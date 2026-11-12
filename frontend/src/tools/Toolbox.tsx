@@ -178,7 +178,9 @@ export default function Toolbox() {
           <div className={sheet ? "hidden" : ""}>
             <Resizer />
           </div>
-          <div ref={tabBar} className="flex h-9 shrink-0 items-stretch gap-1 border-b border-gray-200 bg-gray-50 px-2" role="tablist">
+          <div className="flex h-9 shrink-0 items-stretch gap-1 border-b border-gray-200 bg-gray-50 px-2">
+            {/* the tabs take what room is left and scroll sideways, so Full screen and Close always fit (on a phone too) */}
+            <div ref={tabBar} className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto [scrollbar-width:none]" role="tablist">
             {box.open.map((id, index) => {
               const t = TOOLS.find((x) => x.id === id)!;
               const front = box.active === id;
@@ -235,7 +237,8 @@ export default function Toolbox() {
                     className={`flex touch-none items-center gap-1.5 px-3 text-sm font-medium select-none ${front ? "text-(--lk-accent)" : "text-gray-600 hover:text-gray-900"}`}
                   >
                     <t.icon className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    {pick(t.name)}
+                    {/* on a phone the tabs behind show just their icon */}
+                    <span className={front ? "" : "max-sm:sr-only"}>{pick(t.name)}</span>
                     {box.running.includes(id) && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
                   </button>
                   <button
@@ -249,12 +252,14 @@ export default function Toolbox() {
                 </div>
               );
             })}
+            </div>
             <button
               type="button"
               onClick={() => setExpanded(!sheet)}
-              className="ml-auto flex items-center gap-1 self-center rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 max-sm:px-2.5"
+              className="flex shrink-0 items-center gap-1 self-center rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 max-sm:px-2.5"
               title={sheet ? pick(["Back to the bottom panel (Esc)", "回到底部面板（Esc）"]) : pick(["Fill the screen", "全螢幕"])}
               aria-pressed={sheet}
+              aria-label={sheet ? pick(["Smaller", "縮小"]) : pick(["Full screen", "全螢幕"])}
               data-testid="dock-expand"
             >
               {sheet ? <Minimize2 className="h-4 w-4" strokeWidth={2} aria-hidden /> : <Maximize2 className="h-4 w-4" strokeWidth={2} aria-hidden />}
@@ -263,12 +268,13 @@ export default function Toolbox() {
             <button
               type="button"
               onClick={hideDock}
-              className="flex items-center gap-1 self-center rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 max-sm:px-2.5"
+              aria-label={pick(["Close", "關閉"])}
+              className="flex shrink-0 items-center gap-1 self-center rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 max-sm:px-2.5"
               title={pick(["Close the tools (they keep running; open the Toolbox to come back)", "關閉工具面板（工具會繼續運作；從工具箱回來）"])}
               data-testid="dock-close"
             >
               <X className="h-4 w-4 max-sm:h-5 max-sm:w-5" strokeWidth={2} aria-hidden />
-              {pick(["Close", "關閉"])}
+              <span className="max-sm:hidden">{pick(["Close", "關閉"])}</span>
             </button>
           </div>
           {/* room on the right (and at the bottom on a phone) for the Toolbox button, which sits over the dock */}
