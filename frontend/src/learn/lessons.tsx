@@ -183,8 +183,8 @@ C3 D E3 F | G6 z2 |]`}
       </Example>
       <P
         t={[
-          "Turn on **Click** above the score to hear the beat under the notes (the first beat of each bar is louder), and **Loop bar** to repeat one bar until the rhythm sits.",
-          "打開樂譜上方的**節拍器**，可以聽到音符下的拍子（每小節第一拍較響）；用**循環小節**重複某一小節，直到節奏熟悉。",
+          "Use **Loop bar** above the score to repeat one bar until the rhythm sits.",
+          "用樂譜上方的**循環小節**重複某一小節，直到節奏熟悉。",
         ]}
       />
     </>

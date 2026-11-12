@@ -30,13 +30,12 @@ import { fillIn, UI } from "./learn/ui.ts";
 import { CATEGORIES, LEVELS, PROBLEMS, type Problem } from "./problems.ts";
 import ScoreView from "./ScoreView.tsx";
 import { fill } from "./strings.ts";
-import { ArrowRight, ChevronRight, ChevronsLeft, ChevronsRight, CircleCheck, Repeat, RotateCcw, Search, Timer, X } from "lucide-react";
+import { ArrowRight, ChevronRight, ChevronsLeft, ChevronsRight, CircleCheck, Repeat, RotateCcw, Search, X } from "lucide-react";
 import { Button, Icon, IconButton } from "./Button.tsx";
 import { CHECK, FIELD } from "./ui.ts";
 
 const codeKey = (id: string) => `polyphonizer.learn.${id}`;
 const PASSED = "polyphonizer.learn.passed";
-const CLICK = "polyphonizer.learn.click";
 function passedSet(): Set<string> {
   try {
     return new Set(JSON.parse(localStorage.getItem(PASSED) ?? "[]"));
@@ -411,14 +410,7 @@ function ProblemView({ problem, done, onPassed }: { problem: Problem; done: bool
     };
   }, []);
 
-  // practice aids for the score's Play: a click on every beat, one bar on a loop
-  const [click, setClick] = useState(() => {
-    try {
-      return localStorage.getItem(CLICK) === "on";
-    } catch {
-      return false;
-    }
-  });
+  // practice aid for the score's Play: one bar on a loop (no metronome in Learn to Code; it lives in the Toolbox)
   const [loopBar, setLoopBar] = useState<number | null>(null);
   const data = score?.data ?? null;
   useEffect(() => {
@@ -427,7 +419,7 @@ function ProblemView({ problem, done, onPassed }: { problem: Problem; done: bool
     const next = data.measures.find((m) => bar && m.offset > bar.offset);
     const sounding = data.notes.filter((n) => n.midi.length);
     setPractice({
-      click,
+      click: false,
       measures: data.measures,
       time: data.time,
       endQ: Math.max(0, ...sounding.map((n) => n.offset + n.dur)),
@@ -436,7 +428,7 @@ function ProblemView({ problem, done, onPassed }: { problem: Problem; done: bool
       notes: data.notes,
       pedals: data.pedals,
     });
-  }, [data, click, loopBar]);
+  }, [data, loopBar]);
   useEffect(() => () => setPractice(null), []);
 
   // code ↔ score, for single-part code with one tiny("…") string
@@ -708,23 +700,6 @@ function ProblemView({ problem, done, onPassed }: { problem: Problem; done: bool
         </div>
         <div className={`min-h-[20rem] flex-col xl:min-h-0 xl:flex-[3] ${mobileTab === "score" ? "flex" : "hidden xl:flex"}`}>
           <div className={PANEL_HEAD} data-testid="practice">
-            <label className={CHECK} title={pick(UI.clickHint)}>
-              <input
-                type="checkbox"
-                checked={click}
-                onChange={(e) => {
-                  setClick(e.target.checked);
-                  try {
-                    localStorage.setItem(CLICK, e.target.checked ? "on" : "off");
-                  } catch {
-                    /* storage unavailable */
-                  }
-                }}
-                data-testid="metronome"
-              />
-              <Icon icon={Timer} />
-              {pick(UI.click)}
-            </label>
             <label className={CHECK} title={pick(UI.loopHint)}>
               <Icon icon={Repeat} />
               {pick(UI.loop)}

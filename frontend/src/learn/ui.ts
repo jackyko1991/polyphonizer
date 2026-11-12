@@ -12,8 +12,6 @@ export const UI = {
   next: ["Next", "下一個"],
   saved: ["Saved", "已儲存"],
   checkHint: ["Check: {save} or {enter}", "檢查：{save} 或 {enter}"],
-  click: ["Click", "節拍器"],
-  clickHint: ["A click on every beat while the score plays; the first beat of each bar is louder", "播放時每一拍都有節拍聲；每小節第一拍較響"],
   loop: ["Loop", "循環"],
   loopOff: ["whole piece", "整首"],
   loopBar: ["bar {n}", "第 {n} 小節"],
