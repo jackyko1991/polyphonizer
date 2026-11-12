@@ -40,3 +40,42 @@ pre,
 .pz-clickable g.note, .pz-clickable g.rest, .pz-clickable g.chord { cursor: pointer; }
 .pz-clickable g.note:hover, .pz-clickable g.rest:hover { fill: #be123c; }
 .pz-start, .pz-start * { fill: #0284c7 !important; stroke: #0284c7; }
+
+/* the toolbox: the page keeps its last lines visible above the open dock */
+#pz-scroll {
+  padding-bottom: var(--pz-dock, 0px);
+}
+@keyframes pz-pulse {
+  from {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  to {
+    opacity: 0.35;
+    transform: scaleX(0.6);
+  }
+}
+@keyframes pz-dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 0.7;
+  }
+}
+@keyframes pz-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-[pz-"] {
+    animation: none !important;
+  }
+}

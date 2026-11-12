@@ -7,7 +7,7 @@
 import type { Sound } from "./engrave.ts";
 import { programOf, soundSettings, type Kit, GM } from "./sound.ts";
 
-type Sampler = { start(e: { note: number; time: number; duration: number; velocity: number; detune: number }): unknown; stop(): void };
+export type Sampler = { start(e: { note: number; time: number; duration: number; velocity: number; detune: number }): unknown; stop(): void };
 
 let ctx: AudioContext | null = null;
 /** instruments connect here once; each playback connects the bus to its own output chain */
@@ -15,14 +15,14 @@ let bus: GainNode | null = null;
 let stopAll: (() => void) | null = null;
 const samplers = new Map<string, Promise<Sampler | null>>();
 
-function audio(): { ac: AudioContext; bus: GainNode } {
+export function audio(): { ac: AudioContext; bus: GainNode } {
   ctx ??= new AudioContext();
   bus ??= ctx.createGain();
   return { ac: ctx, bus };
 }
 
 /** load (once) the samples for one instrument; null if they can't be fetched (then the synth plays it) */
-function sampler(kit: Kit, program: number): Promise<Sampler | null> {
+export function sampler(kit: Kit, program: number): Promise<Sampler | null> {
   const key = `${kit}:${program}`;
   let p = samplers.get(key);
   if (!p) {
@@ -55,8 +55,8 @@ function room(ac: AudioContext, seconds = 2.2): AudioBuffer {
 }
 let impulse: AudioBuffer | null = null;
 
-type Family = "bowed" | "plucked" | "struck" | "flute" | "reed" | "brass" | "voice" | "organ";
-function family(program: number): Family {
+export type Family = "bowed" | "plucked" | "struck" | "flute" | "reed" | "brass" | "voice" | "organ";
+export function family(program: number): Family {
   if (program === 45 || program === 46 || (program >= 24 && program <= 39) || (program >= 104 && program <= 108)) return "plucked";
   if (program < 16 || program === 47 || program >= 112) return "struck";
   if ((program >= 40 && program <= 51) || program === 110) return "bowed";
@@ -68,7 +68,7 @@ function family(program: number): Family {
 }
 
 /** one synth note, shaped by its instrument family */
-function synthNote(ac: AudioContext, out: AudioNode, f: Family, hz: number, start: number, dur: number, gain: number) {
+export function synthNote(ac: AudioContext, out: AudioNode, f: Family, hz: number, start: number, dur: number, gain: number) {
   const end = start + dur;
   const g = ac.createGain();
   g.connect(out);
@@ -192,7 +192,7 @@ function beats(p: Practice, qMs: number, fromMs: number, toMs: number): [number,
 }
 
 /** a short woodblock-like tick */
-function click(ac: AudioContext, out: AudioNode, at: number, accent: boolean) {
+export function click(ac: AudioContext, out: AudioNode, at: number, accent: boolean) {
   const o = ac.createOscillator();
   const g = ac.createGain();
   o.type = "square";

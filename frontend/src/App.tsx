@@ -6,6 +6,7 @@ import { SCROLL } from "./pages/kit.tsx";
 import { LEARN_TABS } from "./learn/route.ts";
 import RoadmapPage from "./RoadmapPage.tsx";
 import { STRINGS } from "./strings.ts";
+import Toolbox from "./tools/Toolbox.tsx";
 
 const REPO_URL = "https://github.com/jackyko1991/polyphonizer";
 /** Concept's sub-pages (Tensorizer's and Formalizer's order, History last) */
@@ -154,6 +155,7 @@ export default function App() {
         )}
       </Suspense>
       </PageBoundary>
+      <Toolbox />
     </Shell>
   );
 }
