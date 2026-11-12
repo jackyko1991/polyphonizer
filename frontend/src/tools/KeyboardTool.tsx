@@ -67,9 +67,10 @@ function load(): KeyboardPrefs {
   }
 }
 
-/** is the user typing somewhere (then the computer keys don't play) */
+/** is the user typing somewhere (then the computer keys don't play). A drop-down doesn't count: after picking a layout
+ * or a sound the focus stays on it, and the keys should play straight away */
 const typing = (t: EventTarget | null) =>
-  t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || !!t.closest(".cm-editor"));
+  t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName) || !!t.closest(".cm-editor"));
 
 export default function KeyboardTool() {
   const { pick, index: lang } = useLang();
