@@ -67,6 +67,15 @@ function load(): KeyboardPrefs {
   }
 }
 
+/** how hard a key was pressed: as on a real key, nearer the front (lower on the screen) plays louder, nearer the back
+ * softer; a pen's pressure wins when it reports one */
+function pressVelocity(e: { clientY: number; pointerType: string; pressure: number; currentTarget: Element }): number {
+  if (e.pointerType === "pen" && e.pressure > 0 && e.pressure !== 0.5) return Math.max(0.1, Math.min(1, e.pressure));
+  const r = e.currentTarget.getBoundingClientRect();
+  const depth = r.height ? Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) : 0.6;
+  return Math.round((0.2 + 0.8 * depth) * 100) / 100;
+}
+
 /** is the user typing somewhere (then the computer keys don't play). A drop-down doesn't count: after picking a layout
  * or a sound the focus stays on it, and the keys should play straight away */
 const typing = (t: EventTarget | null) =>
@@ -322,7 +331,7 @@ export default function KeyboardTool() {
         <span className="ml-auto text-xs text-gray-500">
           {armed
             ? layoutHelp(p.layout ?? "typing", { high: p.baseC, low: p.lowC ?? p.baseC - 12 }, p.velocity, lang === 1)
-            : pick(["Click the keys, or turn on the computer keys", "點按琴鍵，或開啟電腦鍵盤彈奏"])}
+            : pick(["Click the keys (lower on a key = louder), or turn on the computer keys", "點按琴鍵（按在琴鍵越下方越大聲），或開啟電腦鍵盤彈奏"])}
         </span>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -353,7 +362,7 @@ export default function KeyboardTool() {
               label={p.names ? `${letter(m)}${m % 12 === 0 ? Math.floor(m / 12) - 1 : ""}` : ""}
               keyLetter={p.keys && armed ? keyLabelFor(p.layout ?? "typing", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }) : null}
               middle={m === 60}
-              onStart={(id) => start(id, m, "mouse")}
+              onStart={(id, v) => start(id, m, "mouse", v)}
               onEnd={(id) => end(id, m, "mouse")}
               className="h-full flex-1 rounded-b-md border border-gray-300 bg-white"
             />
@@ -370,7 +379,7 @@ export default function KeyboardTool() {
                 lit={lit.has(m)}
                 label=""
                 keyLetter={p.keys && armed ? keyLabelFor(p.layout ?? "typing", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }) : null}
-                onStart={(id) => start(id, m, "mouse")}
+                onStart={(id, v) => start(id, m, "mouse", v)}
                 onEnd={(id) => end(id, m, "mouse")}
                 className="absolute top-0 h-[60%] -translate-x-1/2 rounded-b-md bg-gray-900"
                 style={{ left: `${(before / W) * 100}%`, width: `${(0.62 / W) * 100}%` }}
@@ -404,7 +413,8 @@ function Key({
   black?: boolean;
   className: string;
   style?: React.CSSProperties;
-  onStart: (id: string) => void;
+  /** `velocity`: how hard (from where on the key it was pressed, or a pen's pressure); none = the loudness setting */
+  onStart: (id: string, velocity?: number) => void;
   onEnd: (id: string) => void;
 }) {
   return (
@@ -412,8 +422,12 @@ function Key({
       type="button"
       aria-label={`${noteName(midi)}${middle ? ", middle C" : ""}`}
       onPointerDown={(e) => {
-        e.currentTarget.setPointerCapture(e.pointerId);
-        onStart(`p${e.pointerId}`);
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          /* the pointer is gone already */
+        }
+        onStart(`p${e.pointerId}`, pressVelocity(e));
       }}
       onPointerUp={(e) => onEnd(`p${e.pointerId}`)}
       onPointerCancel={(e) => onEnd(`p${e.pointerId}`)}
