@@ -107,3 +107,12 @@ test("YIN finds the pitch of violin strings, a flute note and a low cello C, wit
   const noise = Float32Array.from({ length: 2048 }, () => Math.random() - 0.5);
   assert.equal(detectPitch(noise, 48000), null);
 });
+
+test("metronome: the heavy note can be the first of the bar, of every beat, or none; muted beats stay silent", async () => {
+  const { ticksBetween, DEFAULT_METRONOME } = await import("../src/tools/metronomeCore.ts");
+  const kinds = (heavy: "bar" | "beat" | "none") =>
+    ticksBetween({ ...DEFAULT_METRONOME, bpm: 60, sub: 3, heavy, accents: ["accent", "normal", "mute", "normal"] }, 0, 0, 4).map((t) => t.kind);
+  assert.deepEqual(kinds("bar"), ["accent", "sub", "sub", "normal", "sub", "sub", "mute", "sub", "sub", "normal", "sub", "sub"]);
+  assert.deepEqual(kinds("beat"), ["accent", "sub", "sub", "accent", "sub", "sub", "mute", "sub", "sub", "accent", "sub", "sub"]);
+  assert.deepEqual(kinds("none"), ["normal", "sub", "sub", "normal", "sub", "sub", "mute", "sub", "sub", "normal", "sub", "sub"]);
+});

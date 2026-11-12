@@ -12,6 +12,9 @@ export interface MetronomeSettings {
   sub: 1 | 2 | 3 | 4;
   /** per beat of the bar */
   accents: Accent[];
+  /** which note is played heavier: the first of each bar (the beat accents decide), the first of every beat, or
+   * none (all beats even); muted beats stay silent either way */
+  heavy?: "bar" | "beat" | "none";
 }
 
 export interface Tick {
@@ -41,7 +44,10 @@ export function ticksBetween(s: MetronomeSettings, origin: number, from: number,
     const beatIndex = Math.floor(k / s.sub);
     const beat = beatIndex % s.beats;
     const sub = k % s.sub;
-    out.push({ time, index: k, beat, sub, kind: sub ? "sub" : accentOf(s, beat) });
+    const a = accentOf(s, beat);
+    const heavy = s.heavy ?? "bar";
+    const kind = sub ? "sub" : a === "mute" || heavy === "bar" ? a : heavy === "beat" ? "accent" : "normal";
+    out.push({ time, index: k, beat, sub, kind });
   }
   return out;
 }

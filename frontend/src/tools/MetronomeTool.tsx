@@ -9,11 +9,41 @@ import { nextAccent, withBeats } from "./metronomeCore.ts";
 import { tapTempo } from "./music.ts";
 
 const SUBS: [1 | 2 | 3 | 4, readonly [string, string]][] = [
-  [1, ["Beats", "拍"]],
+  [1, ["Beats (quarter notes)", "拍（四分音符）"]],
   [2, ["Eighths", "八分音符"]],
   [3, ["Triplets", "三連音"]],
   [4, ["Sixteenths", "十六分音符"]],
 ];
+const HEAVY: ["bar" | "beat" | "none", readonly [string, string]][] = [
+  ["bar", ["First note of the bar", "每小節第一拍"]],
+  ["beat", ["First note of every beat", "每一拍的第一個音"]],
+  ["none", ["None (all even)", "無（全部一樣）"]],
+];
+
+/** one beat's notes, drawn: a quarter, two eighths, three eighths under a 3, or four sixteenths (beamed) */
+function BeatNotes({ n }: { n: 1 | 2 | 3 | 4 }) {
+  const gap = 9;
+  const w = 8 + (n - 1) * gap + 6;
+  const xs = Array.from({ length: n }, (_, i) => 5 + i * gap);
+  const stem = (x: number) => x + 3.3;
+  return (
+    <svg viewBox={`0 0 ${w} 26`} className="h-6 shrink-0" style={{ width: (w / 26) * 24 }} aria-hidden fill="currentColor">
+      {n === 3 && (
+        <text x={(stem(xs[0]) + stem(xs[2])) / 2} y="5.5" fontSize="6.5" textAnchor="middle" fontStyle="italic" fontWeight="600">
+          3
+        </text>
+      )}
+      {xs.map((x) => (
+        <g key={x}>
+          <ellipse cx={x} cy="21.5" rx="3.6" ry="2.6" transform={`rotate(-20 ${x} 21.5)`} />
+          <rect x={stem(x) - 0.6} y="8" width="1.2" height="13.5" />
+        </g>
+      ))}
+      {n > 1 && <rect x={stem(xs[0]) - 0.6} y="8" width={stem(xs[n - 1]) - stem(xs[0]) + 1.2} height="2.4" />}
+      {n === 4 && <rect x={stem(xs[0]) - 0.6} y="12" width={stem(xs[n - 1]) - stem(xs[0]) + 1.2} height="2.4" />}
+    </svg>
+  );
+}
 /** Italian tempo names, roughly */
 const TEMPO_NAMES: [number, string][] = [
   [40, "Grave"],
@@ -113,18 +143,38 @@ export default function MetronomeTool() {
               ))}
             </select>
           </label>
-          <select
-            value={s.sub}
-            onChange={(e) => setMetronome({ sub: Number(e.target.value) as 1 | 2 | 3 | 4 })}
-            className={FIELD}
-            aria-label={pick(["Subdivision", "細分"])}
-          >
+          <div className="inline-flex rounded-md border border-gray-300 p-0.5" role="radiogroup" aria-label={pick(["Subdivision", "細分"])}>
             {SUBS.map(([v, name]) => (
-              <option key={v} value={v}>
-                {pick(name)}
-              </option>
+              <button
+                key={v}
+                role="radio"
+                aria-checked={s.sub === v}
+                onClick={() => setMetronome({ sub: v })}
+                title={pick(name)}
+                className={`inline-flex h-8 items-center gap-1 rounded px-2 text-xs ${s.sub === v ? "bg-(--lk-accent) text-white" : "text-gray-700 hover:bg-gray-100"}`}
+                data-testid={`sub-${v}`}
+              >
+                <BeatNotes n={v} />
+                <span className="hidden sm:inline">{pick(name).replace(/ \(.*\)|（.*）/, "")}</span>
+              </button>
             ))}
-          </select>
+          </div>
+          <label className="inline-flex items-center gap-1.5 text-sm text-gray-700">
+            {pick(["Heavy", "重音"])}
+            <select
+              value={s.heavy ?? "bar"}
+              onChange={(e) => setMetronome({ heavy: e.target.value as "bar" | "beat" | "none" })}
+              className={FIELD}
+              aria-label={pick(["Which note is played heavier", "哪個音較重"])}
+              data-testid="heavy"
+            >
+              {HEAVY.map(([v, name]) => (
+                <option key={v} value={v}>
+                  {pick(name)}
+                </option>
+              ))}
+            </select>
+          </label>
           <select
             value={s.sound}
             onChange={(e) => setMetronome({ sound: e.target.value as MetronomeState["sound"] })}
