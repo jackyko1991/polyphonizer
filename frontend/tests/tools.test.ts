@@ -129,3 +129,15 @@ test("tool tabs: dragging moves a tool to its new place", async () => {
   assert.deepEqual(moved(["keyboard", "metronome", "tuner"], "metronome", 9), ["keyboard", "tuner", "metronome"]);
   assert.deepEqual(moved(["keyboard"], "tuner", 0), ["keyboard"]);
 });
+
+test("live staff: pitches in ABC, chords from keys pressed together, a grand staff in bars of four", async () => {
+  const { abcPitch, groupChords, liveAbc } = await import("../src/tools/liveStaff.ts");
+  assert.deepEqual([60, 61, 72, 84, 48, 47, 59].map(abcPitch), ["C", "^C", "c", "c'", "C,", "B,,", "B,"]);
+  assert.deepEqual(groupChords([{ midi: 64, time: 0 }, { midi: 60, time: 10 }, { midi: 67, time: 30 }, { midi: 62, time: 500 }]), [[60, 64, 67], [62]]);
+  const abc = liveAbc([[60, 64, 67], [48], [62]]);
+  assert.match(abc, /V:1\n\[CEG\] z D z \|\]/);
+  assert.match(abc, /V:2 clef=bass\nz C, z z \|\]/);
+  // it draws: two staves, the notes in the right places
+  const { exampleData } = await import("../src/engine/abc.ts");
+  assert.match(exampleData(abc), /<staffDef n="2"/);
+});

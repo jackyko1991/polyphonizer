@@ -4,14 +4,16 @@
  * goes out on the note stream (noteInput.ts) for step entry and the Play lessons.
  */
 import { useLang } from "@learnkit/web";
-import { ChevronLeft, ChevronRight, Keyboard as KeysIcon, Music2, Type } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Keyboard as KeysIcon, Music, Music2, Type } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "../Button.tsx";
 import { CHECK, FIELD } from "../ui.ts";
 import { noteOn, prepare } from "./liveSound.ts";
 import { isBlack, KEY_OFFSETS, keyLabel, keysBetween, letter, noteName, RANGES } from "./music.ts";
 import { publishNote, type NoteSource } from "./noteInput.ts";
 import { setRunning } from "./toolboxState.ts";
+
+const LiveStaff = lazy(() => import("./LiveStaff.tsx"));
 
 /** sounds to play with: General MIDI programs */
 export const KEYBOARD_SOUNDS: [number, readonly [string, string]][] = [
@@ -40,6 +42,8 @@ interface KeyboardPrefs {
   low: number;
   names: boolean;
   keys: boolean;
+  /** show what is played on a staff beside the keys */
+  staff?: boolean;
   program: number;
   baseC: number;
   velocity: number;
@@ -255,6 +259,10 @@ export default function KeyboardTool() {
           <input type="checkbox" checked={p.names} onChange={(e) => update({ names: e.target.checked })} />
           <Music2 className="h-4 w-4" aria-hidden /> {pick(["Note names", "音名"])}
         </label>
+        <label className={CHECK} title={pick(["Show what you play on a staff", "在五線譜上顯示你彈的音"])}>
+          <input type="checkbox" checked={!!p.staff} onChange={(e) => update({ staff: e.target.checked })} data-testid="kb-staff" />
+          <Music className="h-4 w-4" aria-hidden /> {pick(["Staff", "五線譜"])}
+        </label>
         <label className={CHECK}>
           <input type="checkbox" checked={p.keys} onChange={(e) => update({ keys: e.target.checked })} />
           <Type className="h-4 w-4" aria-hidden /> {pick(["Key letters", "按鍵字母"])}
@@ -274,6 +282,14 @@ export default function KeyboardTool() {
             : pick(["Click the keys, or turn on the computer keys", "點按琴鍵，或開啟電腦鍵盤彈奏"])}
         </span>
       </div>
+      <div className="flex min-h-0 flex-1 gap-2">
+      {p.staff && (
+        <div className="w-[min(40%,30rem)] shrink-0 max-sm:hidden">
+          <Suspense fallback={null}>
+            <LiveStaff />
+          </Suspense>
+        </div>
+      )}
       <div
         className="relative min-h-[90px] flex-1 touch-none select-none"
         role="group"
@@ -314,6 +330,7 @@ export default function KeyboardTool() {
               />
             );
           })}
+      </div>
       </div>
     </div>
   );
