@@ -3,15 +3,16 @@
  * button that lights up the notes as they sound; export. The Pages view is also the layout editor: bars per line,
  * staff size, and line and page breaks set by clicking a bar, with page turns planned around them.
  */
-import { ChevronDown, Download, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, RotateCcw, Square, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, RotateCcw, Square, X } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { engravePages, engraveScroll, midiFile, timelineOf, type Engraving } from "./engine/engrave.ts";
 import { barIndices, barNumbers, DEFAULT_SETUP, PAPERS, SCREENS, screenPaper, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
 import { play, stop } from "./engine/player.ts";
 import type { ScoreData } from "./engine/types.ts";
 import { cursorAt, onsetTable, type Onset } from "./engine/cursor.ts";
+import { keyTurn, pageSize, pagesPerView, turn, viewOf } from "./engine/reader.ts";
 import { useSoundSettings } from "./engine/sound.ts";
 import { RANGE, setStage, useStage } from "./progress.ts";
 import SoundPanel from "./SoundPanel.tsx";
@@ -90,10 +91,16 @@ export default function ScoreView({
   const [width, setWidth] = useState(800);
   // full screen only zooms: the layout keeps the width it had when full screen began (no re-flow)
   const [frozenWidth, setFrozenWidth] = useState<number | null>(null);
+  // the full-screen page reader (Pages view): the panel's size, and the first page on show
+  const [boxW, setBoxW] = useState(800);
+  const [boxH, setBoxH] = useState(600);
+  const [readerAt, setReaderAt] = useState(0);
+  const swipe = useRef<number | null>(null);
   const [eng, setEng] = useState<Engraving | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [full, setFull] = useState(false);
   // the page setup: from the score's code (editor), or kept here (Learn, which has no Pages view)
   const [localSetup, setLocalSetup] = useState<PageSetup>(DEFAULT_SETUP);
   const cur = setup ?? localSetup;
@@ -111,6 +118,15 @@ export default function ScoreView({
     lineBreaks: barIndices(cur.line_breaks, measures),
     pageBreaks: barIndices(cur.page_breaks, measures),
   };
+  const reading = full && view === "pages";
+  const aspect = cur.width_mm / cur.height_mm;
+  const perView = pagesPerView(boxW - 112, boxH - 48, aspect);
+  const readerPage = pageSize(boxW - 112, boxH - 48, aspect, perView);
+  const pageCount = eng?.pages.length ?? 0;
+  const goPage = (to: number | 1 | -1 | "first" | "last", by = false) =>
+    setReaderAt((at) =>
+      to === "first" ? 0 : to === "last" ? turn(pageCount, 1, perView, pageCount) : by ? turn(at, to as 1 | -1, perView, pageCount) : viewOf(to as number, perView),
+    );
   const onLayout = (l: { barsPerLine: number; lineBreaks: number[]; pageBreaks: number[] }) =>
     update({ ...cur, bars_per_line: l.barsPerLine, line_breaks: barNumbers(l.lineBreaks, measures), page_breaks: barNumbers(l.pageBreaks, measures) });
   const [menu, setMenu] = useState(false);
@@ -126,7 +142,6 @@ export default function ScoreView({
   const [speed, setSpeedState] = useState(1);
   // ⤢: the panel fills the window (and the screen, where the browser allows it)
   const panel = useRef<HTMLDivElement>(null);
-  const [full, setFull] = useState(false);
   const [startMs, setStartMs] = useState(0);
   const [startId, setStartId] = useState<string | null>(null);
   const [clickPlay, setClickPlay] = useState(() => {
@@ -147,7 +162,11 @@ export default function ScoreView({
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setWidth(Math.round(e.contentRect.width / 50) * 50));
+    const ro = new ResizeObserver(([e]) => {
+      setWidth(Math.round(e.contentRect.width / 50) * 50);
+      setBoxH(Math.round(e.contentRect.height));
+      setBoxW(Math.round(e.contentRect.width));
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -254,6 +273,15 @@ export default function ScoreView({
     if (!full) return;
     // Esc closes the note editor first, then leaves full screen; leaving browser full screen leaves ours too
     const onKey = (e: KeyboardEvent) => {
+      // page turns (arrows, Page Up/Down from a page-turn pedal, Space …), unless typing in a field
+      const typing = (e.target as HTMLElement)?.closest?.("input, textarea, select, .cm-editor");
+      if (view === "pages" && !typing) {
+        const k = keyTurn(e.key);
+        if (k !== null) {
+          e.preventDefault();
+          return goPage(k, true);
+        }
+      }
       if (e.key !== "Escape") return;
       if (bar) return setBar(null);
       setFull(false);
@@ -266,7 +294,9 @@ export default function ScoreView({
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("fullscreenchange", onChange);
     };
-  }, [full, bar]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [full, bar, view, perView, pageCount]);
+  useEffect(() => setReaderAt(0), [eng]);
   useEffect(() => {
     try {
       const saved = Number(localStorage.getItem(speedKey));
@@ -315,6 +345,14 @@ export default function ScoreView({
   /** where a running playback is now, in ms of the written tempo */
   const position = () => (running.current ? running.current.from + (performance.now() - running.current.at) * running.current.speed : startMs);
 
+  // which page each note is on (the reader turns to it during playback)
+  const idPage = useMemo(() => {
+    const m = new Map<string, number>();
+    eng?.pages.forEach((svg, i) => {
+      for (const x of svg.matchAll(/<g id="([^"]+)" class="(?:note|chord|rest)/g)) m.set(x[1], i);
+    });
+    return m;
+  }, [eng]);
   // the playback cursor: an onset table (time → x, system) from the drawn notes, and a line moved every frame
   const cursorEl = useRef<HTMLDivElement>(null);
   const onsets = useRef<(Onset & { page: number })[]>([]);
@@ -342,7 +380,7 @@ export default function ScoreView({
       });
     }
     onsets.current = onsetTable(items) as (Onset & { page: number })[];
-  }, [eng, width, full, view]);
+  }, [eng, width, full, view, readerAt, boxH]);
   /** put the line where the music is at `t` (ms, written tempo); scroll it into view if it left */
   const placeCursor = (t: number) => {
     const c = cursorEl.current;
@@ -360,13 +398,21 @@ export default function ScoreView({
     setCursorShown(true);
     let raf = 0;
     const tick = () => {
-      placeCursor(position());
+      const t = position();
+      if (reading && eng) {
+        // the reader follows the music: the page of the note sounding now
+        let lo = 0;
+        while (lo + 1 < eng.sounds.length && eng.sounds[lo + 1].time <= t) lo++;
+        const page = idPage.get(eng.sounds[lo]?.id ?? "");
+        if (page !== undefined) setReaderAt((at) => (page < at || page >= at + perView ? viewOf(page, perView) : at));
+      }
+      placeCursor(t);
       raf = requestAnimationFrame(tick);
     };
     tick();
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, showCursor, eng]);
+  }, [playing, showCursor, eng, reading, perView]);
   // stopped: the line stays; a clicked start moves it there
   useEffect(() => {
     if (!playing && cursorShown && showCursor) placeCursor(startMs);
@@ -709,7 +755,7 @@ export default function ScoreView({
 
       <ProgressLine />
       {view === "score" && noteEdit && <p className="border-b border-gray-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900">{t("edit.hint")}</p>}
-      <div ref={box} className="pz-score relative min-h-0 flex-1 overflow-auto bg-gray-100 p-3" data-testid="score">
+      <div ref={box} className={`pz-score relative min-h-0 flex-1 bg-gray-100 p-3 ${reading ? "overflow-hidden" : "overflow-auto"}`} data-testid="score">
         {/* export and full screen: just above the sheet, staying in view while the score scrolls */}
         <div className="pointer-events-none sticky top-0 z-20 -mb-2 flex justify-end gap-1.5 [&>*]:pointer-events-auto" data-testid="score-actions">
           {onExportCode !== undefined && (
@@ -773,7 +819,52 @@ export default function ScoreView({
         {err && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">{err}</p>}
         {!score && !err && <p className="p-6 text-center text-sm text-gray-500">{t("view.empty")}</p>}
         {eng &&
-          (view === "pages" ? (
+          (reading ? (
+            <div
+              className="relative flex h-full touch-pan-y items-center justify-center gap-4 select-none"
+              onPointerDown={(e) => (swipe.current = e.clientX)}
+              onPointerUp={(e) => {
+                const dx = swipe.current === null ? 0 : e.clientX - swipe.current;
+                swipe.current = null;
+                if (Math.abs(dx) > 60) goPage(dx < 0 ? 1 : -1, true);
+              }}
+              onClick={(e) => onNote(e)}
+              data-testid="reader"
+            >
+              {eng.pages.slice(readerAt, readerAt + perView).map((svg, k) => (
+                <div
+                  key={readerAt + k}
+                  data-page={readerAt + k}
+                  style={{ width: readerPage.w, height: readerPage.h }}
+                  className={`shrink-0 bg-white shadow-md [&>svg]:h-full [&>svg]:w-full ${clickPlay ? "pz-clickable" : ""}`}
+                  dangerouslySetInnerHTML={{ __html: svg }}
+                />
+              ))}
+              <button
+                onClick={(e) => (e.stopPropagation(), goPage(-1, true))}
+                disabled={readerAt === 0}
+                className="absolute top-1/2 left-2 flex h-24 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/10 text-gray-700 transition hover:bg-black/25 disabled:opacity-0"
+                aria-label={t("reader.prev")}
+                title={t("reader.prev")}
+                data-testid="reader-prev"
+              >
+                <Icon icon={ChevronLeft} className="h-7 w-7" />
+              </button>
+              <button
+                onClick={(e) => (e.stopPropagation(), goPage(1, true))}
+                disabled={readerAt + perView >= pageCount}
+                className="absolute top-1/2 right-2 flex h-24 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/10 text-gray-700 transition hover:bg-black/25 disabled:opacity-0"
+                aria-label={t("reader.next")}
+                title={t("reader.next")}
+                data-testid="reader-next"
+              >
+                <Icon icon={ChevronRight} className="h-7 w-7" />
+              </button>
+              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-black/10 px-2 py-0.5 text-xs text-gray-700 tabular-nums" data-testid="reader-at">
+                {perView === 2 && readerAt + 1 < pageCount ? `${readerAt + 1}–${readerAt + 2}` : readerAt + 1} / {pageCount}
+              </span>
+            </div>
+          ) : view === "pages" ? (
             <div className={`flex flex-wrap justify-center gap-4 ${editing ? "pz-edit" : clickPlay ? "pz-clickable" : ""}`} onClick={(e) => (editing ? onPagesClick(e) : onNote(e))}>
               {eng.pages.map((svg, i) => (
                 <div key={i} className="relative [content-visibility:auto] [contain-intrinsic-size:auto_600px]">

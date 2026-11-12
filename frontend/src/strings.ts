@@ -223,6 +223,8 @@ export const STRINGS = {
     "莫札特鋼琴奏鳴曲與喬普林：Craig Stuart Sapp 的 Humdrum 版本，CC BY-NC-SA 4.0（姓名標示、非商業性、相同方式分享）。",
   ],
   "src.music21": ["music21 corpus", "music21 曲庫"],
+  "reader.prev": ["Previous page (←, Page Up)", "上一頁（←、Page Up）"],
+  "reader.next": ["Next page (→, Page Down, Space)", "下一頁（→、Page Down、空白鍵）"],
   "full.enter": ["Full screen", "全螢幕"],
   "full.exit": ["Leave full screen (Esc)", "離開全螢幕（Esc）"],
   "partPlay.label": ["What ▶ plays while one part is shown", "顯示單一聲部時，▶ 播放什麼"],
