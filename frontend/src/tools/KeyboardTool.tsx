@@ -14,7 +14,7 @@ import { clearStaff, undoBar, undoStaff } from "./liveStaff.ts";
 import { keyAction, keyLabelFor, keyMidi, LAYOUTS, layoutHelp, type LayoutId } from "./keyLayouts.ts";
 import { isBlack, keysBetween, letter, noteName, RANGES } from "./music.ts";
 import { publishNote, type NoteSource } from "./noteInput.ts";
-import { setRunning } from "./toolboxState.ts";
+import { armKeyboard, setRunning, useToolbox } from "./toolboxState.ts";
 
 const LiveStaff = lazy(() => import("./LiveStaff.tsx"));
 
@@ -94,7 +94,13 @@ export default function KeyboardTool() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const [armed, setArmed] = useState(false);
+  const { keyboardArmed: armed, hint, baseRequest } = useToolbox();
+  const setArmed = (v: boolean | ((a: boolean) => boolean)) => armKeyboard(typeof v === "function" ? v(armed) : v);
+  // a lesson asked for the home-row layout with its C here
+  useEffect(() => {
+    if (baseRequest) update({ baseC: baseRequest.c, layout: "typing" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseRequest]);
   const [lit, setLit] = useState<Set<number>>(new Set());
   const [midiState, setMidiState] = useState<"off" | "on" | "none">("off");
   const held = useRef(new Map<string, () => void>());
@@ -359,6 +365,7 @@ export default function KeyboardTool() {
               key={m}
               midi={m}
               lit={lit.has(m)}
+              next={hint.includes(m)}
               label={p.names ? `${letter(m)}${m % 12 === 0 ? Math.floor(m / 12) - 1 : ""}` : ""}
               keyLetter={p.keys && armed ? keyLabelFor(p.layout ?? "typing", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }) : null}
               middle={m === 60}
@@ -377,6 +384,7 @@ export default function KeyboardTool() {
                 key={m}
                 midi={m}
                 lit={lit.has(m)}
+                next={hint.includes(m)}
                 label=""
                 keyLetter={p.keys && armed ? keyLabelFor(p.layout ?? "typing", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }) : null}
                 onStart={(id, v) => start(id, m, "mouse", v)}
@@ -396,6 +404,7 @@ export default function KeyboardTool() {
 function Key({
   midi,
   lit,
+  next,
   label,
   keyLetter,
   middle,
@@ -407,6 +416,8 @@ function Key({
 }: {
   midi: number;
   lit: boolean;
+  /** the key to play next (a Learn to Play hint) */
+  next?: boolean;
   label: string;
   keyLetter: string | null;
   middle?: boolean;
@@ -441,7 +452,7 @@ function Key({
       style={style}
       className={`${className} flex flex-col items-center justify-end pb-1 text-[10px] leading-tight transition-colors duration-75 ${
         lit ? (black ? "bg-(--lk-accent)!" : "bg-rose-200!") : ""
-      } ${black ? "z-10 text-white/80" : "text-gray-500"} focus-visible:outline-2 focus-visible:outline-(--lk-accent)`}
+      } ${next && !lit ? "ring-3 ring-sky-400 ring-inset" : ""} ${black ? "z-10 text-white/80" : "text-gray-500"} focus-visible:outline-2 focus-visible:outline-(--lk-accent)`}
     >
       {keyLetter && <span className={`font-mono font-semibold ${black ? "text-white" : "text-gray-800"}`}>{keyLetter}</span>}
       {label && <span className={middle ? "font-semibold text-(--lk-accent)" : ""}>{label}</span>}

@@ -71,6 +71,8 @@ export function parseAbc(abc: string) {
   let meter = "4/4";
   let unit = 1 / 8;
   let key = 0;
+  /** quarter notes per minute, from Q: ("1/4=80", "3/8=60", or the old "80" in units of L) */
+  let bpm: number | null = null;
   const voices = new Map<string, { clef: string; bars: Event[][] }>();
   let current = "1";
   const voice = () => voices.get(current) ?? (voices.set(current, { clef: "treble", bars: [[]] }), voices.get(current)!);
@@ -83,6 +85,10 @@ export function parseAbc(abc: string) {
       if (k === "M") meter = v === "C" ? "4/4" : v === "C|" ? "2/2" : v;
       if (k === "L") unit = frac(v);
       if (k === "K") key = keyFifths(v);
+      if (k === "Q") {
+        const m = /^(?:"[^"]*"\s*)?(?:(\d+\/\d+)\s*=\s*)?(\d+(?:\.\d+)?)/.exec(v);
+        if (m) bpm = Number(m[2]) * (m[1] ? frac(m[1]) : unit) * 4;
+      }
       if (k === "V") {
         current = v.split(/\s/)[0];
         const clef = /clef=(\w+)/.exec(v)?.[1];
@@ -119,7 +125,7 @@ export function parseAbc(abc: string) {
     }
   }
   for (const v of voices.values()) if (v.bars.length > 1 && v.bars[v.bars.length - 1].length === 0) v.bars.pop();
-  return { meter, unit, key, voices };
+  return { meter, unit, key, voices, bpm };
 }
 
 const BASES = [1, 1 / 2, 1 / 4, 1 / 8, 1 / 16, 1 / 32, 1 / 64];
@@ -136,7 +142,7 @@ const ACCID: Record<number, string> = { 2: "x", 1: "s", 0: "n", [-1]: "f", [-2]:
 
 /** MEI for a multi-voice ABC example: one staff per voice */
 export function abcToMei(abc: string): string {
-  const { meter, key, voices } = parseAbc(abc);
+  const { meter, key, voices, bpm } = parseAbc(abc);
   const [count, unitDen] = meter.split("/").map(Number);
   const names = [...voices.keys()];
   const sig = key === 0 ? "0" : key > 0 ? `${key}s` : `${-key}f`;
@@ -212,7 +218,7 @@ export function abcToMei(abc: string): string {
   }
   return `<?xml version="1.0" encoding="UTF-8"?>
 <mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="4.0.1"><meiHead><fileDesc><titleStmt><title/></titleStmt><pubStmt/></fileDesc></meiHead>
-<music><body><mdiv><score><scoreDef meter.count="${count}" meter.unit="${unitDen}" key.sig="${sig}"><staffGrp${names.length > 1 ? ' symbol="bracket"' : ""}>${staffDefs}</staffGrp></scoreDef>
+<music><body><mdiv><score><scoreDef meter.count="${count}" meter.unit="${unitDen}" key.sig="${sig}"${bpm ? ` midi.bpm="${Math.round(bpm * 100) / 100}"` : ""}><staffGrp${names.length > 1 ? ' symbol="bracket"' : ""}>${staffDefs}</staffGrp></scoreDef>
 <section>${measures.join("")}</section></score></mdiv></body></music></mei>`;
 }
 

@@ -16,6 +16,12 @@ export interface ToolboxState {
   hidden: boolean;
   /** the dock enlarged to fill the window (remembered) */
   expanded: boolean;
+  /** the computer keys play the virtual keyboard (a lesson can switch them on) */
+  keyboardArmed: boolean;
+  /** keys to outline as the next ones to play (Learn to Play) */
+  hint: number[];
+  /** a lesson's request: the home-row ("typing") layout with its C here (a counter, so the same value repeats) */
+  baseRequest: { c: number; n: number } | null;
 }
 
 const KEY = "polyphonizer.toolbox";
@@ -29,10 +35,13 @@ let state: ToolboxState = (() => {
       height: s?.height ?? 230,
       running: [],
       hidden: false,
+      keyboardArmed: false,
+      hint: [],
+      baseRequest: null,
       expanded: s?.expanded ?? false,
     };
   } catch {
-    return { open: [], active: null, height: 230, running: [], hidden: false, expanded: false };
+    return { open: [], active: null, height: 230, running: [], hidden: false, expanded: false, keyboardArmed: false, hint: [], baseRequest: null };
   }
 })();
 const listeners = new Set<() => void>();
@@ -88,3 +97,7 @@ export function moved<T>(list: T[], id: T, to: number): T[] {
 }
 /** drag a tab: put the tool at position `to` among the open tools (remembered) */
 export const moveTool = (id: ToolId, to: number) => set({ ...state, open: moved(state.open, id, to) });
+
+export const armKeyboard = (on: boolean) => state.keyboardArmed !== on && set({ ...state, keyboardArmed: on });
+export const setKeyHint = (keys: number[]) => set({ ...state, hint: keys });
+export const requestKeyboardBase = (c: number) => set({ ...state, baseRequest: { c, n: (state.baseRequest?.n ?? 0) + 1 } });

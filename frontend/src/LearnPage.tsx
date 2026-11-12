@@ -14,7 +14,7 @@
  */
 import { plainText, RichText, useLang } from "@learnkit/web";
 import type { EditorView } from "@codemirror/view";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import CodePane from "./CodePane.tsx";
 import { ErrorBox, PyStatus } from "./EditorPage.tsx";
 import { check, type RuleResult } from "./engine/checker.ts";
@@ -28,6 +28,8 @@ import { TECH_BODY, TECH_TARGETS } from "./learn/techniqueLessons.tsx";
 import { ruleLabel } from "./learn/ruleText.ts";
 import { noteTokens, tinyTokens } from "./learn/tokens.ts";
 import { goCode, parseLearn } from "./learn/route.ts";
+
+const PlayPage = lazy(() => import("./learn/play/PlayPage.tsx"));
 import { fillIn, UI } from "./learn/ui.ts";
 import { CATEGORIES, LEVELS, PROBLEMS, type Problem } from "./problems.ts";
 import ScoreView from "./ScoreView.tsx";
@@ -75,25 +77,12 @@ export default function LearnPage({ tab, section }: { tab: string | null; sectio
   useEffect(() => {
     if (route.redirect) window.location.replace(route.redirect);
   }, [route.redirect]);
-  return route.tab === "play" ? <PlayPage /> : <CodePage id={route.id} />;
-}
-
-/** Learn to ▸ Play: the keyboard lessons come with the Toolbox */
-function PlayPage() {
-  const { pick } = useLang();
-  return (
-    <div className="mx-auto max-w-2xl px-5 py-16 text-center" data-testid="learn-play">
-      <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{pick(["Learn to play", "學習彈奏"])}</h1>
-      <p className="mt-4 text-gray-600">
-        {pick([
-          "Lessons in playing on a keyboard are coming with the Toolbox: play what you see, and hear and see what you play.",
-          "鍵盤彈奏課程將與工具箱一起推出：彈出你看到的，並聽見、看見你彈的。",
-        ])}
-      </p>
-      <p className="mt-6">
-        <Button onClick={() => goCode("")}>{pick(["Learn to code music meanwhile", "先學寫音樂程式"])}</Button>
-      </p>
-    </div>
+  return route.tab === "play" ? (
+    <Suspense fallback={<p className="p-10 text-center text-sm text-gray-500">…</p>}>
+      <PlayPage id={route.id} />
+    </Suspense>
+  ) : (
+    <CodePage id={route.id} />
   );
 }
 
