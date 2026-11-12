@@ -9,7 +9,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { Button, IconButton } from "../Button.tsx";
 import { CHECK, FIELD } from "../ui.ts";
 import { noteOn, prepare } from "./liveSound.ts";
-import { clearStaff } from "./liveStaff.ts";
+import { clearStaff, undoBar, undoStaff } from "./liveStaff.ts";
 import { keyAction, keyLabelFor, keyMidi, LAYOUTS, layoutHelp, type LayoutId } from "./keyLayouts.ts";
 import { isBlack, keysBetween, letter, noteName, RANGES } from "./music.ts";
 import { publishNote, type NoteSource } from "./noteInput.ts";
@@ -71,6 +71,16 @@ const typing = (t: EventTarget | null) =>
 export default function KeyboardTool() {
   const { pick, index: lang } = useLang();
   const [p, setP] = useState(load);
+  // the keys' width, for their largest height (a piano's proportions)
+  const keysBox = useRef<HTMLDivElement>(null);
+  const [keysW, setKeysW] = useState(0);
+  useEffect(() => {
+    const el = keysBox.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setKeysW(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [armed, setArmed] = useState(false);
   const [lit, setLit] = useState<Set<number>>(new Set());
   const [midiState, setMidiState] = useState<"off" | "on" | "none">("off");
@@ -134,12 +144,15 @@ export default function KeyboardTool() {
     if (!armed) return;
     const codeMidi = new Map<string, number>();
     const down = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
-      if (e.code === "Escape") return setArmed(false);
+      // the live staff handles its own keys while it has focus (← → pick, Backspace removes)
+      if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || (e.target as HTMLElement)?.closest?.("[data-live-staff]")) return;
+      // Backspace: the last note off the staff; Shift+Backspace / Delete: the last bar; Esc: all (Esc on an empty staff:
+      // computer keys off)
       if (e.code === "Backspace" || e.code === "Delete") {
         e.preventDefault();
-        return clearStaff();
+        return void (e.code === "Delete" || e.shiftKey ? undoBar() : undoStaff());
       }
+      if (e.code === "Escape") return void (clearStaff() || setArmed(false));
       const lay = prefs.current.layout ?? "typing";
       const bases = { high: prefs.current.baseC, low: prefs.current.lowC ?? prefs.current.baseC - 12 };
       const midi = keyMidi(lay, e.code, bases);
@@ -310,14 +323,19 @@ export default function KeyboardTool() {
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2">
       {p.staff && (
-        <div className="h-[38%] min-h-16 shrink-0">
+        // the staff and the keys share the height 2 : 3; keys never taller than a piano's (see below), the staff gets the rest
+        <div className="min-h-0" style={{ flex: "2 1 0" }}>
           <Suspense fallback={null}>
             <LiveStaff />
           </Suspense>
         </div>
       )}
       <div
-        className="relative min-h-[90px] flex-1 touch-none select-none"
+        ref={keysBox}
+        // with the staff on: 3 parts of the height, but white keys at most 4.2 times as tall as they are wide (a
+        // piano's shape); without it the keys fill the panel
+        className="relative min-h-[90px] w-full touch-none select-none"
+        style={p.staff ? { flex: "3 1 0", maxHeight: keysW ? Math.round((keysW / whites.length) * 4.2) : undefined } : { flex: "1 1 0" }}
         role="group"
         aria-label={pick(["Piano keyboard", "鋼琴鍵盤"])}
         onContextMenu={(e) => e.preventDefault()}

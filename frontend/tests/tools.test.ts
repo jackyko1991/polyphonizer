@@ -161,3 +161,27 @@ test("keyboard layouts: Musical Typing and two-row piano (two hands, ~2½ octave
   assert.equal(keyLabelFor("tworow", 63, b), "3");
   assert.equal(keyLabelFor("typing", 60, b), "A");
 });
+
+test("live staff: Backspace takes off the last note or chord, a bar is four chords from the first, the staff shows the last two bars", async () => {
+  const { chordStarts, dropLast, dropBar, liveAbc, groupChords } = await import("../src/tools/liveStaff.ts");
+  // C, then an E-G chord (10 ms apart), then six more single notes: 8 chords = 2 bars
+  const ons = [{ midi: 60, time: 0 }, { midi: 64, time: 500 }, { midi: 67, time: 510 }, ...[62, 65, 69, 71, 72, 74].map((m, i) => ({ midi: m, time: 1000 + i * 500 }))];
+  assert.deepEqual(chordStarts(ons), [0, 1, 3, 4, 5, 6, 7, 8]);
+  assert.equal(dropLast(ons).length, 8); // the last note
+  assert.equal(dropLast(ons.slice(0, 3)).length, 1); // the E-G chord goes as one
+  assert.equal(dropBar(ons).length, 5); // chords 5-8 (the second bar)
+  assert.equal(dropBar(ons.slice(0, 5)).length, 0); // only one bar: all of it
+  // a third bar starts at the 9th chord; the staff then shows bars 2 and 3
+  const nine = [...ons, { midi: 76, time: 5000 }];
+  const abc = liveAbc(groupChords(nine));
+  assert.match(abc, /V:1\nA B c d \| e z z z \|\]/); // A4 B4 C5 D5 | E5
+
+});
+
+test("live staff: a chosen chord can be taken off, wherever it is", async () => {
+  const { dropChord } = await import("../src/tools/liveStaff.ts");
+  const ons = [{ midi: 60, time: 0 }, { midi: 64, time: 500 }, { midi: 67, time: 510 }, { midi: 62, time: 1000 }];
+  assert.deepEqual(dropChord(ons, 1).map((e) => e.midi), [60, 62]); // the E-G chord, both notes
+  assert.deepEqual(dropChord(ons, 0).map((e) => e.midi), [64, 67, 62]);
+  assert.deepEqual(dropChord(ons, 9), ons);
+});

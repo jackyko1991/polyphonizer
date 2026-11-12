@@ -6,7 +6,7 @@
  */
 import { useLang } from "@learnkit/web";
 import { AudioWaveform, Maximize2, Minimize2, Piano, Timer, Wrench, X, type LucideIcon } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { closeTool, hideDock, moveTool, openTool, setDockHeight, setExpanded, toggleTool, useToolbox, type ToolId } from "./toolboxState.ts";
 
 const KeyboardTool = lazy(() => import("./KeyboardTool.tsx"));
@@ -47,9 +47,22 @@ export default function Toolbox() {
   const dockOpen = box.open.length > 0;
   // dragging a tab to reorder: which tool, where the pointer started, and whether it moved (then it's not a click)
   const tabBar = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ id: ToolId; x: number } | null>(null);
-  const dragged = useRef(false);
+  const drag = useRef<{ id: ToolId; x: number; grab: number } | null>(null);
   const [dragging, setDragging] = useState<ToolId | null>(null);
+  // the dragged tab follows the pointer sideways (as browser tabs do): where the pointer is now
+  const [dragX, setDragX] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const bar = tabBar.current;
+    const el = dragging ? bar?.querySelector<HTMLElement>(`[data-tab="${dragging}"]`) : null;
+    bar?.querySelectorAll<HTMLElement>("[data-tab]").forEach((t) => t !== el && (t.style.transform = ""));
+    if (!bar || !el || dragX === null || !drag.current) return;
+    // its slot's left edge (offsetLeft ignores transforms), and how far the pointer has pulled it from there
+    const slot = bar.getBoundingClientRect().left + el.offsetLeft - bar.scrollLeft;
+    const min = bar.getBoundingClientRect().left - slot;
+    const max = bar.getBoundingClientRect().right - el.offsetWidth - slot;
+    el.style.transform = `translateX(${Math.max(min, Math.min(max, dragX - drag.current.grab - slot))}px)`;
+  }, [dragging, dragX, box.open]);
+  const dragged = useRef(false);
   const dockShown = dockOpen && !box.hidden;
   // the dock is a bottom panel by default (phone and computer); ⤢ makes it fill the window, Esc shrinks it back
   const sheet = box.expanded;
@@ -171,7 +184,9 @@ export default function Toolbox() {
                 <div
                   key={id}
                   data-tab={id}
-                  className={`flex items-center rounded-t-md ${front ? "bg-white shadow-[0_1px_0_white]" : ""} ${dragging === id ? "cursor-grabbing opacity-70 ring-1 ring-(--lk-accent)/40" : ""}`}
+                  className={`relative flex items-center rounded-t-md ${front ? "bg-white shadow-[0_1px_0_white]" : ""} ${
+                    dragging === id ? "z-10 cursor-grabbing bg-white shadow-md" : "transition-transform duration-150"
+                  }`}
                 >
                   <button
                     type="button"
@@ -180,7 +195,8 @@ export default function Toolbox() {
                     onClick={() => (dragged.current ? (dragged.current = false) : openTool(id))}
                     // drag a tab sideways to reorder (mouse or touch); Alt+← / → moves it with the keyboard
                     onPointerDown={(e) => {
-                      drag.current = { id, x: e.clientX };
+                      const tab = (e.currentTarget as HTMLElement).closest<HTMLElement>("[data-tab]")!;
+                      drag.current = { id, x: e.clientX, grab: e.clientX - tab.getBoundingClientRect().left };
                       dragged.current = false;
                       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                     }}
@@ -189,6 +205,7 @@ export default function Toolbox() {
                       if (!d || (!dragged.current && Math.abs(e.clientX - d.x) < 6)) return;
                       dragged.current = true;
                       setDragging(d.id);
+                      setDragX(e.clientX);
                       // its new place: how many of the other tabs have their centre left of the pointer
                       const to = [...(tabBar.current?.querySelectorAll<HTMLElement>("[data-tab]") ?? [])].filter((el) => {
                         if (el.dataset.tab === d.id) return false;
@@ -200,10 +217,12 @@ export default function Toolbox() {
                     onPointerUp={() => {
                       drag.current = null;
                       setDragging(null);
+                      setDragX(null);
                     }}
                     onPointerCancel={() => {
                       drag.current = null;
                       setDragging(null);
+                      setDragX(null);
                     }}
                     onKeyDown={(e) => {
                       if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
