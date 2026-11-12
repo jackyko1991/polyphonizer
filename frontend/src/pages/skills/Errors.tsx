@@ -448,7 +448,7 @@ K:C
         <p className="flex flex-wrap gap-4">
           <SiteLink to={["editor"]} label={["Open the score editor", "開啟樂譜編輯器"]} />
           <SiteLink to={["skills", "first"]} label={["First music21", "第一步 music21"]} />
-          <SiteLink to={["learn", "hello-scale"]} label={["Start the Learn to Code track", "開始學習單元"]} />
+          <SiteLink to={["learn", "code", "hello-scale"]} label={["Start the Learn to Code track", "開始學習單元"]} />
         </p>
       </Section>
     </Page>

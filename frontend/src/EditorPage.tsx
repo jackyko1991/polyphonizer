@@ -12,11 +12,11 @@ import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import CodePane from "./CodePane.tsx";
 import { EXAMPLES } from "./examples.ts";
-import type { Layout } from "./engine/engrave.ts";
 import { addFile, barText, bootPython, runScore, usePythonStage, type PyError, type PyModule } from "./engine/python.ts";
 import type { ScoreData } from "./engine/types.ts";
 import { OWN_SCORE_LIMIT, currentTier } from "./account.ts";
-import { addRecent, layoutOf, MAIN, newFileName, recentScores, sheetKey, validName, zip, type Project } from "./project.ts";
+import { addRecent, MAIN, newFileName, recentScores, validName, zip, type Project } from "./project.ts";
+import { setupFor, writeSetup, type PageSetup } from "./engine/pageSetup.ts";
 import {
   currentProject,
   deleteOwn,
@@ -373,9 +373,18 @@ export default function EditorPage() {
   };
 
   // the layout of the sheet on show
-  const key = sheetKey(part === null ? null : (score?.parts[part] ?? null));
-  const layout = layoutOf(project, key);
-  const setLayout = (l: Layout) => setProject((p) => ({ ...p, layouts: { ...p.layouts, [key]: l } }));
+  // the sheet's page setup lives in main.py as pages(...): read it from the compiled score; a change in the Pages
+  // view rewrites that line and compiles (the new value shows at once, until the compile comes back)
+  const sheetName = part === null ? null : (score?.parts[part] ?? null);
+  const [pendingSetup, setPendingSetup] = useState<PageSetup | null>(null);
+  useEffect(() => setPendingSetup(null), [score, sheet]);
+  const setup = pendingSetup && pendingSetup.part === sheetName ? pendingSetup : setupFor((part !== null ? sheet : score)?.layouts, sheetName);
+  const changeSetup = (s: PageSetup) => {
+    const next = { ...s, part: sheetName };
+    setPendingSetup(next);
+    setCode(MAIN, writeSetup(projectRef.current.files[0].code, next));
+    void run();
+  };
 
   const errorHere = error && (error.file ?? MAIN) === active.name ? error.line : null;
   return (
@@ -584,8 +593,8 @@ export default function EditorPage() {
           onExportCode={exportCode}
           view={view}
           onView={setView}
-          layout={layout}
-          onLayout={setLayout}
+          setup={setup}
+          onSetup={changeSetup}
           barText={barText}
           onEditBar={editBar}
           onNoteClick={onNoteClick}

@@ -16,7 +16,7 @@ const MUSIC21 = [
   "tablature", "tempo", "text", "tie", "tinyNotation", "tree", "variant", "vexflow", "voiceLeading", "volpiano",
   "volume",
 ];
-const HELPERS = ["tiny", "together", "load", "edit_bar", "fetch_score"];
+const HELPERS = ["tiny", "together", "load", "edit_bar", "fetch_score", "pages"];
 /** markings.py: playing techniques */
 const MARKINGS = [
   "bowings", "slur", "staccato", "spiccato", "tenuto", "accent", "harmonic", "pizz", "arco", "fingering", "text",

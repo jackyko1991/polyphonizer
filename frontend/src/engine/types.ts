@@ -23,6 +23,8 @@ export interface MeasureInfo {
 }
 
 export interface ScoreData {
+  /** the pages(...) calls in the code: one page setup per sheet (engine/pageSetup.ts) */
+  layouts?: import("./pageSetup.ts").PageSetup[];
   musicxml: string;
   parts: string[];
   /** General MIDI program (0–127) per part, from its instrument or its name; null = unknown */

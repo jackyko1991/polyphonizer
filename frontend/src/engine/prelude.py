@@ -273,7 +273,7 @@ def _summary(s):
     }
 
 
-HEADER = "from music21 import *\nfrom polyphonizer import tiny, together, load, edit_bar, fetch_score\n"
+HEADER = "from music21 import *\nfrom polyphonizer import tiny, together, load, edit_bar, fetch_score, pages\n"
 PROJECT = "/project"
 
 
@@ -284,6 +284,7 @@ def _expose_helpers():
 
     mod = types.ModuleType("polyphonizer")
     mod.tiny, mod.together, mod.load, mod.edit_bar, mod.fetch_score = tiny, together, load, edit_bar, fetch_score
+    mod.pages = pages
     sys.modules["polyphonizer"] = mod
 
 
@@ -362,8 +363,95 @@ def _titled(s):
     return s
 
 
+# ── the page setup, written in the score's code: pages(part="Violin I", stand="spread", …) ──
+
+_PAPERS = {"A4": (210.0, 297.0), "A3": (297.0, 420.0), "B4": (250.0, 353.0), "Letter": (215.9, 279.4)}
+_LAYOUTS = []
+
+
+def pages(
+    part=None,
+    paper="A4",
+    orientation="portrait",
+    stand="spread",
+    min_rest=2,
+    plan_turns=True,
+    staff_size=7.0,
+    margins_mm=(10, 10, 10, 10),
+    page_numbers=True,
+    title="first",
+    part_name="every",
+    bars_per_line=0,
+    line_breaks=(),
+    page_breaks=(),
+):
+    """How a sheet is laid out on paper, for the Pages view and printing. One call per sheet: part=None is the full
+    score, part="Violin I" one player's part. paper: "A4", "A3", "B4", "Letter" or (width, height) in mm;
+    stand: "single" (every page end is a turn), "spread" (open pages: turn after 2, 4 …) or "spread-right";
+    min_rest: seconds of rest a turn needs; plan_turns: move page breaks to rests; staff_size: staff height in mm
+    (4.8–16; 7 is usual for parts); margins_mm: (top, bottom, left, right); title / part_name: "first", "every" or
+    "none"; bars_per_line: 0 = as many as fit; line_breaks / page_breaks: bar numbers (as printed) that start a new
+    line / page."""
+
+    def bad(name, why):
+        raise ValueError(f"pages(): {name} {why}")
+
+    if part is not None and not isinstance(part, str):
+        bad("part", "is the part's name, e.g. part=\"Violin I\" (or leave it out for the full score)")
+    if isinstance(paper, str):
+        if paper not in _PAPERS:
+            bad("paper", f"must be one of {', '.join(_PAPERS)} or (width, height) in mm")
+        size = _PAPERS[paper]
+    elif isinstance(paper, (tuple, list)) and len(paper) == 2 and all(isinstance(x, (int, float)) and 50 <= x <= 1000 for x in paper):
+        size = (float(paper[0]), float(paper[1]))
+    else:
+        bad("paper", "must be a name such as \"A4\" or (width, height) in mm")
+    if orientation not in ("portrait", "landscape"):
+        bad("orientation", "must be \"portrait\" or \"landscape\"")
+    if stand not in ("single", "spread", "spread-right"):
+        bad("stand", "must be \"single\", \"spread\" or \"spread-right\"")
+    if not isinstance(min_rest, (int, float)) or not 0 <= min_rest <= 30:
+        bad("min_rest", "is seconds of rest, from 0 to 30")
+    if not isinstance(staff_size, (int, float)) or not 4.8 <= staff_size <= 16:
+        bad("staff_size", "is the staff height in mm, from 4.8 to 16")
+    if not (isinstance(margins_mm, (tuple, list)) and len(margins_mm) == 4 and all(isinstance(x, (int, float)) and 0 <= x <= 60 for x in margins_mm)):
+        bad("margins_mm", "is (top, bottom, left, right) in mm, each 0–60")
+    for name, value in (("title", title), ("part_name", part_name)):
+        if value not in ("first", "every", "none"):
+            bad(name, "must be \"first\", \"every\" or \"none\"")
+    if not isinstance(bars_per_line, int) or not 0 <= bars_per_line <= 16:
+        bad("bars_per_line", "is a whole number from 0 (as many as fit) to 16")
+    for name, value in (("line_breaks", line_breaks), ("page_breaks", page_breaks)):
+        if not isinstance(value, (tuple, list)) or not all(isinstance(x, int) and x > 0 for x in value):
+            bad(name, "is a list of bar numbers, e.g. [9, 17]")
+    if any(l.get("part") == part for l in _LAYOUTS):
+        bad("part", f"{part!r} already has a pages(...) line" if part else "the full score already has a pages(...) line")
+    w, h = size
+    layout = {
+        "part": part,
+        "paper": paper if isinstance(paper, str) else [w, h],
+        "width_mm": h if orientation == "landscape" else w,
+        "height_mm": w if orientation == "landscape" else h,
+        "orientation": orientation,
+        "stand": stand,
+        "min_rest": float(min_rest),
+        "plan_turns": bool(plan_turns),
+        "staff_size": float(staff_size),
+        "margins_mm": [float(x) for x in margins_mm],
+        "page_numbers": bool(page_numbers),
+        "title": title,
+        "part_name": part_name,
+        "bars_per_line": bars_per_line,
+        "line_breaks": sorted(set(line_breaks)),
+        "page_breaks": sorted(set(page_breaks)),
+    }
+    _LAYOUTS.append(layout)
+    return layout
+
+
 def _run(code, part=None):
     ns = {"__name__": "__score__"}
+    _LAYOUTS.clear()
     exec(compile(HEADER + code, "score.py", "exec"), ns)
     if "score" not in ns:
         raise NameError("your code must set a variable named `score`")
@@ -372,7 +460,9 @@ def _run(code, part=None):
         _last["score"] = s
     else:
         s = _only_part(s, part)
-    return json.dumps(_summary(_labelled(_titled(s))))
+    out = _summary(_labelled(_titled(s)))
+    out["layouts"] = list(_LAYOUTS)
+    return json.dumps(out)
 
 
 def _load_file(path, part=None):

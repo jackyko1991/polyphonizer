@@ -305,8 +305,8 @@ score = chorale`}
       <Section page={PAGE} id="parts" n={5} title={SECTIONS[4].title}>
         <P
           t={[
-            "Players read parts, not the score. Open the **Pages & turns** view, choose a part under **Sheet for**, and look at it as the player will:",
-            "演奏者讀的是分譜，不是總譜。打開**頁面與翻頁**視圖，在**樂譜給**底下選一個聲部，用演奏者的眼光看它：",
+            "Players read parts, not the score. Open the **Pages** view, choose a part under **Sheet for**, and look at it as the player will:",
+            "演奏者讀的是分譜，不是總譜。打開**頁面**視圖，在**樂譜給**底下選一個聲部，用演奏者的眼光看它：",
           ]}
         />
         <List
@@ -402,8 +402,8 @@ score = violin`}
               "**讀每份分譜的開頭**：標題、聲部名稱、速度、調號與拍號、譜號。",
             ],
             [
-              "**Check every page turn** in Pages & turns, for every part, with the stand the player will use.",
-              "**檢查每一次翻頁**：在頁面與翻頁視圖裡，對每個聲部、用演奏者實際的擺法檢查。",
+              "**Check every page turn** in Pages, for every part, with the stand the player will use.",
+              "**檢查每一次翻頁**：在頁面視圖裡，對每個聲部、用演奏者實際的擺法檢查。",
             ],
             [
               "**Cues after long rests; multi-bar rests** where a part waits.",
@@ -418,7 +418,7 @@ score = violin`}
         <p className="flex flex-wrap gap-4">
           <SiteLink to={["editor"]} label={["Open the score editor", "開啟樂譜編輯器"]} />
           <SiteLink to={["skills", "errors"]} label={["Reading errors", "讀懂錯誤訊息"]} />
-          <SiteLink to={["learn", "species-1-above"]} label={["Try a problem with rules", "試一道有規則的題目"]} />
+          <SiteLink to={["learn", "code", "species-1-above"]} label={["Try a problem with rules", "試一道有規則的題目"]} />
         </p>
       </Section>
     </Page>

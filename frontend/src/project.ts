@@ -2,7 +2,6 @@
  * The editor's project: its Python files (main.py sets `score`; the others are modules it imports) and the player's
  * page layout of each sheet. Saved in this browser (localStorage); Export ▸ Code gives the files back.
  */
-import { DEFAULT_LAYOUT, type Layout } from "./engine/engrave.ts";
 
 export const MAIN = "main.py";
 
@@ -15,7 +14,8 @@ export interface Project {
   files: ProjectFile[];
   active: string;
   /** by sheet: "full" or "part:<name>" */
-  layouts: Record<string, Layout>;
+  /** page layouts kept per browser by earlier versions; the page setup now lives in the code (pages(...)) */
+  layouts: Record<string, unknown>;
 }
 
 const KEY = "polyphonizer.project";
@@ -51,8 +51,6 @@ export function newFileName(files: ProjectFile[]): string {
   }
 }
 
-export const sheetKey = (partName: string | null) => (partName === null ? "full" : `part:${partName}`);
-export const layoutOf = (p: Project, key: string): Layout => ({ ...DEFAULT_LAYOUT, ...p.layouts[key] });
 
 // ── a minimal zip (stored, no compression) for Export ▸ Code ──
 

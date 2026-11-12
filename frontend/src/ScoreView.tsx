@@ -7,8 +7,8 @@ import { ChevronDown, Download, Gauge, Maximize2, Minimize2, Music, PencilLine, 
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { DEFAULT_LAYOUT, engravePages, engraveScroll, midiFile, timelineOf, type Engraving, type Layout } from "./engine/engrave.ts";
-import type { Stand } from "./engine/pageTurns.ts";
+import { engravePages, engraveScroll, midiFile, timelineOf, type Engraving } from "./engine/engrave.ts";
+import { barIndices, barNumbers, DEFAULT_SETUP, PAPERS, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
 import { play, stop } from "./engine/player.ts";
 import type { ScoreData } from "./engine/types.ts";
 import { RANGE, setStage, useStage } from "./progress.ts";
@@ -30,9 +30,9 @@ export interface ScoreViewProps {
   fullScore?: ScoreData | null;
   /** Export ▸ Code (the editor's project files) */
   onExportCode?: () => void;
-  /** the player's layout of this sheet (Pages view) */
-  layout?: Layout;
-  onLayout?: (l: Layout) => void;
+  /** this sheet's page setup (the score's pages(...) call) and how to change it (the editor rewrites the call) */
+  setup?: PageSetup;
+  onSetup?: (s: PageSetup) => void;
   /** Score view, editing notes: a bar's notes as text, and writing an edit into the code */
   barText?: (part: string, bar: number) => Promise<{ text: string; lost: string[] }>;
   onEditBar?: (part: string, bar: number, text: string) => void;
@@ -77,8 +77,8 @@ export default function ScoreView({
   pagesView = true,
   view = "score",
   onView,
-  layout = DEFAULT_LAYOUT,
-  onLayout,
+  setup,
+  onSetup,
   barText,
   onEditBar,
   onNoteClick,
@@ -92,9 +92,25 @@ export default function ScoreView({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [stand, setStand] = useState<Stand>("spread");
-  const [minRest, setMinRest] = useState(2);
-  const [planOn, setPlanOn] = useState(true);
+  // the page setup: from the score's code (editor), or kept here (Learn, which has no Pages view)
+  const [localSetup, setLocalSetup] = useState<PageSetup>(DEFAULT_SETUP);
+  const cur = setup ?? localSetup;
+  const update = onSetup ?? setLocalSetup;
+  const stand = cur.stand;
+  const minRest = cur.min_rest;
+  const planOn = cur.plan_turns;
+  const setStand = (v: Stand) => update({ ...cur, stand: v });
+  const setMinRest = (v: number) => update({ ...cur, min_rest: Math.max(0, Math.min(30, v)) });
+  const setPlanOn = (v: boolean) => update({ ...cur, plan_turns: v });
+  // breaks: bar numbers in the code, measure indices for the engraver
+  const measures = score?.measures ?? [];
+  const layout = {
+    barsPerLine: cur.bars_per_line,
+    lineBreaks: barIndices(cur.line_breaks, measures),
+    pageBreaks: barIndices(cur.page_breaks, measures),
+  };
+  const onLayout = (l: { barsPerLine: number; lineBreaks: number[]; pageBreaks: number[] }) =>
+    update({ ...cur, bars_per_line: l.barsPerLine, line_breaks: barNumbers(l.lineBreaks, measures), page_breaks: barNumbers(l.pageBreaks, measures) });
   const [menu, setMenu] = useState(false);
   const [soundOpen, setSoundOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -142,7 +158,7 @@ export default function ScoreView({
     stop();
     setPlaying(false);
     (view === "pages"
-      ? engravePages(score, { stand, minRest, mode: planOn ? "plan" : "plain", layout })
+      ? engravePages(score, cur)
       : engraveScroll(score.musicxml, Math.max(320, layoutWidth(width, frozenWidth) - 24))
     )
       .then((e) => {
@@ -159,7 +175,7 @@ export default function ScoreView({
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [score, view, view === "pages" ? 0 : layoutWidth(width, frozenWidth), stand, minRest, planOn, JSON.stringify(layout)]);
+  }, [score, view, view === "pages" ? 0 : layoutWidth(width, frozenWidth), JSON.stringify(cur)]);
 
   // where the forced breaks are on the pages (drawn as markers at the start of their bars)
   useLayoutEffect(() => {
@@ -181,7 +197,8 @@ export default function ScoreView({
       }
     }
     setMarks(out);
-  }, [eng, view, width, layout.lineBreaks, layout.pageBreaks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eng, view, width, JSON.stringify(cur.line_breaks), JSON.stringify(cur.page_breaks)]);
 
   /** Score view, editing notes: a click on a bar of one staff opens its notes as text */
   const onScoreClick = async (e: React.MouseEvent) => {
@@ -206,7 +223,7 @@ export default function ScoreView({
 
   /** edit mode: a click on a bar cycles new line → new page → none */
   const onPagesClick = (e: React.MouseEvent) => {
-    if (!editing || !eng || !onLayout) return;
+    if (!editing || !eng) return;
     const id = (e.target as Element).closest("g.measure")?.id;
     const bar = id ? eng.measureIds.indexOf(id) : -1;
     if (bar <= 0) return;
@@ -517,7 +534,23 @@ export default function ScoreView({
             <input type="checkbox" checked={planOn} onChange={(e) => setPlanOn(e.target.checked)} data-testid="plan-toggle" />
             {t("pages.plan")}
           </label>
-          {onLayout && (
+          <label className="flex items-center gap-1.5">
+            {t("layout.paper")}
+            <select
+              value={typeof cur.paper === "string" ? cur.paper : ""}
+              onChange={(e) => update(withPaper(cur, e.target.value))}
+              className="rounded border border-gray-300 bg-white px-1.5 py-0.5"
+              data-testid="paper"
+            >
+              {typeof cur.paper !== "string" && <option value="">{`${cur.width_mm} × ${cur.height_mm} mm`}</option>}
+              {Object.keys(PAPERS).map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+          {(
             <>
               <span className="hidden h-5 border-l border-gray-300 sm:block" />
               <label className="flex items-center gap-1.5">
@@ -538,16 +571,18 @@ export default function ScoreView({
               </label>
               <label className="flex items-center gap-1.5">
                 {t("layout.scale")}
-                <input
-                  type="range"
-                  min={30}
-                  max={80}
-                  step={5}
-                  value={layout.scale}
-                  onChange={(e) => onLayout({ ...layout, scale: Number(e.target.value) })}
-                  className="w-24"
-                  title={`${layout.scale}%`}
-                />
+                <select
+                  value={cur.staff_size}
+                  onChange={(e) => update({ ...cur, staff_size: Number(e.target.value) })}
+                  className="rounded border border-gray-300 bg-white px-1.5 py-0.5"
+                  data-testid="staff-size"
+                >
+                  {[5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9].map((mm) => (
+                    <option key={mm} value={mm}>
+                      {mm} mm
+                    </option>
+                  ))}
+                </select>
               </label>
               <button
                 onClick={() => setEditing((x) => !x)}
@@ -609,7 +644,7 @@ export default function ScoreView({
                   {[
                     ["export.musicxml", () => download(`${name}.musicxml`, score.musicxml, "application/vnd.recordare.musicxml+xml")],
                     ["export.midi", async () => download(`${name}.mid`, (await midiFile()) as BlobPart, "audio/midi")],
-                    ["export.print", async () => printPages((await engravePages(score, { stand, minRest, mode: planOn ? "plan" : "plain", layout })).pages, score.title)],
+                    ["export.print", async () => printPages((await engravePages(score, cur)).pages, score.title)],
                     ["export.code", onExportCode],
                   ].map(([k, f]) => (
                     <button

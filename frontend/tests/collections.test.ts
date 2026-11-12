@@ -145,7 +145,7 @@ test("prelude.py allows the same collections", () => {
   const prelude = readFileSync("src/engine/prelude.py", "utf8");
   const block = /_SCORE_SOURCES = \(([\s\S]*?)\)/.exec(prelude)![1];
   assert.deepEqual([...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]), SCORE_SOURCES);
-  assert.match(prelude, /HEADER = "from music21 import \*\\nfrom polyphonizer import tiny, together, load, edit_bar, fetch_score\\n"/);
+  assert.match(prelude, /HEADER = "from music21 import \*\\nfrom polyphonizer import tiny, together, load, edit_bar, fetch_score, pages\\n"/);
 });
 
 test("the worker finds fetch_score string literals in the code", () => {

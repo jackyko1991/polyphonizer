@@ -257,8 +257,8 @@ z4 | z4 | z4 | z4 | C D E C | C D E C |]`}
               "**你聆聽。** Verovio 也會給出音符的時間軸，由 WebAudio 播放，每個聲部用自己的樂器，發聲的音符會跟著變色。",
             ],
             [
-              "**The rules check** the note list (in Learn to Code), and the page planner uses it to find rests for page turns (in Pages & turns).",
-              "**規則檢查**音符列表（在「學寫程式」裡），頁面規劃器也用它找出可以翻頁的休止（在「頁面與翻頁」裡）。",
+              "**The rules check** the note list (in Learn to Code), and the page planner uses it to find rests for page turns (in Pages).",
+              "**規則檢查**音符列表（在「學寫程式」裡），頁面規劃器也用它找出可以翻頁的休止（在「頁面」裡）。",
             ],
           ]}
         />
@@ -365,8 +365,8 @@ CDEF GA_Bc | CDEF GABc |]`}
         <Py
           code={ONE_PART}
           note={[
-            "You rarely need this line: in the **Pages & turns** view, *Sheet for* picks a player's part from the full score.",
-            "你很少需要這一行：在**頁面與翻頁**檢視中，用「樂譜給」就能從總譜選出某位演奏者的分譜。",
+            "You rarely need this line: in the **Pages** view, *Sheet for* picks a player's part from the full score.",
+            "你很少需要這一行：在**頁面**檢視中，用「樂譜給」就能從總譜選出某位演奏者的分譜。",
           ]}
         />
         <P
@@ -406,8 +406,8 @@ E F G | z3 | z3 | c3 |]`}
         <Callout kind="tip" title={["Try it on a real quartet", "用真正的四重奏試試看"]}>
           <P
             t={[
-              "In the editor, open the example *Mozart K. 80*, switch to **Pages & turns**, choose a player under *Sheet for*, and turn on *Move page breaks to rests*. Then change the stand or the seconds a turn needs and watch the breaks move.",
-              "在編輯器裡開啟範例〈莫札特 K. 80〉，切換到**頁面與翻頁**，在「樂譜給」選一位演奏者，再打開「把換頁移到休止處」。接著改變譜架擺法或翻頁需要的秒數，看看換頁位置如何移動。",
+              "In the editor, open the example *Mozart K. 80*, switch to **Pages**, choose a player under *Sheet for*, and turn on *Move page breaks to rests*. Then change the stand or the seconds a turn needs and watch the breaks move.",
+              "在編輯器裡開啟範例〈莫札特 K. 80〉，切換到**頁面**，在「樂譜給」選一位演奏者，再打開「把換頁移到休止處」。接著改變譜架擺法或翻頁需要的秒數，看看換頁位置如何移動。",
             ]}
           />
         </Callout>

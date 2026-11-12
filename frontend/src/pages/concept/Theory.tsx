@@ -520,7 +520,7 @@ G A B G | B c d2 |]`}
         <TryIn ids={["hello-scale", "ode-for-flute"]} />
         <p className="flex flex-wrap gap-4">
           <SiteLink to={["skills", "first"]} label={["Coding Skills: first music21", "程式技巧：第一步 music21"]} />
-          <SiteLink to={["learn", "ode-for-flute"]} label={["Open the Ode to Joy problem", "開啟〈快樂頌〉題目"]} />
+          <SiteLink to={["learn", "code", "ode-for-flute"]} label={["Open the Ode to Joy problem", "開啟〈快樂頌〉題目"]} />
         </p>
         <Sources
           items={[

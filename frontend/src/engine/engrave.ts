@@ -9,7 +9,8 @@
  */
 import type { VerovioToolkit } from "verovio/esm";
 import { fixAbcKeys } from "./abc.ts";
-import { planPages, restAtMeasureStarts, turnsAt, type Plan, type Stand } from "./pageTurns.ts";
+import { barIndices, DEFAULT_SETUP, type PageSetup } from "./pageSetup.ts";
+import { planPages, restAtMeasureStarts, turnsAt, type Plan } from "./pageTurns.ts";
 import type { ScoreData } from "./types.ts";
 
 type Module = Awaited<ReturnType<typeof import("verovio/wasm")["default"]>>;
@@ -125,38 +126,38 @@ export async function engraveScroll(xml: string, widthPx: number, zoom = 40): Pr
   return { pages, sounds: timeline(t), plan: null, measureIds };
 }
 
-/** The player's own layout of a sheet: kept per sheet (full score, each part) with the project. */
-export interface Layout {
-  /** bars on every line; 0 = as many as fit */
-  barsPerLine: number;
-  /** staff size: Verovio's scale, 50 = default */
-  scale: number;
-  /** measure indices (0-based, into the score's measures) that must start a new line / a new page */
-  lineBreaks: number[];
-  pageBreaks: number[];
-}
-export const DEFAULT_LAYOUT: Layout = { barsPerLine: 0, scale: 50, lineBreaks: [], pageBreaks: [] };
+/** A sheet's page setup: the score's pages(...) call (pageSetup.ts). */
+export type { PageSetup } from "./pageSetup.ts";
 
-export interface PageOptions {
-  stand: Stand;
-  minRest: number;
-  /** "plan" moves page breaks to the rests; "plain" just fills the pages */
-  mode: "plan" | "plain";
-  layout?: Layout;
+/** Verovio's options for a setup: paper and margins in tenths of a mm, staff size as Verovio's unit (9 = 7.2 mm) */
+function pageOptions(setup: PageSetup) {
+  const [top, bottom, left, right] = setup.margins_mm;
+  return {
+    pageWidth: Math.round(setup.width_mm * 10),
+    pageHeight: Math.round(setup.height_mm * 10),
+    pageMarginTop: Math.round(top * 10),
+    pageMarginBottom: Math.round(bottom * 10),
+    pageMarginLeft: Math.round(left * 10),
+    pageMarginRight: Math.round(right * 10),
+    unit: Math.max(6, Math.min(20, Math.round(setup.staff_size * 1.25 * 10) / 10)),
+    header: (setup.title === "none" ? "none" : "auto") as "none" | "auto",
+    footer: (setup.page_numbers ? "always" : "none") as "always" | "none",
+  };
 }
-
-/** A4 portrait at Verovio's default unit (10 per mm) */
-const A4 = { pageWidth: 2100, pageHeight: 2970, pageMarginTop: 80, pageMarginBottom: 80, pageMarginLeft: 100, pageMarginRight: 100 };
 
 /**
  * A4 pages in three passes: (1) Verovio's own line breaks, unless the layout fixes the bars per line; the player's
  * forced breaks are added; (2) those lines with Verovio's page breaks, to learn how many lines fit on a page;
  * (3) the page breaks chosen by the planner (pageTurns.ts), which keeps the forced page breaks.
  */
-export async function engravePages(score: ScoreData, opts: PageOptions): Promise<Engraving> {
+export async function engravePages(score: ScoreData, setup: PageSetup = DEFAULT_SETUP): Promise<Engraving> {
   const t = await tk();
-  const layout = opts.layout ?? DEFAULT_LAYOUT;
-  t.setOptions({ ...BASE, ...A4, scale: layout.scale, adjustPageHeight: false, breaks: "auto", header: "auto" });
+  const layout = {
+    barsPerLine: setup.bars_per_line,
+    lineBreaks: barIndices(setup.line_breaks, score.measures),
+    pageBreaks: barIndices(setup.page_breaks, score.measures),
+  };
+  t.setOptions({ ...BASE, ...pageOptions(setup), scale: 50, adjustPageHeight: false, breaks: "auto" });
   t.loadData(score.musicxml);
   const parser = new DOMParser();
   const firstMeasures = (svg: string) =>
@@ -200,9 +201,9 @@ export async function engravePages(score: ScoreData, opts: PageOptions): Promise
     systemStarts: starts,
     restAt,
     perPage,
-    stand: opts.stand,
+    stand: setup.stand,
     // "plain": fill the pages and only report the turns
-    minRest: opts.mode === "plan" ? opts.minRest : 0,
+    minRest: setup.plan_turns ? setup.min_rest : 0,
     forcedStarts: starts.flatMap((m, s) => (forcedPage.has(m) ? [s] : [])),
   });
   t.setOptions({ breaks: "encoded" });
@@ -210,7 +211,7 @@ export async function engravePages(score: ScoreData, opts: PageOptions): Promise
   const pages = Array.from({ length: t.getPageCount() }, (_, i) => untitled(t.renderToSVG(i + 1)));
   // report the turns of the pages as laid out
   const rendered = pages.map((svg) => index.get(firstMeasures(svg)[0] ?? "") ?? -1);
-  const turns = rendered.every((m) => m >= 0) ? turnsAt(rendered, restAt, opts.stand, opts.minRest) : plan.turns;
+  const turns = rendered.every((m) => m >= 0) ? turnsAt(rendered, restAt, setup.stand, setup.min_rest) : plan.turns;
   return { pages, sounds: timeline(t), plan: { ...plan, turns, ok: turns.every((x) => x.ok) }, measureIds: ids };
 }
 

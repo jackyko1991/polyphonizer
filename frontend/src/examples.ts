@@ -23,8 +23,8 @@ score = corpus.parse("bach/bwv66.6")
   },
   {
     id: "mozart",
-    title: ["Mozart K. 80, first movement (try Pages & turns)", "莫札特 K. 80 第一樂章（試試「頁面與翻頁」）"],
-    code: `# A string quartet: open "Pages & turns" and pick one player's sheet to see where the pages turn.
+    title: ["Mozart K. 80, first movement (try Pages)", "莫札特 K. 80 第一樂章（試試「頁面」）"],
+    code: `# A string quartet: open "Pages" and pick one player's sheet to see where the pages turn.
 score = corpus.parse("mozart/k80/movement1")
 `,
   },

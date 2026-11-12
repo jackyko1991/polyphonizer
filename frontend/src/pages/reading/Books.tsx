@@ -38,7 +38,7 @@ const BOOK_GROUPS: { id: Book["group"]; title: L }[] = [
 
 const THEORY: Book["site"] = { to: ["concept", "theory"], label: ["Concept ▸ Music theory as code", "概念 ▸ 以程式碼表達樂理"] };
 const ENGRAVING: Book["site"] = { to: ["concept", "engraving"], label: ["Concept ▸ How a score is engraved", "概念 ▸ 樂譜如何排版"] };
-const SPECIES: Book["site"] = { to: ["learn", "species-1-above"], label: ["Learn ▸ First species", "學習 ▸ 第一類對位"] };
+const SPECIES: Book["site"] = { to: ["learn", "code", "species-1-above"], label: ["Learn ▸ First species", "學習 ▸ 第一類對位"] };
 
 const BOOKS: Book[] = [
   // Start here (free online)
@@ -143,7 +143,7 @@ const BOOKS: Book[] = [
       "A modern, hands-on course in Renaissance counterpoint, from two-voice species to imitation and writing in the style of a real motet.",
       "一套現代、動手做的文藝復興對位課程，從兩聲部類別對位一路到模仿，以及仿經文歌風格的寫作。",
     ],
-    site: { to: ["learn", "species-1-below"], label: ["Learn ▸ First species below", "學習 ▸ 下方第一類對位"] },
+    site: { to: ["learn", "code", "species-1-below"], label: ["Learn ▸ First species below", "學習 ▸ 下方第一類對位"] },
   },
   {
     id: "kennan",
@@ -157,7 +157,7 @@ const BOOKS: Book[] = [
       "The standard short course in Bach-style tonal counterpoint: two-voice writing, inventions, canon and fugue.",
       "巴赫風格調性對位的標準精簡教材：兩聲部寫作、創意曲、卡農與賦格。",
     ],
-    site: { to: ["learn", "twinkle-duet"], label: ["Learn ▸ Duet", "學習 ▸ 二重奏"] },
+    site: { to: ["learn", "code", "twinkle-duet"], label: ["Learn ▸ Duet", "學習 ▸ 二重奏"] },
   },
   {
     id: "aldwell",
