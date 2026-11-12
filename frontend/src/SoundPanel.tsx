@@ -81,6 +81,17 @@ export default function SoundPanel({ parts, programs, onClose }: { parts: string
         />
       </div>
 
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-gray-700">
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={s.cursor !== false} onChange={(e) => setSoundSettings({ cursor: e.target.checked })} data-testid="cursor-toggle" />
+          {t("sound.cursor")}
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={s.highlight !== false} onChange={(e) => setSoundSettings({ highlight: e.target.checked })} />
+          {t("sound.highlight")}
+        </label>
+      </div>
+
       {parts.length > 0 && (
         <>
           <h3 className="mt-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">{t("sound.parts")}</h3>

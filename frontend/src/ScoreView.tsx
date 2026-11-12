@@ -11,6 +11,8 @@ import { engravePages, engraveScroll, midiFile, timelineOf, type Engraving } fro
 import { barIndices, barNumbers, DEFAULT_SETUP, PAPERS, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
 import { play, stop } from "./engine/player.ts";
 import type { ScoreData } from "./engine/types.ts";
+import { cursorAt, onsetTable, type Onset } from "./engine/cursor.ts";
+import { useSoundSettings } from "./engine/sound.ts";
 import { RANGE, setStage, useStage } from "./progress.ts";
 import SoundPanel from "./SoundPanel.tsx";
 import { BUTTON, BUTTON_ON, CHECK, FIELD, layoutWidth, SEGMENT, SEGMENTS } from "./ui.ts";
@@ -280,8 +282,12 @@ export default function ScoreView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [speedKey, marked]);
 
-  const mark = (id: string, on: boolean) =>
+  const sound = useSoundSettings();
+  const showCursor = sound.cursor !== false;
+  const showHighlight = sound.highlight !== false;
+  const markRaw = (id: string, on: boolean) =>
     box.current?.querySelector(`[id="${CSS.escape(id)}"]`)?.classList.toggle("pz-playing", on);
+  const mark = (id: string, on: boolean) => (showHighlight || !on) && markRaw(id, on);
   /** play from `from` ms (of the written tempo) at speed `spd` */
   const playFrom = async (from: number, spd: number) => {
     if (!eng) return;
@@ -308,6 +314,65 @@ export default function ScoreView({
   };
   /** where a running playback is now, in ms of the written tempo */
   const position = () => (running.current ? running.current.from + (performance.now() - running.current.at) * running.current.speed : startMs);
+
+  // the playback cursor: an onset table (time → x, system) from the drawn notes, and a line moved every frame
+  const cursorEl = useRef<HTMLDivElement>(null);
+  const onsets = useRef<(Onset & { page: number })[]>([]);
+  const [cursorShown, setCursorShown] = useState(false);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || !eng) return void (onsets.current = []);
+    const b = el.getBoundingClientRect();
+    const systems = [...el.querySelectorAll("g.system")];
+    const items: (Onset & { page: number })[] = [];
+    for (const snd of eng.sounds) {
+      const note = el.querySelector(`[id="${CSS.escape(snd.id)}"]`);
+      const sys = note?.closest("g.system");
+      if (!note || !sys) continue;
+      const r = note.getBoundingClientRect();
+      const sr = sys.getBoundingClientRect();
+      const page = Number((note.closest("[data-page]") as HTMLElement | null)?.dataset.page ?? 0);
+      items.push({
+        time: snd.time,
+        x: r.left - b.left + el.scrollLeft,
+        top: sr.top - b.top + el.scrollTop,
+        height: sr.height,
+        system: systems.indexOf(sys),
+        page,
+      });
+    }
+    onsets.current = onsetTable(items) as (Onset & { page: number })[];
+  }, [eng, width, full, view]);
+  /** put the line where the music is at `t` (ms, written tempo); scroll it into view if it left */
+  const placeCursor = (t: number) => {
+    const c = cursorEl.current;
+    const el = box.current;
+    const glide = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const at = cursorAt(onsets.current, t, glide);
+    if (!c || !el || !at) return;
+    c.style.transform = `translate(${at.x}px, ${at.top}px)`;
+    c.style.height = `${at.height}px`;
+    if (at.top < el.scrollTop || at.top + at.height > el.scrollTop + el.clientHeight)
+      el.scrollTo({ top: Math.max(0, at.top - 24), behavior: glide ? "smooth" : "auto" });
+  };
+  useEffect(() => {
+    if (!playing || !showCursor) return;
+    setCursorShown(true);
+    let raf = 0;
+    const tick = () => {
+      placeCursor(position());
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, showCursor, eng]);
+  // stopped: the line stays; a clicked start moves it there
+  useEffect(() => {
+    if (!playing && cursorShown && showCursor) placeCursor(startMs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startMs]);
+  useEffect(() => setCursorShown(false), [eng]);
   const toggle = () => {
     if (playing) {
       running.current = null;
@@ -670,6 +735,14 @@ export default function ScoreView({
             <Icon icon={full ? Minimize2 : Maximize2} />
           </button>
         </div>
+        {showCursor && cursorShown && (
+          <div
+            ref={cursorEl}
+            className="pointer-events-none absolute top-0 left-0 z-10 w-0.5 rounded-full bg-(--lk-accent) opacity-70"
+            aria-hidden
+            data-testid="play-cursor"
+          />
+        )}
         {bar && (
           <BarEditor
             bar={bar}

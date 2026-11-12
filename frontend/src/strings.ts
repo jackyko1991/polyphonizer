@@ -260,6 +260,8 @@ export const STRINGS = {
   "sound.a4": ["Tuning: A4 =", "調音：A4 ="],
   "sound.baroque": ["Baroque", "巴洛克"],
   "sound.reverb": ["Reverb", "殘響"],
+  "sound.cursor": ["Cursor line while playing", "播放時顯示游標線"],
+  "sound.highlight": ["Light up the sounding notes", "點亮正在發聲的音符"],
   "sound.parts": ["Parts", "聲部"],
   "sound.mute": ["Mute", "靜音"],
   "sound.auto": ["As in the score: {name}", "依樂譜：{name}"],

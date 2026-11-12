@@ -57,6 +57,9 @@ export interface SoundSettings {
   a4: number;
   /** 0–1 */
   reverb: number;
+  /** while playing: a line follows the music; the sounding notes light up */
+  cursor?: boolean;
+  highlight?: boolean;
   /** by part name, so a choice survives re-running the code */
   parts: Record<string, PartSound>;
 }
