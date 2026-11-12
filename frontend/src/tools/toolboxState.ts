@@ -12,6 +12,8 @@ export interface ToolboxState {
   active: ToolId | null;
   height: number;
   running: ToolId[];
+  /** the dock put away (Close): its tools stay open (a ticking metronome keeps ticking) until a tool is opened */
+  hidden: boolean;
 }
 
 const KEY = "polyphonizer.toolbox";
@@ -24,9 +26,10 @@ let state: ToolboxState = (() => {
       active: open.includes(s?.active as ToolId) ? (s!.active as ToolId) : (open[0] ?? null),
       height: s?.height ?? 230,
       running: [],
+      hidden: false,
     };
   } catch {
-    return { open: [], active: null, height: 230, running: [] };
+    return { open: [], active: null, height: 230, running: [], hidden: false };
   }
 })();
 const listeners = new Set<() => void>();
@@ -49,11 +52,13 @@ export const useToolbox = () =>
 
 /** open a tool (or bring it to the front) */
 export function openTool(id: ToolId) {
-  set({ ...state, open: state.open.includes(id) ? state.open : [...state.open, id], active: id });
+  set({ ...state, open: state.open.includes(id) ? state.open : [...state.open, id], active: id, hidden: false });
 }
+/** put the dock away without closing its tools */
+export const hideDock = () => set({ ...state, hidden: true });
 /** open it, or close it if it is already in front */
 export function toggleTool(id: ToolId) {
-  if (state.active === id) closeTool(id);
+  if (state.active === id && !state.hidden) closeTool(id);
   else openTool(id);
 }
 export function closeTool(id: ToolId) {

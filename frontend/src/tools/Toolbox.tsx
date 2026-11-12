@@ -7,7 +7,7 @@
 import { useLang } from "@learnkit/web";
 import { AudioWaveform, Piano, Timer, Wrench, X, type LucideIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { closeTool, openTool, setDockHeight, toggleTool, useToolbox, type ToolId } from "./toolboxState.ts";
+import { closeTool, hideDock, openTool, setDockHeight, toggleTool, useToolbox, type ToolId } from "./toolboxState.ts";
 
 const KeyboardTool = lazy(() => import("./KeyboardTool.tsx"));
 const MetronomeTool = lazy(() => import("./MetronomeTool.tsx"));
@@ -45,11 +45,20 @@ export default function Toolbox() {
 
   // the dock slides up when it opens; the page keeps its last lines visible above it
   const dockOpen = box.open.length > 0;
+  const dockShown = dockOpen && !box.hidden;
+  const sheet = box.active === "metronome" || box.active === "tuner";
+  // Esc puts the full-screen sheet away on a phone
   useEffect(() => {
-    const raf = requestAnimationFrame(() => setShown(dockOpen));
-    document.documentElement.style.setProperty("--pz-dock", dockOpen ? `${box.height}px` : "0px");
+    if (!dockShown || !sheet) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && window.innerWidth < 640 && hideDock();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dockShown, sheet]);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setShown(dockShown));
+    document.documentElement.style.setProperty("--pz-dock", dockShown ? `${box.height}px` : "0px");
     return () => cancelAnimationFrame(raf);
-  }, [dockOpen, box.height]);
+  }, [dockShown, box.height]);
 
   const hoverIn = () => {
     if (closeTimer.current) window.clearTimeout(closeTimer.current);
@@ -68,8 +77,8 @@ export default function Toolbox() {
     <>
       {/* launcher and its menu */}
       <div
-        className="fixed right-4 z-50 flex flex-col items-end gap-2 transition-[bottom] duration-200"
-        style={{ bottom: `calc(2.5rem + var(--pz-dock, 0px))` }}
+        // always in the same place, bottom right, above everything (the dock and the phone sheet too)
+        className="fixed right-4 bottom-10 z-[70] flex flex-col items-end gap-2"
         onMouseEnter={hoverIn}
         onMouseLeave={hoverOut}
         onKeyDown={(e) => e.key === "Escape" && setMenu(false)}
@@ -141,12 +150,12 @@ export default function Toolbox() {
             shown ? "translate-y-0" : "translate-y-full"
           } ${
             // on a phone the metronome and the tuner take the whole screen (big, easy to touch)
-            box.active === "metronome" || box.active === "tuner" ? "max-sm:top-0 max-sm:bottom-0 max-sm:z-[60] max-sm:h-[100dvh]! max-sm:border-t-0" : ""
-          }`}
+            sheet ? "max-sm:top-0 max-sm:bottom-0 max-sm:z-[60] max-sm:h-[100dvh]! max-sm:border-t-0" : ""
+          } ${box.hidden ? "hidden" : ""}`}
           style={{ height: box.height }}
           data-testid="tool-dock"
         >
-          <div className={box.active === "metronome" || box.active === "tuner" ? "max-sm:hidden" : ""}>
+          <div className={sheet ? "max-sm:hidden" : ""}>
             <Resizer />
           </div>
           <div className="flex h-9 shrink-0 items-stretch gap-1 border-b border-gray-200 bg-gray-50 px-2" role="tablist">
@@ -177,8 +186,19 @@ export default function Toolbox() {
                 </div>
               );
             })}
+            <button
+              type="button"
+              onClick={hideDock}
+              className="ml-auto flex items-center gap-1 self-center rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 max-sm:px-3 max-sm:py-1.5 max-sm:text-base"
+              title={pick(["Close the tools (they keep running; open the Toolbox to come back)", "關閉工具面板（工具會繼續運作；從工具箱回來）"])}
+              data-testid="dock-close"
+            >
+              <X className="h-4 w-4 max-sm:h-5 max-sm:w-5" strokeWidth={2} aria-hidden />
+              {pick(["Close", "關閉"])}
+            </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto p-3 max-sm:p-4">
+          {/* room on the right (and at the bottom on a phone) for the Toolbox button, which sits over the dock */}
+          <div className="min-h-0 flex-1 overflow-auto p-3 pr-20 max-sm:p-4 max-sm:pr-4 max-sm:pb-24">
             <Suspense fallback={<p className="text-sm text-gray-500">…</p>}>
               {/* open tools stay mounted (a ticking metronome keeps its panel state); only the front one shows */}
               {box.open.map((id) => (
