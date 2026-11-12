@@ -75,6 +75,8 @@ export default function Toolbox() {
   useEffect(() => {
     const raf = requestAnimationFrame(() => setShown(dockShown));
     document.documentElement.style.setProperty("--pz-dock", dockShown ? `${box.height}px` : "0px");
+    // the dock sits above the footer (bottom-7): a full-screen score stops above both
+    document.documentElement.style.setProperty("--pz-dock-gap", dockShown ? "1.75rem" : "0px");
     return () => cancelAnimationFrame(raf);
   }, [dockShown, box.height]);
 

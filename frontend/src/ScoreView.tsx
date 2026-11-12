@@ -271,7 +271,8 @@ export default function ScoreView({
     } else {
       setFrozenWidth(width);
       setFull(true);
-      panel.current?.requestFullscreen?.().catch(() => undefined);
+      // the whole page goes full screen (not just this panel), so the Toolbox stays usable over the score
+      document.documentElement.requestFullscreen?.().catch(() => undefined);
     }
   };
   useEffect(() => {
@@ -490,7 +491,13 @@ export default function ScoreView({
   const btn = BUTTON;
 
   return (
-    <div ref={panel} className={`flex flex-col bg-white ${full ? "fixed inset-0 z-50" : "h-full min-h-[24rem]"}`} data-testid="score-panel">
+    <div
+      ref={panel}
+      // full screen: over the page, above the header, and ending where the Toolbox dock begins (the Toolbox stays on top)
+      className={`flex flex-col bg-white ${full ? "fixed inset-x-0 top-0 z-[35]" : "h-full min-h-[24rem]"}`}
+      style={full ? { bottom: "calc(var(--pz-dock, 0px) + var(--pz-dock-gap, 0px))" } : undefined}
+      data-testid="score-panel"
+    >
       <div className="flex items-center gap-1.5 overflow-x-auto border-b border-gray-200 bg-white px-2 py-1.5 lg:flex-wrap lg:overflow-visible">
         {allParts && allParts.length > 1 && (
           <label className="inline-flex shrink-0 items-center" title={t("pages.part")}>
