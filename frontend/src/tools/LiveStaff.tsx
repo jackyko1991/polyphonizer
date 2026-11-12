@@ -5,7 +5,8 @@
  */
 import { useLang } from "@learnkit/web";
 import { useEffect, useRef, useState } from "react";
-import { liveAbc, groupChords } from "./liveStaff.ts";
+import { X } from "lucide-react";
+import { clearStaff, groupChords, liveAbc, onClearStaff } from "./liveStaff.ts";
 import { subscribeNotes } from "./noteInput.ts";
 
 export default function LiveStaff({ width = 420 }: { width?: number }) {
@@ -29,6 +30,16 @@ export default function LiveStaff({ width = 420 }: { width?: number }) {
           else next.delete(e.midi);
           return next;
         });
+      }),
+    [],
+  );
+
+  useEffect(
+    () =>
+      onClearStaff(() => {
+        ons.current = [];
+        setHeld(new Set());
+        setVersion((v) => v + 1);
       }),
     [],
   );
@@ -62,11 +73,21 @@ export default function LiveStaff({ width = 420 }: { width?: number }) {
   return (
     <div
       ref={box}
-      className="pz-score flex h-full min-w-0 items-center justify-center overflow-hidden rounded-md border border-gray-200 bg-white px-2 [&_svg]:h-full [&_svg]:max-h-full [&_svg]:w-auto"
+      className="pz-score relative flex h-full min-w-0 items-center justify-center overflow-hidden rounded-md border border-gray-200 bg-white px-2 [&_svg]:h-full [&_svg]:max-h-full [&_svg]:w-auto"
       aria-label={pick(["The notes you play, on a staff", "你彈的音，在五線譜上"])}
       data-testid="live-staff"
     >
       {svg ? <div className="h-full" dangerouslySetInnerHTML={{ __html: svg }} /> : <p className="text-xs text-gray-400">♪</p>}
+      <button
+        type="button"
+        onClick={clearStaff}
+        className="absolute top-1 right-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+        title={pick(["Clear the staff (Backspace or Delete while the computer keys are on)", "清除五線譜（開啟電腦鍵盤彈奏時按 Backspace 或 Delete）"])}
+        data-testid="staff-clear"
+      >
+        <X className="h-3.5 w-3.5" aria-hidden />
+        {pick(["Clear", "清除"])}
+      </button>
     </div>
   );
 }

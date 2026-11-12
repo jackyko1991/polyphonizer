@@ -40,3 +40,11 @@ export function liveAbc(chords: number[][], max = 8): string {
       .trim() + " |]";
   return ["X:1", "M:4/4", "L:1/4", "K:C", "V:1", line((n) => n >= 60), "V:2 clef=bass", line((n) => n < 60)].join("\n");
 }
+
+const clearers = new Set<() => void>();
+/** the live staff listens for "clear" (its button, or Backspace / Delete on the armed keyboard) */
+export function onClearStaff(f: () => void): () => void {
+  clearers.add(f);
+  return () => void clearers.delete(f);
+}
+export const clearStaff = () => clearers.forEach((f) => f());

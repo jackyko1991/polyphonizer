@@ -9,7 +9,9 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { Button, IconButton } from "../Button.tsx";
 import { CHECK, FIELD } from "../ui.ts";
 import { noteOn, prepare } from "./liveSound.ts";
-import { isBlack, KEY_OFFSETS, keyLabel, keysBetween, letter, noteName, RANGES } from "./music.ts";
+import { clearStaff } from "./liveStaff.ts";
+import { keyAction, keyLabelFor, keyMidi, LAYOUTS, layoutHelp, type LayoutId } from "./keyLayouts.ts";
+import { isBlack, keysBetween, letter, noteName, RANGES } from "./music.ts";
 import { publishNote, type NoteSource } from "./noteInput.ts";
 import { setRunning } from "./toolboxState.ts";
 
@@ -46,6 +48,10 @@ interface KeyboardPrefs {
   staff?: boolean;
   program: number;
   baseC: number;
+  /** the left hand's C in the two-row layout */
+  lowC?: number;
+  /** which computer-keyboard layout plays the keys */
+  layout?: LayoutId;
   velocity: number;
 }
 const KEY = "polyphonizer.keyboard";
@@ -63,7 +69,7 @@ const typing = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || !!t.closest(".cm-editor"));
 
 export default function KeyboardTool() {
-  const { pick } = useLang();
+  const { pick, index: lang } = useLang();
   const [p, setP] = useState(load);
   const [armed, setArmed] = useState(false);
   const [lit, setLit] = useState<Set<number>>(new Set());
@@ -130,20 +136,26 @@ export default function KeyboardTool() {
     const down = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
       if (e.code === "Escape") return setArmed(false);
-      const off = KEY_OFFSETS[e.code];
-      if (off !== undefined) {
+      if (e.code === "Backspace" || e.code === "Delete") {
+        e.preventDefault();
+        return clearStaff();
+      }
+      const lay = prefs.current.layout ?? "typing";
+      const bases = { high: prefs.current.baseC, low: prefs.current.lowC ?? prefs.current.baseC - 12 };
+      const midi = keyMidi(lay, e.code, bases);
+      const action = keyAction(lay, e.code);
+      const clamp = (m: number) => Math.min(96, Math.max(24, m));
+      if (midi !== null) {
         e.preventDefault();
         if (e.repeat) return;
-        const midi = prefs.current.baseC + off;
         codeMidi.set(e.code, midi);
         start(e.code, midi, "keys");
-      } else if (e.code === "KeyZ" || e.code === "KeyX") {
+      } else if (action) {
         e.preventDefault();
-        if (!e.repeat) update({ baseC: Math.min(96, Math.max(24, prefs.current.baseC + (e.code === "KeyX" ? 12 : -12))) });
-      } else if (e.code === "KeyC" || e.code === "KeyV") {
-        e.preventDefault();
-        if (!e.repeat)
-          update({ velocity: Math.round(Math.min(1, Math.max(0.2, prefs.current.velocity + (e.code === "KeyV" ? 0.1 : -0.1))) * 10) / 10 });
+        if (e.repeat) return;
+        if (action === "octDown" || action === "octUp") update({ baseC: clamp(prefs.current.baseC + (action === "octUp" ? 12 : -12)) });
+        else if (action === "lowDown" || action === "lowUp") update({ lowC: clamp(bases.low + (action === "lowUp" ? 12 : -12)) });
+        else update({ velocity: Math.round(Math.min(1, Math.max(0.2, prefs.current.velocity + (action === "louder" ? 0.1 : -0.1))) * 10) / 10 });
       } else if (e.code === "Space") {
         e.preventDefault();
         sustain.current = true;
@@ -215,6 +227,23 @@ export default function KeyboardTool() {
           {armed ? pick(["Computer keys on", "電腦鍵盤彈奏中"]) : pick(["Play with computer keys", "用電腦鍵盤彈"])}
         </Button>
         <select
+          value={p.layout ?? "typing"}
+          onChange={(e) => update({ layout: e.target.value as LayoutId, lowC: p.lowC ?? p.baseC - 12 })}
+          className={FIELD}
+          aria-label={pick(["Computer-keyboard layout", "電腦鍵盤配置"])}
+          title={pick([
+            "Two-row piano: two hands, about 2½ octaves (as FL Studio and trackers). Musical Typing: one row, about 1½ octaves (as GarageBand and Ableton).",
+            "雙排鋼琴：雙手、約兩個半八度（同 FL Studio 與 tracker）。Musical Typing：單排、約一個半八度（同 GarageBand 與 Ableton）。",
+          ])}
+          data-testid="kb-layout"
+        >
+          {LAYOUTS.map((l) => (
+            <option key={l} value={l}>
+              {l === "tworow" ? pick(["Two-row piano (2 hands)", "雙排鋼琴（雙手）"]) : pick(["Musical Typing (1 row)", "Musical Typing（單排）"])}
+            </option>
+          ))}
+        </select>
+        <select
           value={p.program}
           onChange={(e) => update({ program: Number(e.target.value) })}
           className={FIELD}
@@ -275,16 +304,13 @@ export default function KeyboardTool() {
         {midiState === "none" && <span className="text-xs text-red-700">{pick(["No MIDI access", "無法使用 MIDI"])}</span>}
         <span className="ml-auto text-xs text-gray-500">
           {armed
-            ? pick([
-                `A S D F G H J K = C D E F G A B C · W E T Y U = black keys · Z/X octave (C${p.baseC / 12 - 1}) · C/V loudness ${Math.round(p.velocity * 100)}% · Space = pedal`,
-                `A S D F G H J K = C D E F G A B C · W E T Y U = 黑鍵 · Z/X 換八度（C${p.baseC / 12 - 1}）· C/V 音量 ${Math.round(p.velocity * 100)}% · 空白鍵 = 踏板`,
-              ])
+            ? layoutHelp(p.layout ?? "typing", { high: p.baseC, low: p.lowC ?? p.baseC - 12 }, p.velocity, lang === 1)
             : pick(["Click the keys, or turn on the computer keys", "點按琴鍵，或開啟電腦鍵盤彈奏"])}
         </span>
       </div>
-      <div className="flex min-h-0 flex-1 gap-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
       {p.staff && (
-        <div className="w-[min(40%,30rem)] shrink-0 max-sm:hidden">
+        <div className="h-[38%] min-h-16 shrink-0">
           <Suspense fallback={null}>
             <LiveStaff />
           </Suspense>
@@ -303,7 +329,7 @@ export default function KeyboardTool() {
               midi={m}
               lit={lit.has(m)}
               label={p.names ? `${letter(m)}${m % 12 === 0 ? Math.floor(m / 12) - 1 : ""}` : ""}
-              keyLetter={p.keys && armed ? keyLabel(m, p.baseC) : null}
+              keyLetter={p.keys && armed ? keyLabelFor(p.layout ?? "typing", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }) : null}
               middle={m === 60}
               onStart={(id) => start(id, m, "mouse")}
               onEnd={(id) => end(id, m, "mouse")}
@@ -321,7 +347,7 @@ export default function KeyboardTool() {
                 midi={m}
                 lit={lit.has(m)}
                 label=""
-                keyLetter={p.keys && armed ? keyLabel(m, p.baseC) : null}
+                keyLetter={p.keys && armed ? keyLabelFor(p.layout ?? "typing", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }) : null}
                 onStart={(id) => start(id, m, "mouse")}
                 onEnd={(id) => end(id, m, "mouse")}
                 className="absolute top-0 h-[60%] -translate-x-1/2 rounded-b-md bg-gray-900"

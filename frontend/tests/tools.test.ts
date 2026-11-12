@@ -141,3 +141,23 @@ test("live staff: pitches in ABC, chords from keys pressed together, a grand sta
   const { exampleData } = await import("../src/engine/abc.ts");
   assert.match(exampleData(abc), /<staffDef n="2"/);
 });
+
+test("keyboard layouts: Musical Typing and two-row piano (two hands, ~2½ octaves)", async () => {
+  const { keyMidi, keyAction, keyLabelFor } = await import("../src/tools/keyLayouts.ts");
+  const b = { high: 60, low: 48 };
+  // Musical Typing: A = C4, W = C♯4, K = C5, Z/X octave, C/V loudness
+  assert.deepEqual(["KeyA", "KeyW", "KeyK", "KeyZ"].map((k) => keyMidi("typing", k, b)), [60, 61, 72, null]);
+  assert.equal(keyAction("typing", "KeyX"), "octUp");
+  assert.equal(keyAction("typing", "KeyV"), "louder");
+  // two rows: Z = C3 (left hand), S = C♯3, / = E4; Q = C4 (right hand), 2 = C♯4, ] = G5
+  assert.deepEqual(["KeyZ", "KeyS", "KeyM", "Slash", "KeyQ", "Digit2", "KeyU", "KeyI", "BracketRight"].map((k) => keyMidi("tworow", k, b)), [48, 49, 59, 64, 60, 61, 71, 72, 79]);
+  // in two rows Z X C V are notes; the arrows move the hands' octaves
+  assert.equal(keyAction("tworow", "KeyZ"), null);
+  assert.equal(keyAction("tworow", "ArrowDown"), "lowDown");
+  assert.equal(keyAction("tworow", "ArrowRight"), "octUp");
+  // labels on the virtual keys
+  assert.equal(keyLabelFor("tworow", 48, b), "Z");
+  assert.equal(keyLabelFor("tworow", 60, b), "Q"); // C4: both hands reach it; the right hand's key is shown
+  assert.equal(keyLabelFor("tworow", 63, b), "3");
+  assert.equal(keyLabelFor("typing", 60, b), "A");
+});
