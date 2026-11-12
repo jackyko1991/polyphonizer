@@ -491,7 +491,7 @@ export default function ScoreView({
 
   return (
     <div ref={panel} className={`flex flex-col bg-white ${full ? "fixed inset-0 z-50" : "h-full min-h-[24rem]"}`} data-testid="score-panel">
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 bg-white px-2 py-1.5">
+      <div className="flex items-center gap-1.5 overflow-x-auto border-b border-gray-200 bg-white px-2 py-1.5 lg:flex-wrap lg:overflow-visible">
         {allParts && allParts.length > 1 && (
           <label className="inline-flex shrink-0 items-center" title={t("pages.part")}>
             <select

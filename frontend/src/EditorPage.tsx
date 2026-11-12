@@ -136,6 +136,8 @@ export default function EditorPage() {
     }
   };
   const [editingName, setEditingName] = useState(false);
+  // phones and tablets show the score or the code (the score first: reading and playing)
+  const [mobileView, setMobileView] = useState<"score" | "code">("score");
   const [score, setScore] = useState<ScoreData | null>(null);
   const [sheet, setSheet] = useState<ScoreData | null>(null);
   const [part, setPart] = useState<number | null>(null);
@@ -388,8 +390,22 @@ export default function EditorPage() {
 
   const errorHere = error && (error.file ?? MAIN) === active.name ? error.line : null;
   return (
-    <div className="grid lg:h-full lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]" data-testid="editor-page">
-      <section className="flex min-h-[22rem] border-r border-gray-200 bg-white">
+    <div className="flex h-[calc(100dvh-var(--pz-dock,0px)-8.75rem)] min-h-[24rem] flex-col lg:grid lg:h-full lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]" data-testid="editor-page">
+      {/* phones and tablets: one panel at a time */}
+      <div className="flex shrink-0 border-b border-gray-200 bg-white lg:hidden" role="tablist" data-testid="editor-mobile-tabs">
+        {(["score", "code"] as const).map((v) => (
+          <button
+            key={v}
+            role="tab"
+            aria-selected={mobileView === v}
+            onClick={() => setMobileView(v)}
+            className={`flex-1 border-b-2 py-2 text-sm font-medium ${mobileView === v ? "border-(--lk-accent) text-(--lk-accent)" : "border-transparent text-gray-500"}`}
+          >
+            {v === "score" ? t("mtab.score") : t("mtab.code")}
+          </button>
+        ))}
+      </div>
+      <section className={`min-h-0 flex-1 border-r border-gray-200 bg-white lg:flex lg:min-h-[22rem] lg:flex-none ${mobileView === "code" ? "flex" : "hidden"}`}>
         {/* the score explorer: a thin rail, or the tree (a drawer on phones) */}
         {treeOpen && <div className="fixed inset-0 z-30 bg-black/20 lg:hidden" onClick={() => setTree(false)} aria-hidden />}
         <div
@@ -481,7 +497,10 @@ export default function EditorPage() {
           )}
           <PyStatus compact />
           <button
-            onClick={() => void run()}
+            onClick={() => {
+              void run();
+              setMobileView("score");
+            }}
             disabled={running}
             className={PRIMARY}
             data-testid="run"
@@ -583,7 +602,7 @@ export default function EditorPage() {
         <ErrorBox error={error} />
         </div>
       </section>
-      <section className="min-h-[28rem] lg:min-h-0">
+      <section className={`min-h-0 flex-1 lg:block lg:min-h-0 ${mobileView === "score" ? "flex flex-col" : "hidden"}`}>
         <ScoreView
           score={part !== null ? sheet : score}
           part={part}
