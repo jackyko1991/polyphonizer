@@ -365,7 +365,20 @@ def _titled(s):
 
 # ── the page setup, written in the score's code: pages(part="Violin I", stand="spread", …) ──
 
-_PAPERS = {"A4": (210.0, 297.0), "A3": (297.0, 420.0), "B4": (250.0, 353.0), "Letter": (215.9, 279.4)}
+# printing papers, and screens (portrait; orientation="landscape" turns them): the size in mm sets the shape and how
+# large the music is relative to the page
+_PAPERS = {
+    "A4": (210.0, 297.0),
+    "Letter": (215.9, 279.4),
+    "A3": (297.0, 420.0),
+    "B4": (250.0, 353.0),
+    "iPad": (180.0, 258.0),
+    "iPad Pro 12.9": (196.0, 262.0),
+    "Tablet 16:10": (170.0, 272.0),
+    "Phone": (70.0, 152.0),
+    "Screen 16:9": (180.0, 320.0),
+    "Screen 16:10": (200.0, 320.0),
+}
 _LAYOUTS = []
 
 

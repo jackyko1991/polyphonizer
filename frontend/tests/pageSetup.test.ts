@@ -29,3 +29,12 @@ test("each sheet finds its own setup, or the defaults", () => {
   assert.deepEqual(setupFor(layouts, "Viola"), { ...DEFAULT_SETUP, part: "Viola" });
   assert.deepEqual(withPaper(DEFAULT_SETUP, "A4", "landscape").width_mm, 297);
 });
+
+test("the papers and screens are the same in Python and TypeScript, and 'fit this screen' keeps its shape", async () => {
+  const { PAPERS, screenPaper } = await import("../src/engine/pageSetup.ts");
+  const { readFileSync } = await import("node:fs");
+  const py = readFileSync("src/engine/prelude.py", "utf8");
+  for (const [name, [w, h]] of Object.entries(PAPERS)) assert.ok(py.includes(`"${name}": (${w.toFixed(1)}, ${h.toFixed(1)})`), name);
+  assert.deepEqual(screenPaper(1640, 2360), [181, 260]);
+  assert.deepEqual(screenPaper(1920, 1080), [260, 146]);
+});

@@ -8,7 +8,7 @@ import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { engravePages, engraveScroll, midiFile, timelineOf, type Engraving } from "./engine/engrave.ts";
-import { barIndices, barNumbers, DEFAULT_SETUP, PAPERS, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
+import { barIndices, barNumbers, DEFAULT_SETUP, PAPERS, SCREENS, screenPaper, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
 import { play, stop } from "./engine/player.ts";
 import type { ScoreData } from "./engine/types.ts";
 import { cursorAt, onsetTable, type Onset } from "./engine/cursor.ts";
@@ -603,16 +603,32 @@ export default function ScoreView({
             {t("layout.paper")}
             <select
               value={typeof cur.paper === "string" ? cur.paper : ""}
-              onChange={(e) => update(withPaper(cur, e.target.value))}
+              onChange={(e) =>
+                update(e.target.value === "fit" ? withPaper(cur, screenPaper(window.screen.width, window.screen.height)) : withPaper(cur, e.target.value))
+              }
               className="rounded border border-gray-300 bg-white px-1.5 py-0.5"
               data-testid="paper"
             >
               {typeof cur.paper !== "string" && <option value="">{`${cur.width_mm} × ${cur.height_mm} mm`}</option>}
-              {Object.keys(PAPERS).map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
+              <optgroup label={t("layout.papers")}>
+                {Object.keys(PAPERS)
+                  .filter((p) => !SCREENS.has(p))
+                  .map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+              </optgroup>
+              <optgroup label={t("layout.screens")}>
+                {Object.keys(PAPERS)
+                  .filter((p) => SCREENS.has(p))
+                  .map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                <option value="fit">{t("layout.fitScreen")}</option>
+              </optgroup>
             </select>
           </label>
           {(

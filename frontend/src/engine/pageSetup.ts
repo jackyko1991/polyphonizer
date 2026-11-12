@@ -25,7 +25,27 @@ export interface PageSetup {
   page_breaks: number[];
 }
 
-export const PAPERS: Record<string, [number, number]> = { A4: [210, 297], A3: [297, 420], B4: [250, 353], Letter: [215.9, 279.4] };
+/** printing papers and screens, portrait (keep in step with prelude.py's _PAPERS) */
+export const PAPERS: Record<string, [number, number]> = {
+  A4: [210, 297],
+  Letter: [215.9, 279.4],
+  A3: [297, 420],
+  B4: [250, 353],
+  iPad: [180, 258],
+  "iPad Pro 12.9": [196, 262],
+  "Tablet 16:10": [170, 272],
+  Phone: [70, 152],
+  "Screen 16:9": [180, 320],
+  "Screen 16:10": [200, 320],
+};
+/** which papers are screens (for grouping in the menu) */
+export const SCREENS = new Set(["iPad", "iPad Pro 12.9", "Tablet 16:10", "Phone", "Screen 16:9", "Screen 16:10"]);
+
+/** a page shaped like this device's screen, as it is held now: (width, height) in mm, the long side 260 mm */
+export function screenPaper(w: number, h: number): [number, number] {
+  const long = 260;
+  return w >= h ? [long, Math.round((long * h) / w)] : [Math.round((long * w) / h), long];
+}
 
 /** pages() with no arguments (keep in step with prelude.py) */
 export const DEFAULT_SETUP: PageSetup = {
@@ -54,7 +74,8 @@ export function setupFor(layouts: PageSetup[] | undefined, part: string | null):
 }
 
 /** the setup with a new paper or orientation: its page size follows */
-export function withPaper(s: PageSetup, paper: string, orientation = s.orientation): PageSetup {
+export function withPaper(s: PageSetup, paper: string | [number, number], orientation = s.orientation): PageSetup {
+  if (Array.isArray(paper)) return { ...s, paper, orientation: "portrait", width_mm: paper[0], height_mm: paper[1] };
   const [w, h] = PAPERS[paper] ?? [s.width_mm, s.height_mm];
   return { ...s, paper, orientation, width_mm: orientation === "landscape" ? h : w, height_mm: orientation === "landscape" ? w : h };
 }
