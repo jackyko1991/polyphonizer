@@ -19,3 +19,6 @@ export const SEGMENTS = "inline-flex h-9 shrink-0 items-stretch rounded-md borde
 export const SEGMENT = "inline-flex items-center rounded px-2.5 font-medium whitespace-nowrap";
 /** a checkbox with its label, centred on the same line */
 export const CHECK = "inline-flex h-9 shrink-0 items-center gap-1.5 text-sm whitespace-nowrap text-gray-700";
+
+/** the width the score is laid out for: while full screen is on, the width it had before (zoom, no re-flow) */
+export const layoutWidth = (width: number, frozen: number | null) => frozen ?? width;

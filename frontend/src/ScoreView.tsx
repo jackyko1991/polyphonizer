@@ -13,10 +13,11 @@ import { play, stop } from "./engine/player.ts";
 import type { ScoreData } from "./engine/types.ts";
 import { RANGE, setStage, useStage } from "./progress.ts";
 import SoundPanel from "./SoundPanel.tsx";
-import { BUTTON, BUTTON_ON, CHECK, FIELD, SEGMENT, SEGMENTS } from "./ui.ts";
+import { BUTTON, BUTTON_ON, CHECK, FIELD, layoutWidth, SEGMENT, SEGMENTS } from "./ui.ts";
 import { fill } from "./strings.ts";
 
 export type View = "score" | "pages";
+
 
 export interface ScoreViewProps {
   score: ScoreData | null;
@@ -85,6 +86,8 @@ export default function ScoreView({
   const { t } = useLang();
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
+  // full screen only zooms: the layout keeps the width it had when full screen began (no re-flow)
+  const [frozenWidth, setFrozenWidth] = useState<number | null>(null);
   const [eng, setEng] = useState<Engraving | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -140,7 +143,7 @@ export default function ScoreView({
     setPlaying(false);
     (view === "pages"
       ? engravePages(score, { stand, minRest, mode: planOn ? "plan" : "plain", layout })
-      : engraveScroll(score.musicxml, Math.max(320, width - 24))
+      : engraveScroll(score.musicxml, Math.max(320, layoutWidth(width, frozenWidth) - 24))
     )
       .then((e) => {
         if (!live) return;
@@ -156,7 +159,7 @@ export default function ScoreView({
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [score, view, width, stand, minRest, planOn, JSON.stringify(layout)]);
+  }, [score, view, view === "pages" ? 0 : layoutWidth(width, frozenWidth), stand, minRest, planOn, JSON.stringify(layout)]);
 
   // where the forced breaks are on the pages (drawn as markers at the start of their bars)
   useLayoutEffect(() => {
@@ -221,7 +224,9 @@ export default function ScoreView({
     if (full) {
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
       setFull(false);
+      setFrozenWidth(null);
     } else {
+      setFrozenWidth(width);
       setFull(true);
       panel.current?.requestFullscreen?.().catch(() => undefined);
     }
@@ -233,8 +238,9 @@ export default function ScoreView({
       if (e.key !== "Escape") return;
       if (bar) return setBar(null);
       setFull(false);
+      setFrozenWidth(null);
     };
-    const onChange = () => !document.fullscreenElement && setFull(false);
+    const onChange = () => !document.fullscreenElement && (setFull(false), setFrozenWidth(null));
     window.addEventListener("keydown", onKey);
     document.addEventListener("fullscreenchange", onChange);
     return () => {
