@@ -54,19 +54,24 @@ function download(name: string, data: BlobPart, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function printPages(pages: string[], title: string) {
+function printPages(pages: string[], title: string, numbers = true, size: [number, number] = [210, 297]) {
   const w = window.open("", "_blank");
   if (!w) return;
   w.document.title = title || "Polyphonizer";
   const style = w.document.createElement("style");
   style.textContent =
-    "@page{size:A4;margin:0}body{margin:0}div{width:210mm;height:297mm;page-break-after:always;display:flex}svg{width:100%;height:100%}";
+    `@page{size:${size[0]}mm ${size[1]}mm;margin:0}body{margin:0}div{position:relative;width:${size[0]}mm;height:${size[1]}mm;page-break-after:always;display:flex}svg{width:100%;height:100%}span{position:absolute;bottom:2.5%;width:100%;text-align:center;font:10pt sans-serif;color:#555}`;
   w.document.head.appendChild(style);
-  for (const svg of pages) {
+  pages.forEach((svg, i) => {
     const div = w.document.createElement("div");
     div.innerHTML = svg; // Verovio's own SVG output
+    if (numbers && pages.length > 1) {
+      const n = w.document.createElement("span");
+      n.textContent = String(i + 1);
+      div.appendChild(n);
+    }
     w.document.body.appendChild(div);
-  }
+  });
   setTimeout(() => w.print(), 300);
 }
 
@@ -617,7 +622,7 @@ export default function ScoreView({
         {eng && view === "pages" && <span className="text-xs text-gray-500">{fill(t("pages.count"), { n: eng.pages.length })}</span>}
       </div>
 
-      {view === "pages" && (
+      {view === "pages" && !reading && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
           <label className="flex items-center gap-1.5">
             {t("pages.stand")}
@@ -730,7 +735,7 @@ export default function ScoreView({
         </div>
       )}
 
-      {view === "pages" && eng?.plan && (
+      {view === "pages" && !reading && eng?.plan && (
         <div className="border-b border-gray-200 bg-white px-3 py-2 text-sm" data-testid="turns">
           <span className="font-medium text-gray-900">{t("pages.turns")}: </span>
           {eng.plan.turns.length === 0 ? (
@@ -771,7 +776,7 @@ export default function ScoreView({
                   {[
                     ["export.musicxml", () => download(`${name}.musicxml`, score.musicxml, "application/vnd.recordare.musicxml+xml")],
                     ["export.midi", async () => download(`${name}.mid`, (await midiFile()) as BlobPart, "audio/midi")],
-                    ["export.print", async () => printPages((await engravePages(score, cur)).pages, score.title)],
+                    ["export.print", async () => printPages((await engravePages(score, cur)).pages, score.title, cur.page_numbers, [cur.width_mm, cur.height_mm])],
                     ["export.code", onExportCode],
                   ].map(([k, f]) => (
                     <button
@@ -821,7 +826,7 @@ export default function ScoreView({
         {eng &&
           (reading ? (
             <div
-              className="relative flex h-full touch-pan-y items-center justify-center gap-4 select-none"
+              className="absolute inset-0 flex touch-pan-y items-center justify-center gap-4 p-3 select-none"
               onPointerDown={(e) => (swipe.current = e.clientX)}
               onPointerUp={(e) => {
                 const dx = swipe.current === null ? 0 : e.clientX - swipe.current;
@@ -832,13 +837,16 @@ export default function ScoreView({
               data-testid="reader"
             >
               {eng.pages.slice(readerAt, readerAt + perView).map((svg, k) => (
-                <div
-                  key={readerAt + k}
-                  data-page={readerAt + k}
-                  style={{ width: readerPage.w, height: readerPage.h }}
-                  className={`shrink-0 bg-white shadow-md [&>svg]:h-full [&>svg]:w-full ${clickPlay ? "pz-clickable" : ""}`}
-                  dangerouslySetInnerHTML={{ __html: svg }}
-                />
+                <div key={readerAt + k} className="relative shrink-0" style={{ width: readerPage.w, height: readerPage.h }}>
+                  <div
+                    data-page={readerAt + k}
+                    className={`h-full w-full bg-white shadow-md [&>svg]:h-full [&>svg]:w-full ${clickPlay ? "pz-clickable" : ""}`}
+                    dangerouslySetInnerHTML={{ __html: svg }}
+                  />
+                  {cur.page_numbers && pageCount > 1 && (
+                    <span className="pointer-events-none absolute bottom-[2.5%] left-0 w-full text-center text-[11px] text-gray-500">{readerAt + k + 1}</span>
+                  )}
+                </div>
               ))}
               <button
                 onClick={(e) => (e.stopPropagation(), goPage(-1, true))}

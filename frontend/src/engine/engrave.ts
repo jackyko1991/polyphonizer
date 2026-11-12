@@ -141,7 +141,8 @@ function pageOptions(setup: PageSetup) {
     pageMarginRight: Math.round(right * 10),
     unit: Math.max(6, Math.min(20, Math.round(setup.staff_size * 1.25 * 10) / 10)),
     header: (setup.title === "none" ? "none" : "auto") as "none" | "auto",
-    footer: (setup.page_numbers ? "always" : "none") as "always" | "none",
+    // Verovio's own footer adds its logo; page numbers are drawn by the page view and the print instead
+    footer: "none" as const,
   };
 }
 
@@ -162,7 +163,14 @@ export async function engravePages(score: ScoreData, setup: PageSetup = DEFAULT_
   const parser = new DOMParser();
   const firstMeasures = (svg: string) =>
     [...parser.parseFromString(svg, "image/svg+xml").querySelectorAll("g.system")].map((sys) => sys.querySelector("g.measure")?.id);
-  const mei = t.getMEI({}).replace(/<(sb|pb)\b[^>]*\/>/g, "");
+  // no generated footer (Verovio's logo) or running header (its "- 2 -" page numbers): page numbers are ours; the
+  // title (first page's header) stays unless the setup says title="none"
+  const mei = t
+    .getMEI({})
+    .replace(/<(sb|pb)\b[^>]*\/>/g, "")
+    .replace(/<pgFoot2?\b[\s\S]*?<\/pgFoot2?>/g, "")
+    .replace(/<pgHead2\b[\s\S]*?<\/pgHead2>/g, "")
+    .replace(setup.title === "none" ? /<pgHead\b[\s\S]*?<\/pgHead>/g : /$^/, "");
   const ids = [...mei.matchAll(MEASURE)].map((m) => m[1]);
   const index = new Map(ids.map((id, i) => [id, i]));
   const n = ids.length;
@@ -208,7 +216,11 @@ export async function engravePages(score: ScoreData, setup: PageSetup = DEFAULT_
   });
   t.setOptions({ breaks: "encoded" });
   t.loadData(withBreaks(new Set(plan.pageStarts.slice(1).map((s) => starts[s]))));
-  const pages = Array.from({ length: t.getPageCount() }, (_, i) => untitled(t.renderToSVG(i + 1)));
+  // Verovio's header holds the title on page 1 and its own "– 2 –" page number on the others: hide the latter
+  const pages = Array.from({ length: t.getPageCount() }, (_, i) => {
+    const svg = untitled(t.renderToSVG(i + 1));
+    return i === 0 ? svg : svg.replace(/class="pgHead( [^"]*)?"/, '$& visibility="hidden"');
+  });
   // report the turns of the pages as laid out
   const rendered = pages.map((svg) => index.get(firstMeasures(svg)[0] ?? "") ?? -1);
   const turns = rendered.every((m) => m >= 0) ? turnsAt(rendered, restAt, setup.stand, setup.min_rest) : plan.turns;
