@@ -479,6 +479,7 @@ export function SyntaxSheet() {
           [["`r4` `r2`", "`r4` `r2`"], ["rests", "休止符"]],
           [["`c2~ c4`", "`c2~ c4`"], ["a tie: one note, three beats", "連結線：一個音，三拍"]],
           [["`trip{c8 d e}`", "`trip{c8 d e}`"], ["a triplet: three in the time of two", "三連音：兩個音的時間奏三個"]],
+          [["`<C E G>2`", "`<C E G>2`"], ["a chord: the notes sound together", "和弦：幾個音同時響"]],
         ]}
       />
       <Table

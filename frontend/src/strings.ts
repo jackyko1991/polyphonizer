@@ -293,6 +293,17 @@ export type Key = keyof typeof STRINGS;
 export const fill = (s: string, vars: Record<string, string | number>) =>
   s.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? `{${k}}`));
 
+/** a distance in semitones as an interval: 12 → "an octave" */
+export function apart(semis: number, lang: 0 | 1): string {
+  const names: Record<number, [string, string]> = {
+    12: ["an octave", "一個八度"],
+    16: ["a tenth", "十度"],
+    19: ["a twelfth", "十二度"],
+    24: ["two octaves", "兩個八度"],
+  };
+  return names[semis]?.[lang] ?? (lang ? ` ${semis} 個半音` : `${semis} semitones`);
+}
+
 /** what a rule checks, in words; `parts` names the parts */
 export function ruleText(rule: Rule, parts: string[], lang: 0 | 1): string {
   const p = (i: number) => parts[i] ?? (lang ? `第 ${i + 1} 聲部` : `part ${i + 1}`);
@@ -313,11 +324,14 @@ export function ruleText(rule: Rule, parts: string[], lang: 0 | 1): string {
         `${p(rule.part)} moves by the scale's steps (${rule.semitones.map((s) => (s === 2 ? "whole" : "half")).join(", ")})`,
         `${p(rule.part)} 依音階步距移動（${rule.semitones.map((s) => (s === 2 ? "全" : "半")).join("、")}）`,
       );
-    case "transposed":
-      return pick(
-        `${p(rule.part)} is the melody moved up ${rule.by === 7 ? "a perfect fifth" : `${rule.by} semitones`}`,
-        `${p(rule.part)} 是旋律升高${rule.by === 7 ? "一個完全五度" : ` ${rule.by} 個半音`}`,
-      );
+    case "transposed": {
+      const by = Math.abs(rule.by);
+      const how =
+        by === 7 ? ["a perfect fifth", "一個完全五度"] : by === 12 ? ["an octave", "一個八度"] : [`${by} semitones`, ` ${by} 個半音`];
+      return rule.by < 0
+        ? pick(`${p(rule.part)} is the melody moved down ${how[0]}`, `${p(rule.part)} 是旋律降低${how[1]}`)
+        : pick(`${p(rule.part)} is the melody moved up ${how[0]}`, `${p(rule.part)} 是旋律升高${how[1]}`);
+    }
     case "sameRhythm":
       return pick(`${p(rule.part)} keeps the melody's rhythm`, `${p(rule.part)} 保留旋律的節奏`);
     case "range":
@@ -350,7 +364,10 @@ export function ruleText(rule: Rule, parts: string[], lang: 0 | 1): string {
         "沒有隱伏五度或八度（同向進入且上聲部跳進）",
       );
     case "noCrossing":
-      return pick("The voices don't cross and stay within a tenth", "聲部不交叉，且相距不超過十度");
+      return pick(
+        `The voices don't cross and stay within ${apart(rule.maxApart, 0)}`,
+        `聲部不交叉，且相距不超過${apart(rule.maxApart, 1)}`,
+      );
     case "goodLeaps":
       return pick(
         `${p(rule.part)} has no tritone, seventh or leap beyond an octave`,

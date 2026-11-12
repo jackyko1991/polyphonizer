@@ -24,9 +24,38 @@ INSTRUMENTS = {
 }
 
 
+def _chord_text(notes):
+    """tinyNotation has no chords, so each <c e g>4 stands in as its first pitch (c4) and becomes a chord afterwards:
+    the text to parse, and {event number: the chord's pitches}."""
+    chords, events, out = {}, 0, []
+    for tok in re.findall(r"(?:trip\{|quad\{)?<[^>]+>\S*|\S+", notes):
+        core = re.sub(r"^(trip|quad)\{|\}$", "", tok)
+        cm = re.fullmatch(r"<([^>]+)>(\S*)", core)
+        if cm:
+            chords[events] = [_text_pitch(x) for x in cm.group(1).split()]
+            tok = tok.replace(core, cm.group(1).split()[0] + cm.group(2))
+        out.append(tok)
+        if not re.fullmatch(r"\d+/\d+", tok):  # a time signature is not an event
+            events += 1
+    return " ".join(out), chords
+
+
+def _as_chord(n, pitches):
+    c = chord.Chord(pitches)
+    c.duration = copy.deepcopy(n.duration)
+    c.tie = n.tie
+    return c
+
+
 def tiny(notes, time="4/4", name=None, key_sig=None, inst=None, clef_=None):
-    """A part from tinyNotation, e.g. tiny("c4 d e f g1", name="Flute", key_sig="C", inst="flute")."""
-    part = converter.parse(f"tinyNotation: {time} {notes}")
+    """A part from tinyNotation, e.g. tiny("c4 d e f g1", name="Flute", key_sig="C", inst="flute"); chords are
+    written <C E G>2."""
+    text, chords = _chord_text(notes)
+    part = converter.parse(f"tinyNotation: {time} {text}")
+    if chords:
+        events = list(part.recurse().notesAndRests)
+        for i, pitches in chords.items():
+            events[i].activeSite.replace(events[i], _as_chord(events[i], pitches))
     first = part.getElementsByClass(stream.Measure).first()
     if inst:
         made = INSTRUMENTS[inst.lower()]()
@@ -170,22 +199,10 @@ def edit_bar(score, part, bar, notes):
     if m is None:
         raise ValueError(f"{p.partName} has no bar {bar}")
     ts = m.getContextByClass(meter.TimeSignature)
-    # chords: tinyNotation has none, so each <…> stands in as its first pitch and becomes a chord afterwards
-    chords, events, out = {}, 0, []
-    for tok in re.findall(r"(?:trip\{|quad\{)?<[^>]+>\S*|\S+", notes):
-        core = re.sub(r"^(trip|quad)\{|\}$", "", tok)
-        cm = re.fullmatch(r"<([^>]+)>(\S*)", core)
-        if cm:
-            chords[events] = [_text_pitch(x) for x in cm.group(1).split()]
-            tok = tok.replace(core, cm.group(1).split()[0] + cm.group(2))
-        out.append(tok)
-        events += 1
-    new = list(converter.parse(f"tinyNotation: {ts.ratioString if ts else '4/4'} {' '.join(out)}").flatten().notesAndRests)
+    text, chords = _chord_text(notes)
+    new = list(converter.parse(f"tinyNotation: {ts.ratioString if ts else '4/4'} {text}").flatten().notesAndRests)
     for i, pitches in chords.items():
-        c = chord.Chord(pitches)
-        c.duration = copy.deepcopy(new[i].duration)
-        c.tie = new[i].tie
-        new[i] = c
+        new[i] = _as_chord(new[i], pitches)
     want = m.barDuration.quarterLength - m.paddingLeft - m.paddingRight
     total = sum(n.quarterLength for n in new)
     if abs(total - want) > 1e-6:

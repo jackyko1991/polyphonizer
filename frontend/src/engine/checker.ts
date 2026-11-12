@@ -110,7 +110,23 @@ export type LessonRule =
   | { id: "violinFirstPosition"; part: number; open?: boolean }
   /** the sung syllables, in order (one per note, hyphens dropped) */
   | { id: "lyrics"; part: number; syllables: string[] };
-export type AnyRule = Rule | LessonRule;
+/** Rules for the arranging problems. A bar's chord is its pitch classes, root first ([7, 11, 2] is G major). */
+export type ArrangeRule =
+  /** the melody's successive intervals, in any key */
+  | { id: "sameShape"; part: number; from: number[] }
+  /** bar by bar (bar 1 = chords[0]), only the chord's notes; `all`: every one of them; `root`: the root lowest */
+  | { id: "chordTones"; part: number; chords: number[][]; all?: boolean; root?: boolean }
+  /** bar by bar, wherever a note starts, the parts sounding together play exactly the chord: complete, nothing else */
+  | { id: "fullChords"; parts: number[]; chords: number[][] }
+  /** eighth notes in fours, low–high–middle–high (C G E G) */
+  | { id: "alberti"; part: number }
+  /** when both parts move, at least half the time in opposite directions */
+  | { id: "contraryMostly"; upper: number; lower: number }
+  /** no parallel fifths or octaves between any two of these parts */
+  | { id: "noParallelsAll"; parts: number[] }
+  /** neighbouring parts (top to bottom) don't cross, and stay within maxApart[i] semitones of the next one down */
+  | { id: "spacing"; parts: number[]; maxApart: number[] };
+export type AnyRule = Rule | LessonRule | ArrangeRule;
 
 /**
  * The successive intervals of a scale run over `octaves` octaves, up and back down: `up` is one octave's steps going
@@ -399,10 +415,95 @@ export function checkRule(score: ScoreData, rule: AnyRule): RuleResult {
       return result(rule, bars, s.length === rule.durs.length ? undefined : `${s.length}`);
     }
     case "range": {
-      const s = sounds(score.notes, rule.part);
+      // every note of a chord, not just its top
+      const out = numbered(score, rule.part).filter((n) => n.midi.some((m) => m < rule.low || m > rule.high));
       return result(
         rule,
-        s.filter((x) => x.midi < rule.low || x.midi > rule.high).map((x) => x.measure),
+        out.map((n) => n.measure),
+      );
+    }
+    case "sameShape": {
+      const s = sounds(score.notes, rule.part);
+      const bars: number[] = [];
+      for (let i = 1; i < s.length; i++) if (s[i].midi - s[i - 1].midi !== rule.from[i] - rule.from[i - 1]) bars.push(s[i].measure);
+      return result(rule, bars, s.length === rule.from.length ? undefined : `${s.length}`);
+    }
+    case "chordTones": {
+      const byBar = new Map<number, number[]>();
+      for (const n of numbered(score, rule.part)) byBar.set(n.measure, [...(byBar.get(n.measure) ?? []), ...n.midi]);
+      const bars: number[] = [];
+      rule.chords.forEach((chord, i) => {
+        const midis = byBar.get(i + 1) ?? [];
+        const pcs = new Set(midis.map(pc));
+        const ok =
+          midis.length > 0 &&
+          [...pcs].every((x) => chord.includes(x)) &&
+          (!rule.all || chord.every((x) => pcs.has(x))) &&
+          (!rule.root || pc(Math.min(...midis)) === chord[0]);
+        if (!ok) bars.push(i + 1);
+      });
+      // nothing after the last chord
+      for (const b of byBar.keys()) if (b > rule.chords.length) bars.push(b);
+      return result(rule, bars);
+    }
+    case "fullChords": {
+      const ns = rule.parts.flatMap((p) => numbered(score, p));
+      const onsets = [...new Map(ns.map((n) => [+n.offset.toFixed(4), n.measure])).entries()].sort((a, b) => a[0] - b[0]);
+      const bars: number[] = [];
+      let detail: string | undefined;
+      for (const [t, bar] of onsets) {
+        const chord = rule.chords[bar - 1];
+        const pcs = new Set(ns.filter((n) => n.offset <= t + EPS && t < n.offset + n.dur - EPS).flatMap((n) => n.midi.map(pc)));
+        if (!chord || pcs.size !== new Set(chord).size || !chord.every((x) => pcs.has(x))) {
+          bars.push(bar);
+          detail ??= [...pcs].map((x) => LETTERS[x]).join(" ");
+        }
+      }
+      // a bar with no chord at all
+      const played = new Set(onsets.map(([, bar]) => bar));
+      rule.chords.forEach((_, i) => {
+        if (!played.has(i + 1)) bars.push(i + 1);
+      });
+      return result(rule, bars, bars.length ? (detail ?? "—") : undefined);
+    }
+    case "alberti": {
+      const ev = events(score.notes, rule.part);
+      while (ev.length && ev[ev.length - 1].midi === null) ev.pop();
+      const bars: number[] = [];
+      for (let i = 0; i < ev.length; i += 4) {
+        const g = ev.slice(i, i + 4);
+        const [lo, hi, mid, hi2] = g.map((e) => e.midi ?? NaN);
+        const eighths = g.length === 4 && g.every((e) => near(e.dur, 0.5));
+        if (!eighths || !(lo < mid && mid < hi && hi2 === hi)) bars.push(g[0].measure);
+      }
+      return result(rule, bars, ev.length ? undefined : "—");
+    }
+    case "contraryMostly": {
+      const p = pairs(score, rule.upper, rule.lower);
+      let both = 0;
+      let contrary = 0;
+      for (let i = 1; i < p.length; i++) {
+        const up = motion(p[i - 1][0].midi, p[i][0].midi);
+        const down = motion(p[i - 1][1].midi, p[i][1].midi);
+        if (up && down) {
+          both++;
+          if (up !== down) contrary++;
+        }
+      }
+      return result(rule, [], contrary * 2 >= both ? undefined : `${contrary}/${both}`);
+    }
+    case "noParallelsAll": {
+      const pairsOf = rule.parts.flatMap((u, i) => rule.parts.slice(i + 1).map((l) => [u, l]));
+      return result(
+        rule,
+        pairsOf.flatMap(([upper, lower]) => checkRule(score, { id: "noParallels", upper, lower }).bars),
+      );
+    }
+    case "spacing": {
+      const neighbours = rule.parts.slice(0, -1).map((upper, i) => ({ upper, lower: rule.parts[i + 1], maxApart: rule.maxApart[i] }));
+      return result(
+        rule,
+        neighbours.flatMap((n) => checkRule(score, { id: "noCrossing", ...n }).bars),
       );
     }
     case "scale": {
@@ -514,6 +615,7 @@ const finger = (n: NoteEvent): number | null => {
   return m ? Number(m.slice(7)) : null;
 };
 
+const pc = (m: number) => ((m % 12) + 12) % 12;
 const LETTERS = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
 const midiLabel = (m: number) => `${LETTERS[((m % 12) + 12) % 12]}${Math.floor(m / 12) - 1}`;
 

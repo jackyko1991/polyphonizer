@@ -1,7 +1,7 @@
 /** How Learn says each rule: the original rules in strings.ts `ruleText`, the Track 0 and scale rules here. */
 import type { AnyRule, Rule } from "../engine/checker.ts";
 import { midiName } from "../problems.ts";
-import { ruleText } from "../strings.ts";
+import { apart, ruleText } from "../strings.ts";
 
 const STEP: Record<number, [string, string]> = { 1: ["H", "半"], 2: ["W", "全"], 3: ["W+H", "增二"] };
 
@@ -38,6 +38,22 @@ const MARK_NAMES: Record<string, [string, string]> = {
   tenuto: ["Tenuto", "持音"],
   accent: ["Accents", "重音"],
 };
+
+const NOTE = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+const QUALITY: Record<string, string> = { "0,4,7": "", "0,3,7": "m", "0,4,7,10": "7", "0,3,6": "dim" };
+
+/** a chord's symbol from its pitch classes, root first: [7, 11, 2] → "G", [9, 0, 4] → "Am"; otherwise its notes */
+function chordName(pcs: number[], lang: 0 | 1): string {
+  const shape = [...new Set(pcs.map((x) => (x - pcs[0] + 12) % 12))].sort((a, b) => a - b).join(",");
+  if (shape in QUALITY) return NOTE[pcs[0]] + QUALITY[shape];
+  return pcs.map((x) => NOTE[x]).join(lang ? "、" : ", ");
+}
+/** "C | F | G | C", or "G throughout" */
+function chordList(chords: number[][], lang: 0 | 1): string {
+  const names = chords.map((c) => chordName(c, lang));
+  if (names.every((n) => n === names[0])) return lang ? `全曲都是 ${names[0]}` : `${names[0]} throughout`;
+  return names.join(" | ");
+}
 
 export function ruleLabel(rule: AnyRule, parts: string[], lang: 0 | 1): string {
   const p = (i: number) => parts[i] ?? (lang ? `第 ${i + 1} 聲部` : `part ${i + 1}`);
@@ -109,6 +125,52 @@ export function ruleLabel(rule: AnyRule, parts: string[], lang: 0 | 1): string {
         : pick("Every fingering fits first position (0 open, 1–4 fingers)", "每個指法都在第一把位（0 空弦，1–4 手指）");
     case "lyrics":
       return pick(`The words are sung as: ${rule.syllables.join(" ")}`, `歌詞唱成：${rule.syllables.join(" ")}`);
+    case "sameShape":
+      return pick(`${p(rule.part)} keeps every interval of the melody (in any key)`, `${p(rule.part)} 保留旋律的每個音程（哪個調都可以）`);
+    case "chordTones": {
+      const list = chordList(rule.chords, lang);
+      const same = rule.chords.every((c) => c.join() === rule.chords[0].join());
+      if (rule.root && same && rule.chords[0].length < 3) {
+        const notes = rule.chords[0].map((x) => NOTE[x]);
+        return pick(
+          `${p(rule.part)} plays only ${notes.join(" and ")}, with ${notes[0]} at the bottom of every bar`,
+          `${p(rule.part)} 只用 ${notes.join(" 和 ")}，每小節最低音是 ${notes[0]}`,
+        );
+      }
+      if (rule.root)
+        return pick(
+          `Each bar of ${p(rule.part)} has the chord's root at the bottom, and only chord notes: ${list}`,
+          `${p(rule.part)} 每小節的最低音是和弦根音，且只用和弦音：${list}`,
+        );
+      if (rule.all)
+        return pick(
+          `Each bar of ${p(rule.part)} plays every note of its chord, and nothing else: ${list}`,
+          `${p(rule.part)} 每小節彈出和弦的每個音，沒有別的音：${list}`,
+        );
+      return pick(`Each bar of ${p(rule.part)} uses only its chord's notes: ${list}`, `${p(rule.part)} 每小節只用該和弦的音：${list}`);
+    }
+    case "fullChords":
+      return pick(
+        `Wherever a note starts, the chord is complete, with no other notes: ${chordList(rule.chords, 0)}`,
+        `每次有音響起時，和弦都完整、沒有多餘的音：${chordList(rule.chords, 1)}`,
+      );
+    case "alberti":
+      return pick(
+        `${p(rule.part)} is an Alberti bass: eighth notes in fours, low–high–middle–high`,
+        `${p(rule.part)} 是阿爾貝提低音：八分音符四個一組，低、高、中、高`,
+      );
+    case "contraryMostly":
+      return pick(
+        `Mostly contrary motion: when ${p(rule.upper)} and ${p(rule.lower)} both move, at least half the time in opposite directions`,
+        `以反向進行為主：${p(rule.upper)} 和 ${p(rule.lower)} 都移動時，至少一半是反方向`,
+      );
+    case "noParallelsAll":
+      return pick("No parallel fifths or octaves between any two parts", "任兩個聲部之間都沒有平行五度或八度");
+    case "spacing":
+      return pick(
+        `The parts don't cross, and neighbouring parts stay close (the upper ones within ${apart(rule.maxApart[0], 0)})`,
+        `聲部不交叉，相鄰聲部不離太遠（上方聲部相距不超過${apart(rule.maxApart[0], 1)}）`,
+      );
     case "steps":
       if (rule.semitones.every((s) => s === 1 || s === 2)) return ruleText(rule, parts, lang);
       return pick(
