@@ -14,6 +14,8 @@ export interface ToolboxState {
   running: ToolId[];
   /** the dock put away (Close): its tools stay open (a ticking metronome keeps ticking) until a tool is opened */
   hidden: boolean;
+  /** the dock enlarged to fill the window (remembered) */
+  expanded: boolean;
 }
 
 const KEY = "polyphonizer.toolbox";
@@ -27,9 +29,10 @@ let state: ToolboxState = (() => {
       height: s?.height ?? 230,
       running: [],
       hidden: false,
+      expanded: s?.expanded ?? false,
     };
   } catch {
-    return { open: [], active: null, height: 230, running: [], hidden: false };
+    return { open: [], active: null, height: 230, running: [], hidden: false, expanded: false };
   }
 })();
 const listeners = new Set<() => void>();
@@ -37,7 +40,7 @@ const listeners = new Set<() => void>();
 function set(next: ToolboxState) {
   state = next;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ open: state.open, active: state.active, height: state.height }));
+    localStorage.setItem(KEY, JSON.stringify({ open: state.open, active: state.active, height: state.height, expanded: state.expanded }));
   } catch {
     /* storage unavailable */
   }
@@ -54,6 +57,8 @@ export const useToolbox = () =>
 export function openTool(id: ToolId) {
   set({ ...state, open: state.open.includes(id) ? state.open : [...state.open, id], active: id, hidden: false });
 }
+/** the dock as a bottom panel, or filling the window */
+export const setExpanded = (expanded: boolean) => set({ ...state, expanded });
 /** put the dock away without closing its tools */
 export const hideDock = () => set({ ...state, hidden: true });
 /** open it, or close it if it is already in front */
@@ -72,3 +77,14 @@ export function setRunning(id: ToolId, on: boolean) {
   if (state.running.includes(id) === on) return;
   set({ ...state, running: on ? [...state.running, id] : state.running.filter((t) => t !== id) });
 }
+
+/** `list` with `id` moved to position `to` (clamped) */
+export function moved<T>(list: T[], id: T, to: number): T[] {
+  const from = list.indexOf(id);
+  if (from < 0) return list;
+  const rest = list.filter((x) => x !== id);
+  const at = Math.max(0, Math.min(rest.length, to));
+  return [...rest.slice(0, at), id, ...rest.slice(at)];
+}
+/** drag a tab: put the tool at position `to` among the open tools (remembered) */
+export const moveTool = (id: ToolId, to: number) => set({ ...state, open: moved(state.open, id, to) });

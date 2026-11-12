@@ -5,9 +5,9 @@
  * says so. Shortcuts: ⌘⇧K keyboard, ⌘⇧M metronome, ⌘⇧U tuner (Ctrl on Windows and Linux).
  */
 import { useLang } from "@learnkit/web";
-import { AudioWaveform, Piano, Timer, Wrench, X, type LucideIcon } from "lucide-react";
+import { AudioWaveform, Maximize2, Minimize2, Piano, Timer, Wrench, X, type LucideIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { closeTool, hideDock, openTool, setDockHeight, toggleTool, useToolbox, type ToolId } from "./toolboxState.ts";
+import { closeTool, hideDock, moveTool, openTool, setDockHeight, setExpanded, toggleTool, useToolbox, type ToolId } from "./toolboxState.ts";
 
 const KeyboardTool = lazy(() => import("./KeyboardTool.tsx"));
 const MetronomeTool = lazy(() => import("./MetronomeTool.tsx"));
@@ -45,12 +45,17 @@ export default function Toolbox() {
 
   // the dock slides up when it opens; the page keeps its last lines visible above it
   const dockOpen = box.open.length > 0;
+  // dragging a tab to reorder: which tool, where the pointer started, and whether it moved (then it's not a click)
+  const tabBar = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ id: ToolId; x: number } | null>(null);
+  const dragged = useRef(false);
+  const [dragging, setDragging] = useState<ToolId | null>(null);
   const dockShown = dockOpen && !box.hidden;
-  const sheet = box.active === "metronome" || box.active === "tuner";
-  // Esc puts the full-screen sheet away on a phone
+  // the dock is a bottom panel by default (phone and computer); ⤢ makes it fill the window, Esc shrinks it back
+  const sheet = box.expanded;
   useEffect(() => {
     if (!dockShown || !sheet) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && window.innerWidth < 640 && hideDock();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setExpanded(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [dockShown, sheet]);
@@ -149,27 +154,64 @@ export default function Toolbox() {
           className={`fixed inset-x-0 bottom-7 z-40 flex flex-col border-t border-gray-200 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.08)] transition-transform duration-200 ease-out motion-reduce:transition-none ${
             shown ? "translate-y-0" : "translate-y-full"
           } ${
-            // on a phone the metronome and the tuner take the whole screen (big, easy to touch)
-            sheet ? "max-sm:top-0 max-sm:bottom-0 max-sm:z-[60] max-sm:h-[100dvh]! max-sm:border-t-0" : ""
+            // enlarged: the tool fills the window (big, easy to touch on a phone or a stand)
+            sheet ? "top-0 bottom-0 z-[60] h-[100dvh]! border-t-0" : ""
           } ${box.hidden ? "hidden" : ""}`}
           style={{ height: box.height }}
           data-testid="tool-dock"
         >
-          <div className={sheet ? "max-sm:hidden" : ""}>
+          <div className={sheet ? "hidden" : ""}>
             <Resizer />
           </div>
-          <div className="flex h-9 shrink-0 items-stretch gap-1 border-b border-gray-200 bg-gray-50 px-2" role="tablist">
-            {box.open.map((id) => {
+          <div ref={tabBar} className="flex h-9 shrink-0 items-stretch gap-1 border-b border-gray-200 bg-gray-50 px-2" role="tablist">
+            {box.open.map((id, index) => {
               const t = TOOLS.find((x) => x.id === id)!;
               const front = box.active === id;
               return (
-                <div key={id} className={`flex items-center rounded-t-md ${front ? "bg-white shadow-[0_1px_0_white]" : ""}`}>
+                <div
+                  key={id}
+                  data-tab={id}
+                  className={`flex items-center rounded-t-md ${front ? "bg-white shadow-[0_1px_0_white]" : ""} ${dragging === id ? "cursor-grabbing opacity-70 ring-1 ring-(--lk-accent)/40" : ""}`}
+                >
                   <button
                     type="button"
                     role="tab"
                     aria-selected={front}
-                    onClick={() => openTool(id)}
-                    className={`flex items-center gap-1.5 px-3 text-sm font-medium ${front ? "text-(--lk-accent)" : "text-gray-600 hover:text-gray-900"}`}
+                    onClick={() => (dragged.current ? (dragged.current = false) : openTool(id))}
+                    // drag a tab sideways to reorder (mouse or touch); Alt+← / → moves it with the keyboard
+                    onPointerDown={(e) => {
+                      drag.current = { id, x: e.clientX };
+                      dragged.current = false;
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                    }}
+                    onPointerMove={(e) => {
+                      const d = drag.current;
+                      if (!d || (!dragged.current && Math.abs(e.clientX - d.x) < 6)) return;
+                      dragged.current = true;
+                      setDragging(d.id);
+                      // its new place: how many of the other tabs have their centre left of the pointer
+                      const to = [...(tabBar.current?.querySelectorAll<HTMLElement>("[data-tab]") ?? [])].filter((el) => {
+                        if (el.dataset.tab === d.id) return false;
+                        const r = el.getBoundingClientRect();
+                        return r.left + r.width / 2 < e.clientX;
+                      }).length;
+                      if (box.open[to] !== d.id) moveTool(d.id, to);
+                    }}
+                    onPointerUp={() => {
+                      drag.current = null;
+                      setDragging(null);
+                    }}
+                    onPointerCancel={() => {
+                      drag.current = null;
+                      setDragging(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+                      e.preventDefault();
+                      moveTool(id, index + (e.key === "ArrowLeft" ? -1 : 1));
+                    }}
+                    title={pick(["Drag to reorder (Alt+← / →)", "拖曳可調整順序（Alt+← / →）"])}
+                    className={`flex touch-none items-center gap-1.5 px-3 text-sm font-medium select-none ${front ? "text-(--lk-accent)" : "text-gray-600 hover:text-gray-900"}`}
                   >
                     <t.icon className="h-4 w-4" strokeWidth={2} aria-hidden />
                     {pick(t.name)}
@@ -188,8 +230,19 @@ export default function Toolbox() {
             })}
             <button
               type="button"
+              onClick={() => setExpanded(!sheet)}
+              className="ml-auto flex items-center gap-1 self-center rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 max-sm:px-2.5"
+              title={sheet ? pick(["Back to the bottom panel (Esc)", "回到底部面板（Esc）"]) : pick(["Fill the screen", "全螢幕"])}
+              aria-pressed={sheet}
+              data-testid="dock-expand"
+            >
+              {sheet ? <Minimize2 className="h-4 w-4" strokeWidth={2} aria-hidden /> : <Maximize2 className="h-4 w-4" strokeWidth={2} aria-hidden />}
+              <span className="max-sm:hidden">{sheet ? pick(["Smaller", "縮小"]) : pick(["Full screen", "全螢幕"])}</span>
+            </button>
+            <button
+              type="button"
               onClick={hideDock}
-              className="ml-auto flex items-center gap-1 self-center rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 max-sm:px-3 max-sm:py-1.5 max-sm:text-base"
+              className="flex items-center gap-1 self-center rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 max-sm:px-2.5"
               title={pick(["Close the tools (they keep running; open the Toolbox to come back)", "關閉工具面板（工具會繼續運作；從工具箱回來）"])}
               data-testid="dock-close"
             >

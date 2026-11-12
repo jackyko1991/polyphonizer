@@ -121,3 +121,11 @@ test("tuner colours: green within ±5 cents, yellow within ±15, red beyond", as
   const { tuneZone } = await import("../src/tools/music.ts");
   assert.deepEqual([0, 5, -5, 6, 15, -15, 16, -40].map(tuneZone), ["green", "green", "green", "yellow", "yellow", "yellow", "red", "red"]);
 });
+
+test("tool tabs: dragging moves a tool to its new place", async () => {
+  const { moved } = await import("../src/tools/toolboxState.ts");
+  assert.deepEqual(moved(["keyboard", "metronome", "tuner"], "tuner", 0), ["tuner", "keyboard", "metronome"]);
+  assert.deepEqual(moved(["keyboard", "metronome", "tuner"], "keyboard", 2), ["metronome", "tuner", "keyboard"]);
+  assert.deepEqual(moved(["keyboard", "metronome", "tuner"], "metronome", 9), ["keyboard", "tuner", "metronome"]);
+  assert.deepEqual(moved(["keyboard"], "tuner", 0), ["keyboard"]);
+});
