@@ -3,6 +3,7 @@
  * = black keys, Z / X = octave, C / V = softer / louder, held Space = sustain pedal) or a MIDI keyboard. Every note
  * goes out on the note stream (noteInput.ts) for step entry and the Play lessons.
  */
+import { FM_PIANO } from "./fm.ts";
 import { useLang } from "@learnkit/web";
 import { ChevronLeft, ChevronRight, Keyboard as KeysIcon, Music, Music2, Type } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -21,6 +22,8 @@ const LiveStaff = lazy(() => import("./LiveStaff.tsx"));
 export const KEYBOARD_SOUNDS: [number, readonly [string, string]][] = [
   [0, ["Piano", "鋼琴"]],
   [4, ["Electric piano", "電鋼琴"]],
+  [FM_PIANO, ["FM piano (DX7-style)", "FM 電鋼琴（DX7 風格）"]],
+  [5, ["Electric piano 2 (FM, sampled)", "電鋼琴 2（FM，取樣）"]],
   [6, ["Harpsichord", "大鍵琴"]],
   [19, ["Church organ", "管風琴"]],
   [40, ["Violin", "小提琴"]],

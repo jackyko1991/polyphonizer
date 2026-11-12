@@ -4,6 +4,7 @@
  * own output, so it sounds whether or not the score is playing. Samples (General MIDI soundfonts, cached in the
  * browser) when the sound settings say so and they load; otherwise a small synth that needs no download.
  */
+import { FM_PIANO, fmPianoVoice } from "./fm.ts";
 import { audio, family, type Family } from "../engine/player.ts";
 import { GM, soundSettings } from "../engine/sound.ts";
 import { midiToHz } from "./music.ts";
@@ -57,6 +58,7 @@ export function loadInstrument(program: number): Promise<Sampler | null> {
 const loaded = new Map<number, Sampler | null>();
 /** start loading an instrument now, so its first note already sounds sampled */
 export function prepare(program: number): Promise<boolean> {
+  if (program === FM_PIANO) return Promise.resolve(true); // made here, nothing to load
   return loadInstrument(program).then((i) => (loaded.set(program, i), i !== null));
 }
 
@@ -64,6 +66,7 @@ export function prepare(program: number): Promise<boolean> {
 export function noteOn(midi: number, program: number, velocity = 0.8): () => void {
   const { ac, out: dest } = output();
   const a4 = soundSettings().a4;
+  if (program === FM_PIANO) return fmPianoVoice(ac, dest, midiToHz(midi, a4), velocity);
   const inst = loaded.get(program);
   if (inst === undefined)
     void loadInstrument(program).then((i) => {

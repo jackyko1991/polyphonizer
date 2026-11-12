@@ -185,3 +185,15 @@ test("live staff: a chosen chord can be taken off, wherever it is", async () => 
   assert.deepEqual(dropChord(ons, 0).map((e) => e.midi), [64, 67, 62]);
   assert.deepEqual(dropChord(ons, 9), ons);
 });
+
+test("FM piano: brighter when played harder, tamed higher up, the tine rings shorter than the body", async () => {
+  const { fmParams } = await import("../src/tools/fm.ts");
+  const soft = fmParams(262, 0.3);
+  const hard = fmParams(262, 1);
+  assert.ok(hard.bodyIndex[0] > soft.bodyIndex[0] && hard.tineIndex[0] > soft.tineIndex[0]);
+  const low = fmParams(131, 0.8);
+  const high = fmParams(1047, 0.8);
+  assert.ok(high.bodyIndex[0] / 1047 < low.bodyIndex[0] / 131); // relative brightness falls with pitch
+  assert.ok(high.bodyRing < low.bodyRing);
+  assert.ok(hard.tineRing < hard.bodyRing);
+});
