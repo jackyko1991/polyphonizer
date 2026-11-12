@@ -141,3 +141,19 @@ test("every music example on the pages is valid and drawn by Verovio", async () 
     if (voices > 1) assert.ok(/<staffDef n="2"/.test(exampleData(abc)), `${where}: voices not on separate staves`);
   }
 });
+
+test("an example in C sounds F natural even right after one in G (Verovio's ABC key leak is corrected)", async () => {
+  const { fixAbcKeys } = await import("../src/engine/abc.ts");
+  const t = new VerovioToolkit(await createVerovioModule());
+  const pitches = (abc: string) => {
+    t.loadData(abc);
+    t.loadData(fixAbcKeys(t.getMEI({}), abc));
+    t.renderToSVG(1);
+    return (t.renderToTimemap() as { on?: string[] }[]).flatMap((e) => (e.on ?? []).map((id) => (t.getMIDIValuesForElement(id) as { pitch: number }).pitch));
+  };
+  assert.deepEqual(pitches("X:1\nM:4/4\nL:1/4\nK:G\nF G A B |]"), [66, 67, 69, 71]);
+  assert.deepEqual(pitches("X:1\nM:4/4\nL:1/4\nK:C\nF G A B | F2- F2 |]"), [65, 67, 69, 71, 65, 65]);
+  // an accidental written in a bar lasts to its end; the key comes back in the next bar
+  assert.deepEqual(pitches("X:1\nM:4/4\nL:1/4\nK:C\n^F F G A | F4 |]"), [66, 66, 67, 69, 65]);
+  assert.deepEqual(pitches("X:1\nM:4/4\nL:1/4\nK:D\nF C =F c | F4 |]"), [66, 61, 65, 73, 66]);
+});

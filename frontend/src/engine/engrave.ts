@@ -8,6 +8,7 @@
  *   (<sb/> and <pb/>) and lay it out again with breaks "encoded".
  */
 import type { VerovioToolkit } from "verovio/esm";
+import { fixAbcKeys } from "./abc.ts";
 import { planPages, restAtMeasureStarts, turnsAt, type Plan, type Stand } from "./pageTurns.ts";
 import type { ScoreData } from "./types.ts";
 
@@ -30,7 +31,7 @@ let snippetTk: Promise<VerovioToolkit> | null = null;
  * A short example for a page (ABC, Humdrum or MusicXML, which Verovio reads itself, so no Python is needed): one SVG
  * at the given width, and its sounds. Uses its own toolkit, so it never disturbs the editor's score.
  */
-export async function engraveSnippet(data: string, widthPx: number, zoom = 38): Promise<{ svg: string; sounds: Sound[] }> {
+export async function engraveSnippet(data: string, widthPx: number, zoom = 38, abc?: string): Promise<{ svg: string; sounds: Sound[] }> {
   snippetTk ??= verovio().then(([m, esm]) => new esm.VerovioToolkit(m));
   const t = await snippetTk;
   t.setOptions({
@@ -47,6 +48,8 @@ export async function engraveSnippet(data: string, widthPx: number, zoom = 38): 
     pageMarginRight: 20,
   });
   if (!t.loadData(data)) throw new Error("Verovio could not read this example");
+  // single-voice ABC: correct the key that Verovio's ABC reader carries over from the previous example
+  if (abc !== undefined && !data.startsWith("<")) t.loadData(fixAbcKeys(t.getMEI({}), abc));
   return { svg: untitled(t.renderToSVG(1)), sounds: timeline(t) };
 }
 

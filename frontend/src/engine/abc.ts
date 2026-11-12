@@ -221,3 +221,33 @@ export function exampleData(abc: string): string {
   const voices = new Set([...abc.matchAll(/^V:\s*(\S+)/gm)].map((m) => m[1]));
   return voices.size > 1 ? abcToMei(abc) : abc;
 }
+
+/**
+ * Verovio's ABC reader leaks the previous tune's key: after a G-major example, a C-major one gets F♯ as a hidden
+ * (gestural) accidental on every F, in the sound and the drawing, even in a new toolkit. So after Verovio reads an
+ * ABC example, its gestural accidentals are rewritten from the example's own key (K:) and the accidentals written
+ * earlier in the same bar, and the corrected MEI is loaded instead. Written accidentals are kept as they are.
+ */
+export function fixAbcKeys(mei: string, abc: string): string {
+  const k = /^K:\s*(.*)$/m.exec(abc)?.[1] ?? "C";
+  const key = keyAlter(keyFifths(k.replace(/\s*clef=\S+/, "")));
+  return mei.replace(/<measure\b[\s\S]*?<\/measure>/g, (measure) => {
+    const carry: Record<string, string> = {};
+    return measure.replace(/<note\b([^>]*?)(\/>|>([\s\S]*?)<\/note>)/g, (whole, attrs: string, _end: string, body: string | undefined) => {
+      const step = /\bpname="([a-g])"/.exec(attrs)?.[1];
+      const oct = /\boct="(\d+)"/.exec(attrs)?.[1];
+      if (!step || !oct) return whole;
+      const written = /\baccid="(\w+)"/.exec(attrs)?.[1] ?? (body ? /<accid\b[^>]*\baccid="(\w+)"/.exec(body)?.[1] : undefined);
+      const clean = (x: string) => x.replace(/\s*accid\.ges="\w+"/g, "");
+      let a = clean(attrs);
+      const b = body !== undefined ? clean(body) : undefined;
+      const id = `${step}${oct}`;
+      if (written) carry[id] = written;
+      else {
+        const alter = carry[id] ?? (key[step.toUpperCase()] ? ACCID[key[step.toUpperCase()]] : undefined);
+        if (alter && alter !== "n") a += ` accid.ges="${alter}"`;
+      }
+      return b !== undefined ? `<note${a}>${b}</note>` : `<note${a}/>`;
+    });
+  });
+}

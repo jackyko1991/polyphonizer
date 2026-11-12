@@ -167,7 +167,7 @@ export function Notation({ abc, caption, instrument = 0, width = 560 }: { abc: s
   useEffect(() => {
     let live = true;
     Promise.all([import("../engine/engrave.ts"), import("../engine/abc.ts")])
-      .then(([m, a]) => m.engraveSnippet(a.exampleData(abc), width))
+      .then(([m, a]) => m.engraveSnippet(a.exampleData(abc), width, undefined, abc))
       .then((r) => live && setOut(r), (e) => live && setErr(String(e)));
     return () => {
       live = false;
