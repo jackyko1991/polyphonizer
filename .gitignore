@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+.lake/
+*.olean
+*.tsbuildinfo
+.pixi/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+frontend/public/generated/

@@ -1,0 +1,33 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+/* learnkit's components use Tailwind classes too */
+@source "../../vendor/learnkit/web/src";
+
+:root {
+  color-scheme: light;
+  --lk-header: #9f1239; /* rose-800 */
+  --lk-accent: #be123c; /* rose-700, the icon's colour */
+  --font-text: "Noto Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+:root:lang(zh-Hant) {
+  --font-text: "Noto Sans", "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+}
+
+body {
+  font-family: var(--font-text);
+}
+code,
+pre,
+.font-mono {
+  font-family: "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* the note that is sounding */
+.pz-score .pz-playing,
+.pz-score .pz-playing * {
+  fill: #e11d48;
+  stroke: #e11d48;
+}
+.pz-error-line {
+  background: #fee2e2;
+}
