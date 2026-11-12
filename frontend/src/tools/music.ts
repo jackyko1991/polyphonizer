@@ -80,3 +80,7 @@ export const TUNINGS: { id: string; name: readonly [string, string]; notes: numb
   { id: "ukulele", name: ["Ukulele", "烏克麗麗"], notes: [67, 60, 64, 69] },
   { id: "chromatic", name: ["Any note", "任何音"], notes: [] },
 ];
+
+/** how close a note is to in tune: green within ±5 cents, yellow within ±15, red beyond */
+export type TuneZone = "green" | "yellow" | "red";
+export const tuneZone = (cents: number): TuneZone => (Math.abs(cents) <= 5 ? "green" : Math.abs(cents) <= 15 ? "yellow" : "red");

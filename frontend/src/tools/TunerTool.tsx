@@ -11,7 +11,7 @@ import { Button } from "../Button.tsx";
 import { CHECK, FIELD } from "../ui.ts";
 import { listen, type Listening } from "./audioInput.ts";
 import { tone } from "./liveSound.ts";
-import { midiToHz, nearestNote, noteName, TUNINGS } from "./music.ts";
+import { midiToHz, nearestNote, noteName, TUNINGS, tuneZone } from "./music.ts";
 import { setRunning } from "./toolboxState.ts";
 
 const A4_PRESETS = [440, 442, 443, 415, 432];
@@ -109,10 +109,74 @@ export default function TunerTool() {
   useEffect(() => () => setRunning("tuner", false), []);
 
   const cents = reading?.cents ?? 0;
-  const good = reading && Math.abs(cents) <= 5;
+  const zone = reading ? tuneZone(cents) : null;
+  /** text and needle colours per zone */
+  const ZONE_TEXT = { green: "text-emerald-600", yellow: "text-amber-500", red: "text-red-600" } as const;
+  const ZONE_BG = { green: "bg-emerald-600", yellow: "bg-amber-500", red: "bg-red-600" } as const;
 
   return (
-    <div className="grid h-full gap-4 lg:grid-cols-2" data-testid="tuner-tool">
+    <div className="grid h-full gap-4 max-sm:flex max-sm:flex-col max-sm:gap-6 lg:grid-cols-2" data-testid="tuner-tool">
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-900">{pick(["Listen", "聆聽"])}</h3>
+          <Button
+            icon={mic ? MicOff : Mic}
+            variant={mic ? "on" : "secondary"}
+            onClick={() => (mic ? stopMic() : void startMic())}
+            data-testid="tuner-mic"
+          >
+            {mic ? pick(["Stop listening", "停止聆聽"]) : pick(["Use the microphone", "使用麥克風"])}
+          </Button>
+          {mic && <span className="truncate text-xs text-gray-500">{mic.deviceLabel}</span>}
+        </div>
+        {micError && (
+          <p className="text-sm text-red-700">
+            {pick(["The microphone is not available: ", "無法使用麥克風："])}
+            {micError}
+          </p>
+        )}
+        <div className="flex items-center gap-4 max-sm:flex-col max-sm:items-stretch">
+          <div className="w-28 text-center max-sm:w-full">
+            <p className={`text-4xl font-semibold tabular-nums max-sm:text-7xl ${zone ? ZONE_TEXT[zone] : "text-gray-900"}`} data-testid="tuner-note" data-zone={zone ?? ""}>
+              {reading ? noteName(reading.midi) : "–"}
+            </p>
+            <p className="text-xs text-gray-500 tabular-nums">
+              {reading ? `${reading.hz.toFixed(1)} Hz` : mic ? pick(["play a note", "請拉一個音"]) : ""}
+            </p>
+          </div>
+          {/* the needle: −50 … +50 cents */}
+          <div className="relative h-16 flex-1 max-sm:h-24 max-sm:flex-none">
+            <div className="absolute inset-x-0 top-1/2 h-px bg-gray-300" />
+            {/* zones: red beyond ±15 cents, yellow within ±15, green within ±5 */}
+            <div className="absolute inset-x-0 top-2 bottom-4 rounded bg-red-50" />
+            <div className="absolute top-2 bottom-4 left-1/2 w-[30%] -translate-x-1/2 rounded bg-amber-100" />
+            <div className="absolute top-2 bottom-4 left-1/2 w-[10%] -translate-x-1/2 rounded bg-emerald-200" />
+            {[-50, -25, 0, 25, 50].map((c) => (
+              <span key={c} className="absolute bottom-0 -translate-x-1/2 text-[10px] text-gray-400" style={{ left: `${50 + c}%` }}>
+                {c > 0 ? `+${c}` : c}
+              </span>
+            ))}
+            <div
+              className={`absolute top-1 h-10 w-1 -translate-x-1/2 rounded-full transition-[left] duration-100 ${zone ? ZONE_BG[zone] : "bg-gray-300"}`}
+              style={{ left: `${50 + Math.max(-50, Math.min(50, cents))}%` }}
+            />
+            <p className={`absolute top-0 right-0 text-xs font-medium tabular-nums ${zone ? ZONE_TEXT[zone] : "text-gray-600"}`}>
+              {reading
+                ? `${cents > 0 ? "+" : ""}${cents.toFixed(0)} ¢ ${cents > 5 ? pick(["sharp", "偏高"]) : cents < -5 ? pick(["flat", "偏低"]) : pick(["in tune", "準"])}`
+                : ""}
+            </p>
+          </div>
+        </div>
+        <div className="h-1.5 rounded-full bg-gray-100" aria-label={pick(["Input level", "輸入音量"])}>
+          <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-75" style={{ width: `${level * 100}%` }} />
+        </div>
+        <p className="text-[11px] text-gray-500">
+          {pick([
+            "One note at a time. Headphones keep the reference tone out of the microphone. An electric violin through an audio interface works too.",
+            "一次一個音。戴耳機可避免參考音被麥克風收進去。電子小提琴接上音訊介面也可以。",
+          ])}
+        </p>
+      </section>
       <section className="flex flex-col gap-2">
         <h3 className="text-sm font-semibold text-gray-900">{pick(["Reference tone", "參考音"])}</h3>
         <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
@@ -174,7 +238,7 @@ export default function TunerTool() {
             </label>
           )}
         </div>
-        <div className="flex flex-wrap gap-2" data-testid="tuner-strings">
+        <div className="flex flex-wrap gap-2 max-sm:flex-nowrap" data-testid="tuner-strings">
           {tuning.notes.length ? (
             (fifths ? tuning.notes.slice(0, -1).map((m, i) => [m, tuning.notes[i + 1]]) : tuning.notes.map((m) => [m])).map((notes) => {
               const on = notes.length === playing.length && notes.every((n) => playing.includes(n));
@@ -184,7 +248,7 @@ export default function TunerTool() {
                   type="button"
                   onClick={() => playTone(notes)}
                   aria-pressed={on}
-                  className={`flex h-14 min-w-14 flex-col items-center justify-center rounded-lg border-2 px-3 transition-colors ${
+                  className={`flex h-14 min-w-14 flex-col items-center justify-center rounded-lg border-2 px-3 transition-colors max-sm:h-16 max-sm:flex-1 max-sm:px-1 ${
                     on
                       ? "border-(--lk-accent) bg-rose-50 text-(--lk-accent)"
                       : "border-gray-300 bg-white text-gray-800 hover:border-gray-400"
@@ -226,64 +290,6 @@ export default function TunerTool() {
         </p>
       </section>
 
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-gray-900">{pick(["Listen", "聆聽"])}</h3>
-          <Button
-            icon={mic ? MicOff : Mic}
-            variant={mic ? "on" : "secondary"}
-            onClick={() => (mic ? stopMic() : void startMic())}
-            data-testid="tuner-mic"
-          >
-            {mic ? pick(["Stop listening", "停止聆聽"]) : pick(["Use the microphone", "使用麥克風"])}
-          </Button>
-          {mic && <span className="truncate text-xs text-gray-500">{mic.deviceLabel}</span>}
-        </div>
-        {micError && (
-          <p className="text-sm text-red-700">
-            {pick(["The microphone is not available: ", "無法使用麥克風："])}
-            {micError}
-          </p>
-        )}
-        <div className="flex items-center gap-4">
-          <div className="w-28 text-center">
-            <p className={`text-4xl font-semibold tabular-nums ${good ? "text-emerald-600" : "text-gray-900"}`} data-testid="tuner-note">
-              {reading ? noteName(reading.midi) : "–"}
-            </p>
-            <p className="text-xs text-gray-500 tabular-nums">
-              {reading ? `${reading.hz.toFixed(1)} Hz` : mic ? pick(["play a note", "請拉一個音"]) : ""}
-            </p>
-          </div>
-          {/* the needle: −50 … +50 cents */}
-          <div className="relative h-16 flex-1">
-            <div className="absolute inset-x-0 top-1/2 h-px bg-gray-300" />
-            <div className="absolute top-2 bottom-2 left-1/2 w-[10%] -translate-x-1/2 rounded bg-emerald-100" />
-            {[-50, -25, 0, 25, 50].map((c) => (
-              <span key={c} className="absolute bottom-0 -translate-x-1/2 text-[10px] text-gray-400" style={{ left: `${50 + c}%` }}>
-                {c > 0 ? `+${c}` : c}
-              </span>
-            ))}
-            <div
-              className={`absolute top-1 h-10 w-1 -translate-x-1/2 rounded-full transition-[left] duration-100 ${reading ? (good ? "bg-emerald-600" : "bg-(--lk-accent)") : "bg-gray-300"}`}
-              style={{ left: `${50 + Math.max(-50, Math.min(50, cents))}%` }}
-            />
-            <p className="absolute top-0 right-0 text-xs font-medium text-gray-600 tabular-nums">
-              {reading
-                ? `${cents > 0 ? "+" : ""}${cents.toFixed(0)} ¢ ${cents > 5 ? pick(["sharp", "偏高"]) : cents < -5 ? pick(["flat", "偏低"]) : pick(["in tune", "準"])}`
-                : ""}
-            </p>
-          </div>
-        </div>
-        <div className="h-1.5 rounded-full bg-gray-100" aria-label={pick(["Input level", "輸入音量"])}>
-          <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-75" style={{ width: `${level * 100}%` }} />
-        </div>
-        <p className="text-[11px] text-gray-500">
-          {pick([
-            "One note at a time. Headphones keep the reference tone out of the microphone. An electric violin through an audio interface works too.",
-            "一次一個音。戴耳機可避免參考音被麥克風收進去。電子小提琴接上音訊介面也可以。",
-          ])}
-        </p>
-      </section>
     </div>
   );
 }

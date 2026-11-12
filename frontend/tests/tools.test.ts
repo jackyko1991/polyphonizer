@@ -116,3 +116,8 @@ test("metronome: the heavy note can be the first of the bar, of every beat, or n
   assert.deepEqual(kinds("beat"), ["accent", "sub", "sub", "accent", "sub", "sub", "mute", "sub", "sub", "accent", "sub", "sub"]);
   assert.deepEqual(kinds("none"), ["normal", "sub", "sub", "normal", "sub", "sub", "mute", "sub", "sub", "normal", "sub", "sub"]);
 });
+
+test("tuner colours: green within ±5 cents, yellow within ±15, red beyond", async () => {
+  const { tuneZone } = await import("../src/tools/music.ts");
+  assert.deepEqual([0, 5, -5, 6, 15, -15, 16, -40].map(tuneZone), ["green", "green", "green", "yellow", "yellow", "yellow", "red", "red"]);
+});

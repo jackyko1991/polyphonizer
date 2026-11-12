@@ -1,6 +1,6 @@
 /** The practice metronome's panel: tempo, tap, beats and subdivision, accents, sound, and a pulse to watch. */
 import { useLang } from "@learnkit/web";
-import { Hand, Minus, Play, Plus, Square } from "lucide-react";
+import { ChevronDown, Hand, Minus, Play, Plus, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "../Button.tsx";
 import { FIELD } from "../ui.ts";
@@ -44,18 +44,20 @@ function BeatNotes({ n }: { n: 1 | 2 | 3 | 4 }) {
     </svg>
   );
 }
-/** Italian tempo names, roughly */
-const TEMPO_NAMES: [number, string][] = [
-  [40, "Grave"],
-  [55, "Largo"],
-  [66, "Adagio"],
-  [76, "Andante"],
-  [108, "Moderato"],
-  [120, "Allegretto"],
-  [156, "Allegro"],
-  [176, "Vivace"],
-  [200, "Presto"],
-  [999, "Prestissimo"],
+
+/** tempo terms with their usual range and a typical speed to set (♩ per minute) */
+const TEMPO_TERMS: [string, number, number, number, readonly [string, string]][] = [
+  ["Grave", 25, 45, 40, ["very slow, solemn", "極慢、莊嚴"]],
+  ["Largo", 40, 60, 50, ["broadly, slow", "寬廣、緩慢"]],
+  ["Lento", 45, 60, 54, ["slow", "慢"]],
+  ["Adagio", 66, 76, 70, ["slow and expressive", "慢而富表情"]],
+  ["Andante", 76, 108, 92, ["at a walking pace", "行板，像走路的速度"]],
+  ["Moderato", 108, 120, 112, ["moderately", "中板"]],
+  ["Allegretto", 112, 120, 116, ["fairly fast", "稍快"]],
+  ["Allegro", 120, 156, 132, ["fast, lively", "快板，活潑"]],
+  ["Vivace", 156, 176, 166, ["lively and fast", "活潑而快"]],
+  ["Presto", 168, 200, 184, ["very fast", "急板，很快"]],
+  ["Prestissimo", 200, 300, 208, ["as fast as possible", "最急板"]],
 ];
 
 export default function MetronomeTool() {
@@ -64,6 +66,7 @@ export default function MetronomeTool() {
   const [beat, setBeat] = useState<number | null>(null);
   const [flash, setFlash] = useState(0);
   const taps = useRef<number[]>([]);
+  const [terms, setTerms] = useState(false);
   useEffect(() => onMetronome(setS), []);
   useEffect(
     () =>
@@ -78,60 +81,87 @@ export default function MetronomeTool() {
     if (!s.running) setBeat(null);
   }, [s.running]);
   const bpm = (v: number) => setMetronome({ bpm: Math.round(Math.min(300, Math.max(20, v))) });
-  const tempoName = TEMPO_NAMES.find(([max]) => s.bpm < max)?.[1] ?? "";
+  // the term whose typical speed is nearest
+  const tempoName = TEMPO_TERMS.reduce((a, b) => (Math.abs(b[3] - s.bpm) < Math.abs(a[3] - s.bpm) ? b : a))[0];
 
   return (
-    <div className="flex h-full flex-wrap items-start gap-x-8 gap-y-3" data-testid="metronome-tool">
-      <div className="flex items-center gap-3">
-        <Button
-          variant="primary"
-          icon={s.running ? Square : Play}
-          onClick={() => setMetronome({ running: !s.running })}
-          className="h-12! px-4! text-base!"
-          data-testid="metro-start"
-        >
-          {s.running ? pick(["Stop", "停止"]) : pick(["Start", "開始"])}
-        </Button>
-        <IconButton icon={Minus} label="−1" variant="secondary" onClick={() => bpm(s.bpm - 1)} />
-        <div className="w-24 text-center">
-          <input
-            type="number"
-            min={20}
-            max={300}
-            value={s.bpm}
-            onChange={(e) => bpm(Number(e.target.value) || s.bpm)}
-            className="w-full bg-transparent text-center text-4xl font-semibold text-gray-900 tabular-nums outline-none"
-            aria-label="BPM"
-            data-testid="metro-bpm"
-          />
-          <p className="text-[11px] text-gray-500">
-            BPM · <i>{tempoName}</i>
-          </p>
+    <div className="flex h-full flex-wrap items-start gap-x-8 gap-y-3 max-sm:flex-col max-sm:items-stretch max-sm:gap-y-5" data-testid="metronome-tool">
+      <div className="flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row">
+        <div className="flex items-center gap-3">
+          <IconButton icon={Minus} label="−1" variant="secondary" onClick={() => bpm(s.bpm - 1)} className="max-sm:h-14! max-sm:w-14! max-sm:rounded-full" />
+          <div className="relative w-28 text-center sm:w-24">
+            <input
+              type="number"
+              min={20}
+              max={300}
+              value={s.bpm}
+              onChange={(e) => bpm(Number(e.target.value) || s.bpm)}
+              className="w-full bg-transparent text-center text-4xl font-semibold text-gray-900 tabular-nums outline-none max-sm:text-6xl"
+              aria-label="BPM"
+              data-testid="metro-bpm"
+            />
+            <button
+              onClick={() => setTerms((o) => !o)}
+              aria-expanded={terms}
+              className="inline-flex items-center gap-0.5 rounded px-1 text-[11px] text-gray-500 hover:bg-gray-100 hover:text-gray-800 max-sm:text-sm"
+              title={pick(["Choose a tempo by its name", "依速度術語選擇"])}
+              data-testid="metro-term"
+            >
+              BPM · <i>{tempoName}</i> <ChevronDown className="h-3 w-3" aria-hidden />
+            </button>
+            {terms && (
+              <ul className="absolute top-full left-1/2 z-30 mt-1 w-64 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-1 text-left text-sm shadow-lg" role="listbox" data-testid="metro-terms">
+                {TEMPO_TERMS.map(([name, lo, hi, typical, gloss]) => (
+                  <li key={name}>
+                    <button
+                      role="option"
+                      aria-selected={tempoName === name}
+                      onClick={() => (bpm(typical), setTerms(false))}
+                      className={`flex w-full items-baseline gap-2 rounded px-2 py-1.5 hover:bg-rose-50 ${tempoName === name ? "bg-rose-50 text-(--lk-accent)" : "text-gray-800"}`}
+                    >
+                      <i className="w-24 shrink-0 font-medium">{name}</i>
+                      <span className="min-w-0 flex-1 truncate text-xs text-gray-500">{pick(gloss)}</span>
+                      <span className="shrink-0 text-xs text-gray-500 tabular-nums">
+                        {lo}–{hi === 300 ? "" : hi}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <IconButton icon={Plus} label="+1" variant="secondary" onClick={() => bpm(s.bpm + 1)} className="max-sm:h-14! max-sm:w-14! max-sm:rounded-full" />
         </div>
-        <IconButton icon={Plus} label="+1" variant="secondary" onClick={() => bpm(s.bpm + 1)} />
-        <Button
-          icon={Hand}
-          onClick={() => {
-            const r = tapTempo(taps.current, performance.now());
-            taps.current = r.times;
-            if (r.bpm) bpm(r.bpm);
-          }}
-          title={pick(["Tap the beat a few times", "跟著拍子點幾下"])}
-        >
-          {pick(["Tap", "點拍"])}
-        </Button>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <Button
+            variant="primary"
+            icon={s.running ? Square : Play}
+            onClick={() => setMetronome({ running: !s.running })}
+            className="h-12! flex-1 px-4! text-base! sm:flex-none"
+            data-testid="metro-start"
+          >
+            {s.running ? pick(["Stop", "停止"]) : pick(["Start", "開始"])}
+          </Button>
+          <Button
+            icon={Hand}
+            onClick={() => {
+              const r = tapTempo(taps.current, performance.now());
+              taps.current = r.times;
+              if (r.bpm) bpm(r.bpm);
+            }}
+            className="h-12! flex-1 sm:flex-none"
+            title={pick([
+              "Tap tempo: tap this button in time with the music (or the speed you want) a few times; the metronome takes its speed from your taps",
+              "點拍定速：跟著音樂（或你想要的速度）點這個按鈕幾下，節拍器就會依你的點擊設定速度",
+            ])}
+            data-testid="metro-tap"
+          >
+            {pick(["Tap tempo", "點拍定速"])}
+          </Button>
+        </div>
       </div>
 
-      <div className="flex min-w-[16rem] flex-1 flex-col gap-2">
-        <input
-          type="range"
-          min={20}
-          max={300}
-          value={s.bpm}
-          onChange={(e) => bpm(Number(e.target.value))}
-          aria-label="BPM"
-          className="w-full accent-(--lk-accent)"
-        />
+      <div className="flex w-full min-w-[16rem] flex-1 flex-col gap-2 sm:w-auto">
         <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
           <label className="flex items-center gap-1.5">
             {pick(["Beats per bar", "每小節拍數"])}
@@ -212,7 +242,7 @@ export default function MetronomeTool() {
                 type="button"
                 onClick={() => setMetronome({ accents: s.accents.map((x, j) => (j === i ? nextAccent(x) : x)) })}
                 aria-label={`${pick(["Beat", "第"])} ${i + 1}${pick(["", " 拍"])}: ${a}`}
-                className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-semibold transition-transform duration-100 ${
+                className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-semibold transition-transform duration-100 max-sm:h-14 max-sm:w-14 max-sm:text-lg ${
                   a === "accent" ? "border-(--lk-accent)" : a === "normal" ? "border-gray-400" : "border-dashed border-gray-300"
                 } ${now ? (a === "mute" ? "scale-110 bg-gray-200" : "scale-110 bg-(--lk-accent) text-white") : "bg-white text-gray-600"}`}
               >

@@ -139,11 +139,16 @@ export default function Toolbox() {
           aria-label={pick(["Music tools", "音樂工具"])}
           className={`fixed inset-x-0 bottom-7 z-40 flex flex-col border-t border-gray-200 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.08)] transition-transform duration-200 ease-out motion-reduce:transition-none ${
             shown ? "translate-y-0" : "translate-y-full"
+          } ${
+            // on a phone the metronome and the tuner take the whole screen (big, easy to touch)
+            box.active === "metronome" || box.active === "tuner" ? "max-sm:top-0 max-sm:bottom-0 max-sm:z-[60] max-sm:h-[100dvh]! max-sm:border-t-0" : ""
           }`}
           style={{ height: box.height }}
           data-testid="tool-dock"
         >
-          <Resizer />
+          <div className={box.active === "metronome" || box.active === "tuner" ? "max-sm:hidden" : ""}>
+            <Resizer />
+          </div>
           <div className="flex h-9 shrink-0 items-stretch gap-1 border-b border-gray-200 bg-gray-50 px-2" role="tablist">
             {box.open.map((id) => {
               const t = TOOLS.find((x) => x.id === id)!;
@@ -173,7 +178,7 @@ export default function Toolbox() {
               );
             })}
           </div>
-          <div className="min-h-0 flex-1 overflow-auto p-3">
+          <div className="min-h-0 flex-1 overflow-auto p-3 max-sm:p-4">
             <Suspense fallback={<p className="text-sm text-gray-500">…</p>}>
               {/* open tools stay mounted (a ticking metronome keeps its panel state); only the front one shows */}
               {box.open.map((id) => (
