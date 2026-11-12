@@ -23,6 +23,8 @@ export interface PlanInput {
   stand: Stand;
   /** seconds a turn needs */
   minRest: number;
+  /** systems that must start a page (the player's own page breaks) */
+  forcedStarts?: number[];
 }
 
 export interface Turn {
@@ -49,7 +51,7 @@ export function isTurn(page: number, stand: Stand): boolean {
 
 const BAD_TURN = 10_000;
 
-export function planPages({ systemStarts, restAt, perPage, stand, minRest }: PlanInput): Plan {
+export function planPages({ systemStarts, restAt, perPage, stand, minRest, forcedStarts = [] }: PlanInput): Plan {
   const n = systemStarts.length;
   const cap = Math.max(1, perPage);
   // best[i][p]: least cost to lay out systems 0..i-1 on p pages (p bounded by n)
@@ -65,6 +67,8 @@ export function planPages({ systemStarts, restAt, perPage, stand, minRest }: Pla
       for (let k = Math.max(0, i - cap); k < i; k++) {
         const prev = best[k][p - 1];
         if (prev === Infinity) continue;
+        // a page may not run across a forced page break
+        if (forcedStarts.some((f) => f > k && f < i)) continue;
         const empty = cap - (i - k);
         let cost = prev + (i === n ? 0.2 : 1) * empty * empty;
         // the break before page p (after page p-1) is a turn?
@@ -84,14 +88,25 @@ export function planPages({ systemStarts, restAt, perPage, stand, minRest }: Pla
     pageStarts.unshift(k);
     i = k;
   }
+  const turns = turnsAt(
+    pageStarts.map((s) => systemStarts[s]),
+    restAt,
+    stand,
+    minRest,
+  );
+  return { pageStarts: n ? pageStarts : [], turns, ok: turns.every((t) => t.ok) };
+}
+
+/** the turns for pages starting at these measure indices (first = page 1) */
+export function turnsAt(pageStartMeasures: number[], restAt: number[], stand: Stand, minRest: number): Turn[] {
   const turns: Turn[] = [];
-  for (let p = 1; p < pageStarts.length; p++) {
+  for (let p = 1; p < pageStartMeasures.length; p++) {
     if (!isTurn(p, stand)) continue;
-    const measure = systemStarts[pageStarts[p]];
+    const measure = pageStartMeasures[p];
     const rest = restAt[measure] ?? 0;
     turns.push({ afterPage: p, measure, rest, ok: rest >= minRest });
   }
-  return { pageStarts: n ? pageStarts : [], turns, ok: turns.every((t) => t.ok) };
+  return turns;
 }
 
 /**

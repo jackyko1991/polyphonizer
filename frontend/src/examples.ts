@@ -5,7 +5,7 @@ export const EXAMPLES: { id: string; title: L; code: string }[] = [
   {
     id: "trio",
     title: ["Trio sketch: flute, violin, piano", "三重奏草稿：長笛、小提琴、鋼琴"],
-    code: `# A score is Python with music21. Run it with ▶ Run (or Ctrl/⌘+Enter).
+    code: `# A score is Python with music21. Build it with ⟳ Compile (or Ctrl/⌘+S); ▶ Play plays it.
 # tiny() writes one part in "tinyNotation": c = middle C, c' = an octave up, C = an octave down,
 # the number is the note value (4 = quarter, 2 = half, 1 = whole) and carries on until it changes.
 flute = tiny("g'4 a' b' c'' b'2 a' g'1", name="Flute", inst="flute")

@@ -14,7 +14,7 @@ function score(...parts: [number, number][][]): ScoreData {
       t += d;
     }
   });
-  return { musicxml: "", parts: parts.map((_, i) => `P${i}`), notes, measures: [], bpm: 96, time: "4/4", key: "", title: "" };
+  return { musicxml: "", parts: parts.map((_, i) => `P${i}`), programs: parts.map(() => null), notes, measures: [], bpm: 96, time: "4/4", key: "", title: "" };
 }
 const whole = (ms: number[]) => ms.map((m) => [m, 4] as [number, number]);
 const quarters = (ms: number[], durs?: number[]) => ms.map((m, i) => [m, durs?.[i] ?? 1] as [number, number]);

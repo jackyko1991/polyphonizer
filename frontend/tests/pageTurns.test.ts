@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planPages, restAtMeasureStarts } from "../src/engine/pageTurns.ts";
+import { planPages, restAtMeasureStarts, turnsAt } from "../src/engine/pageTurns.ts";
 import type { NoteEvent } from "../src/engine/types.ts";
 
 test("turns move to where the rests are, even if pages are less full", () => {
@@ -41,4 +41,22 @@ test("rest at a barline counts rests before and after it, in seconds, and every 
   // a second part playing across the barline cancels the turn
   const both = restAtMeasureStarts([...notes, n(1, 3, 2, [50])], measures, 60, [0, 1]);
   assert.equal(both[1], 0);
+});
+
+test("turns are read from the pages as laid out: spread-right turns after odd pages", () => {
+  const restAt = [0, 0, 3, 0, 1, 0, 0];
+  const turns = turnsAt([0, 2, 4, 6], restAt, "spread-right", 2);
+  assert.deepEqual(
+    turns.map((t) => [t.afterPage, t.measure, t.ok]),
+    [[1, 2, true], [3, 6, false]],
+  );
+  assert.deepEqual(turnsAt([0, 2], restAt, "spread", 2), []);
+});
+
+test("a forced page break always starts a page, even where the music would fit", () => {
+  const restAt = new Array(13).fill(5);
+  const plan = planPages({ systemStarts: [0, 2, 4, 6, 8, 10], restAt, perPage: 6, stand: "single", minRest: 2, forcedStarts: [2] });
+  assert.deepEqual(plan.pageStarts, [0, 2]);
+  const free = planPages({ systemStarts: [0, 2, 4, 6, 8, 10], restAt, perPage: 6, stand: "single", minRest: 2 });
+  assert.deepEqual(free.pageStarts, [0]);
 });

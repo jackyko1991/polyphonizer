@@ -31,3 +31,12 @@ pre,
 .pz-error-line {
   background: #fee2e2;
 }
+
+/* Pages view, editing breaks: a bar under the pointer is the one a click changes */
+.pz-edit g.measure { cursor: pointer; }
+.pz-edit g.measure:hover { fill: #be123c; stroke: #be123c; }
+
+/* click-note mode: notes are clickable; the chosen start is marked */
+.pz-clickable g.note, .pz-clickable g.rest, .pz-clickable g.chord { cursor: pointer; }
+.pz-clickable g.note:hover, .pz-clickable g.rest:hover { fill: #be123c; }
+.pz-start, .pz-start * { fill: #0284c7 !important; stroke: #0284c7; }

@@ -12,6 +12,8 @@ export interface NoteEvent {
   /** "C4", "E4 G4" or "rest" */
   name: string;
   tie: "start" | "continue" | "stop" | null;
+  /** markings (markings.py `_note_marks`): down, up, staccato, finger:3, slur:start, breath, lyric:Twin … */
+  marks?: string[];
 }
 
 export interface MeasureInfo {
@@ -23,6 +25,8 @@ export interface MeasureInfo {
 export interface ScoreData {
   musicxml: string;
   parts: string[];
+  /** General MIDI program (0–127) per part, from its instrument or its name; null = unknown */
+  programs: (number | null)[];
   notes: NoteEvent[];
   measures: MeasureInfo[];
   /** quarter notes per minute */
@@ -30,4 +34,6 @@ export interface ScoreData {
   time: string;
   key: string;
   title: string;
+  /** the sustain pedal held, per part, in quarter notes (markings.py `pedal`) */
+  pedals?: { part: number; from: number; to: number }[];
 }

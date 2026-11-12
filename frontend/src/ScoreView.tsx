@@ -1,13 +1,19 @@
 /**
- * The score panel: the engraved score (live, one long page) or the printed pages with planned page turns, a Play
- * button that lights up the notes as they sound, and export.
+ * The score panel: the engraved score (live) or the printed pages, for the full score or one player's part; a Play
+ * button that lights up the notes as they sound; export. The Pages view is also the layout editor: bars per line,
+ * staff size, and line and page breaks set by clicking a bar, with page turns planned around them.
  */
+import { ChevronDown, Download, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, RotateCcw, Square, X } from "lucide-react";
+import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
-import { useEffect, useRef, useState } from "react";
-import { engravePages, engraveScroll, midiFile, type Engraving } from "./engine/engrave.ts";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { DEFAULT_LAYOUT, engravePages, engraveScroll, midiFile, timelineOf, type Engraving, type Layout } from "./engine/engrave.ts";
 import type { Stand } from "./engine/pageTurns.ts";
 import { play, stop } from "./engine/player.ts";
 import type { ScoreData } from "./engine/types.ts";
+import { RANGE, setStage, useStage } from "./progress.ts";
+import SoundPanel from "./SoundPanel.tsx";
+import { BUTTON, BUTTON_ON, CHECK, FIELD, SEGMENT, SEGMENTS } from "./ui.ts";
 import { fill } from "./strings.ts";
 
 export type View = "score" | "pages";
@@ -19,8 +25,18 @@ export interface ScoreViewProps {
   onPart?: (part: number | null) => void;
   /** all part names of the full score (the part picker) */
   allParts?: string[];
-  /** the code, for "Export ▸ code" */
-  code?: string;
+  /** the full score while one part is shown: for playing the other parts along */
+  fullScore?: ScoreData | null;
+  /** Export ▸ Code (the editor's project files) */
+  onExportCode?: () => void;
+  /** the player's layout of this sheet (Pages view) */
+  layout?: Layout;
+  onLayout?: (l: Layout) => void;
+  /** Score view, editing notes: a bar's notes as text, and writing an edit into the code */
+  barText?: (part: string, bar: number) => Promise<{ text: string; lost: string[] }>;
+  onEditBar?: (part: string, bar: number, text: string) => void;
+  /** a note was clicked (click-note mode): its part, bar number and its place among the part's notes and rests */
+  onNoteClick?: (note: { part: string; partIndex: number; bar: number; index: number }) => void;
   /** offer the Pages view (the editor does; Learn does not) */
   pagesView?: boolean;
   view?: View;
@@ -50,7 +66,22 @@ function printPages(pages: string[], title: string) {
   setTimeout(() => w.print(), 300);
 }
 
-export default function ScoreView({ score, part, onPart, allParts, code, pagesView = true, view = "score", onView }: ScoreViewProps) {
+export default function ScoreView({
+  score,
+  part,
+  onPart,
+  allParts,
+  fullScore,
+  onExportCode,
+  pagesView = true,
+  view = "score",
+  onView,
+  layout = DEFAULT_LAYOUT,
+  onLayout,
+  barText,
+  onEditBar,
+  onNoteClick,
+}: ScoreViewProps) {
   const { t } = useLang();
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
@@ -62,6 +93,35 @@ export default function ScoreView({ score, part, onPart, allParts, code, pagesVi
   const [minRest, setMinRest] = useState(2);
   const [planOn, setPlanOn] = useState(true);
   const [menu, setMenu] = useState(false);
+  const [soundOpen, setSoundOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [noteEdit, setNoteEdit] = useState(false);
+  /** with one part shown: play it alone, the other parts (to play along), or everything */
+  const [partPlay, setPartPlay] = useState<"part" | "others" | "all">("part");
+  // playback speed (1 = as written), remembered per score; where ▶ starts (ms of the written tempo)
+  const speedKey = `polyphonizer.bpm.${score?.title || "untitled"}`;
+  const marked = Math.round(score?.bpm || 96);
+  const [bpmText, setBpmText] = useState(String(marked));
+  const [speed, setSpeedState] = useState(1);
+  // ⤢: the panel fills the window (and the screen, where the browser allows it)
+  const panel = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  const [startMs, setStartMs] = useState(0);
+  const [startId, setStartId] = useState<string | null>(null);
+  const [clickPlay, setClickPlay] = useState(() => {
+    try {
+      return localStorage.getItem("polyphonizer.clickNote") !== "off";
+    } catch {
+      return true;
+    }
+  });
+  /** the running playback: when it started (performance.now()), from where, at what speed */
+  const running = useRef<{ at: number; from: number; speed: number } | null>(null);
+  /** the bar being edited: where the editor opens, which part and bar, its text */
+  const [bar, setBar] = useState<{ x: number; y: number; part: string; n: number; text: string; lost: string[]; error?: string } | null>(null);
+  /** forced breaks drawn over the pages: page index, position in % of the page, kind */
+  const [marks, setMarks] = useState<{ page: number; left: number; top: number; height: number; kind: "line" | "page"; bar: number }[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const el = box.current;
@@ -75,106 +135,356 @@ export default function ScoreView({ score, part, onPart, allParts, code, pagesVi
     if (!score) return setEng(null);
     let live = true;
     setBusy(true);
+    setStage("engrave");
     stop();
     setPlaying(false);
     (view === "pages"
-      ? engravePages(score, { stand, minRest, mode: planOn ? "plan" : "plain" })
+      ? engravePages(score, { stand, minRest, mode: planOn ? "plan" : "plain", layout })
       : engraveScroll(score.musicxml, Math.max(320, width - 24))
     )
-      .then((e) => live && (setEng(e), setErr(null)))
-      .catch((e) => live && setErr(String(e)))
+      .then((e) => {
+        if (!live) return;
+        setStage("render");
+        setEng(e);
+        setErr(null);
+        // drawn once the browser has painted the new pages
+        requestAnimationFrame(() => requestAnimationFrame(() => setStage("done")));
+      })
+      .catch((e) => live && (setErr(String(e)), setStage("error")))
       .finally(() => live && setBusy(false));
     return () => {
       live = false;
     };
-  }, [score, view, width, stand, minRest, planOn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [score, view, width, stand, minRest, planOn, JSON.stringify(layout)]);
+
+  // where the forced breaks are on the pages (drawn as markers at the start of their bars)
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || view !== "pages" || !eng?.measureIds.length) return setMarks([]);
+    const out: typeof marks = [];
+    const pages = [...el.querySelectorAll<HTMLElement>("[data-page]")];
+    for (const [kind, list] of [["line", layout.lineBreaks], ["page", layout.pageBreaks]] as const) {
+      for (const bar of list) {
+        const id = eng.measureIds[bar];
+        if (!id) continue;
+        pages.forEach((pg, i) => {
+          const m = pg.querySelector(`[id="${CSS.escape(id)}"]`);
+          if (!m) return;
+          const a = pg.getBoundingClientRect();
+          const b = m.getBoundingClientRect();
+          out.push({ page: i, kind, bar, left: ((b.left - a.left) / a.width) * 100, top: ((b.top - a.top) / a.height) * 100, height: (b.height / a.height) * 100 });
+        });
+      }
+    }
+    setMarks(out);
+  }, [eng, view, width, layout.lineBreaks, layout.pageBreaks]);
+
+  /** Score view, editing notes: a click on a bar of one staff opens its notes as text */
+  const onScoreClick = async (e: React.MouseEvent) => {
+    if (!noteEdit || !eng || !score || !barText) return;
+    const target = e.target as Element;
+    const measure = target.closest("g.measure");
+    const staff = target.closest("g.staff");
+    if (!measure || !staff) return;
+    const index = eng.measureIds.indexOf(measure.id);
+    const staffNo = [...measure.querySelectorAll(":scope > g.staff")].indexOf(staff);
+    const partName = part !== null ? allParts?.[part] : score.parts[staffNo];
+    const n = score.measures[index]?.n;
+    if (index < 0 || !partName || n === undefined) return;
+    const r = box.current!.getBoundingClientRect();
+    const at = { x: e.clientX - r.left + box.current!.scrollLeft, y: e.clientY - r.top + box.current!.scrollTop, part: partName, n };
+    try {
+      setBar({ ...at, ...(await barText(partName, n)) });
+    } catch (err) {
+      setBar({ ...at, text: "", lost: [], error: (err as { message?: string }).message ?? String(err) });
+    }
+  };
+
+  /** edit mode: a click on a bar cycles new line → new page → none */
+  const onPagesClick = (e: React.MouseEvent) => {
+    if (!editing || !eng || !onLayout) return;
+    const id = (e.target as Element).closest("g.measure")?.id;
+    const bar = id ? eng.measureIds.indexOf(id) : -1;
+    if (bar <= 0) return;
+    const line = layout.lineBreaks.includes(bar);
+    const page = layout.pageBreaks.includes(bar);
+    onLayout({
+      ...layout,
+      lineBreaks: line ? layout.lineBreaks.filter((b) => b !== bar) : page ? layout.lineBreaks : [...layout.lineBreaks, bar],
+      pageBreaks: page ? layout.pageBreaks.filter((b) => b !== bar) : line ? [...layout.pageBreaks, bar] : layout.pageBreaks,
+    });
+  };
 
   useEffect(() => () => stop(), []);
+  const toggleFull = () => {
+    if (full) {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+      setFull(false);
+    } else {
+      setFull(true);
+      panel.current?.requestFullscreen?.().catch(() => undefined);
+    }
+  };
+  useEffect(() => {
+    if (!full) return;
+    // Esc closes the note editor first, then leaves full screen; leaving browser full screen leaves ours too
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (bar) return setBar(null);
+      setFull(false);
+    };
+    const onChange = () => !document.fullscreenElement && setFull(false);
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("fullscreenchange", onChange);
+    };
+  }, [full, bar]);
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem(speedKey));
+      const bpm = saved >= 30 && saved <= 300 ? saved : marked;
+      setBpmText(String(bpm));
+      setSpeedState(bpm / marked);
+    } catch {
+      setBpmText(String(marked));
+      setSpeedState(1);
+    }
+    setStartMs(0);
+    setStartId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speedKey, marked]);
 
   const mark = (id: string, on: boolean) =>
     box.current?.querySelector(`[id="${CSS.escape(id)}"]`)?.classList.toggle("pz-playing", on);
-  const toggle = () => {
-    if (playing) return stop();
+  /** play from `from` ms (of the written tempo) at speed `spd` */
+  const playFrom = async (from: number, spd: number) => {
     if (!eng) return;
+    stop();
     setPlaying(true);
-    void play(eng.sounds, mark).then(() => setPlaying(false));
+    let sounds = eng.sounds;
+    let parts = score?.parts ?? [];
+    let programs = score?.programs ?? [];
+    // one part shown, and the others wanted: the full score's sounds for them, this part's own (they light up)
+    if (part !== null && partPlay !== "part" && fullScore) {
+      const others = (await timelineOf(fullScore.musicxml)).filter((x) => x.staff !== part);
+      const mine = eng.sounds.map((x) => ({ ...x, staff: part }));
+      sounds = partPlay === "others" ? others : [...others, ...mine].sort((a, b) => a.time - b.time);
+      parts = fullScore.parts;
+      programs = fullScore.programs ?? [];
+    }
+    const scaled = sounds.map((x) => ({ ...x, time: x.time / spd, duration: x.duration / spd }));
+    const run = { at: performance.now(), from, speed: spd };
+    running.current = run;
+    void play(scaled, mark, from / spd, { parts, programs, onLoading: setLoading }).then(
+      () => running.current === run && (setPlaying(false), (running.current = null)),
+      () => (setPlaying(false), setLoading(false)),
+    );
   };
+  /** where a running playback is now, in ms of the written tempo */
+  const position = () => (running.current ? running.current.from + (performance.now() - running.current.at) * running.current.speed : startMs);
+  const toggle = () => {
+    if (playing) {
+      running.current = null;
+      setPlaying(false);
+      return stop();
+    }
+    void playFrom(startMs, speed);
+  };
+  /** the playback tempo, ♩ per minute (30–300); a running playback carries on from where it is */
+  const applyBpm = (v: number) => {
+    const bpm = Number.isFinite(v) && v > 0 ? Math.min(300, Math.max(30, Math.round(v))) : marked;
+    const spd = bpm / marked;
+    setBpmText(String(bpm));
+    setSpeedState(spd);
+    try {
+      if (bpm === marked) localStorage.removeItem(speedKey);
+      else localStorage.setItem(speedKey, String(bpm));
+    } catch {
+      /* storage unavailable */
+    }
+    if (playing && spd !== speed) void playFrom(position(), spd);
+  };
+  /** click-note mode: start playback at the clicked note and show its code */
+  const onNote = (e: React.MouseEvent) => {
+    if (!clickPlay || noteEdit || editing || !eng || !score) return;
+    const target = e.target as Element;
+    let el = target.closest("g.note, g.rest, g.chord, g.mRest");
+    if (!el) return;
+    if (el.matches("g.note") && el.closest("g.chord")) el = el.closest("g.chord")!;
+    // its time: the first sounding note inside it (a rest starts where the next note does)
+    const ids = el.matches("g.note") ? [el.id] : [...el.querySelectorAll("g.note")].map((n) => n.id);
+    const sound = eng.sounds.find((s) => ids.includes(s.id));
+    const measure = el.closest("g.measure");
+    const staff = el.closest("g.staff");
+    const layer = el.closest("g.layer");
+    if (measure && !sound) {
+      // a rest: start at the next sound in its bar, else keep the start
+      const later = [...measure.querySelectorAll("g.note")].map((n) => eng.sounds.find((s) => s.id === n.id)).filter(Boolean);
+      if (later[0]) setStartMs(later[0]!.time);
+    } else if (sound) setStartMs(sound.time);
+    setStartId(el.id);
+    if (sound && playing) void playFrom(sound.time, speed);
+    if (!measure || !staff || !layer || !onNoteClick) return;
+    const mIndex = eng.measureIds.indexOf(measure.id);
+    const staffNo = [...measure.querySelectorAll(":scope > g.staff")].indexOf(staff);
+    const partIndex = part !== null ? part : staffNo;
+    const partName = part !== null ? allParts?.[part] : score.parts[staffNo];
+    const events = [...layer.querySelectorAll("g.note, g.rest, g.chord, g.mRest")].filter((x) => !(x.matches("g.note") && x.closest("g.chord")));
+    const inBar = events.indexOf(el);
+    const bar = score.measures[mIndex];
+    if (!partName || !bar || inBar < 0) return;
+    // events of this part before this bar (the sheet's own part is index 0 in its score)
+    const p = part !== null ? 0 : staffNo;
+    const before = score.notes.filter((n) => n.part === p && n.offset < bar.offset - 1e-9).length;
+    onNoteClick({ part: partName, partIndex, bar: bar.n, index: before + inBar });
+  };
+  useEffect(() => {
+    const el = startId ? box.current?.querySelector(`[id="${CSS.escape(startId)}"]`) : null;
+    el?.classList.add("pz-start");
+    return () => el?.classList.remove("pz-start");
+  }, [startId, eng]);
   const name = (score?.title || "score").replace(/[^\w-]+/g, "_");
-  const btn = "rounded-md border border-gray-300 bg-white px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40";
+  const small = `${BUTTON} shadow-sm`;
+  const btn = BUTTON;
 
   return (
-    <div className="flex h-full min-h-[24rem] flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-3 py-2">
+    <div ref={panel} className={`flex flex-col bg-white ${full ? "fixed inset-0 z-50" : "h-full min-h-[24rem]"}`} data-testid="score-panel">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 bg-white px-2 py-1.5">
+        {allParts && allParts.length > 1 && (
+          <label className="inline-flex shrink-0 items-center" title={t("pages.part")}>
+            <select
+              value={part ?? -1}
+              onChange={(e) => onPart?.(Number(e.target.value) < 0 ? null : Number(e.target.value))}
+              className={`${FIELD} max-w-36`}
+              aria-label={t("pages.part")}
+              data-testid="part-picker"
+            >
+              <option value={-1}>{t("pages.full")}</option>
+              {allParts.map((p, i) => (
+                <option key={i} value={i}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {part !== null && fullScore && (
+          <select
+            value={partPlay}
+            onChange={(e) => {
+              setPartPlay(e.target.value as "part" | "others" | "all");
+              if (playing) stop(), setPlaying(false);
+            }}
+            className={`${FIELD} max-w-36`}
+            aria-label={t("partPlay.label")}
+            title={t("partPlay.label")}
+            data-testid="part-play"
+          >
+            <option value="part">{t("partPlay.part")}</option>
+            <option value="others">{t("partPlay.others")}</option>
+            <option value="all">{t("partPlay.all")}</option>
+          </select>
+        )}
         {pagesView && (
-          <div className="flex rounded-md border border-gray-300 p-0.5 text-sm" role="tablist">
+          <div className={SEGMENTS} role="tablist">
             {(["score", "pages"] as View[]).map((v) => (
               <button
                 key={v}
                 role="tab"
                 aria-selected={view === v}
                 onClick={() => onView?.(v)}
-                className={`rounded px-2.5 py-0.5 font-medium ${view === v ? "bg-(--lk-accent) text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                className={`${SEGMENT} ${view === v ? "bg-(--lk-accent) text-white" : "text-gray-600 hover:bg-gray-100"}`}
               >
                 {t(`view.${v}`)}
               </button>
             ))}
           </div>
         )}
+        <label className={`${CHECK} gap-1`} title={t("speed.title")}>
+          <Icon icon={Gauge} className="text-gray-500" />♩ =
+          <input
+            type="number"
+            min={30}
+            max={300}
+            step={1}
+            value={bpmText}
+            disabled={!eng}
+            onChange={(e) => setBpmText(e.target.value)}
+            onBlur={() => applyBpm(Number(bpmText))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") applyBpm(Number(bpmText));
+              if ((e.key === "ArrowUp" || e.key === "ArrowDown") && e.shiftKey) {
+                e.preventDefault();
+                applyBpm(Number(bpmText) + (e.key === "ArrowUp" ? 10 : -10));
+              }
+            }}
+            className={`${FIELD} w-14 px-1 tabular-nums ${speed !== 1 ? "border-(--lk-accent) text-(--lk-accent)" : ""}`}
+            aria-label={t("speed.title")}
+            data-testid="bpm"
+          />
+          {speed !== 1 && (
+            <button onClick={() => applyBpm(marked)} className="text-gray-400 hover:text-gray-700" title={t("speed.reset")} aria-label={t("speed.reset")}>
+              <Icon icon={RotateCcw} className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </label>
         <button onClick={toggle} disabled={!eng || busy} className={btn} data-testid="play">
-          {playing ? `■ ${t("stop")}` : `▶ ${t("play")}`}
+          <Icon icon={playing ? Square : Play} />
+          {playing ? t("stop") : t("play")}
         </button>
+        {loading && <span className="text-xs text-gray-500">{t("play.loading")}</span>}
+
+        <div className="relative">
+          <button
+            onClick={() => setSoundOpen((o) => !o)}
+            disabled={!score}
+            className={btn}
+            aria-expanded={soundOpen}
+            data-testid="sound"
+            title={t("sound.title")}
+          >
+            <Icon icon={Music} /> {t("sound.button")}
+          </button>
+          {soundOpen && score && <SoundPanel parts={score.parts} programs={score.programs ?? []} onClose={() => setSoundOpen(false)} />}
+        </div>
+        {view === "score" && onEditBar && (
+          <button
+            onClick={() => (setNoteEdit((x) => !x), setBar(null))}
+            disabled={!score}
+            aria-pressed={noteEdit}
+            className={noteEdit ? BUTTON_ON : BUTTON}
+            data-testid="edit-notes"
+            title={t("edit.hint")}
+          >
+            <Icon icon={PencilLine} /> {t("edit.notes")}
+          </button>
+        )}
+        <label className={CHECK} title={t("click.hint")}>
+          <input
+            type="checkbox"
+            checked={clickPlay}
+            onChange={(e) => {
+              setClickPlay(e.target.checked);
+              if (!e.target.checked) setStartId(null);
+              try {
+                localStorage.setItem("polyphonizer.clickNote", e.target.checked ? "on" : "off");
+              } catch {
+                /* storage unavailable */
+              }
+            }}
+            data-testid="click-note"
+          />
+          {t("click.label")}
+        </label>
         {busy && <span className="text-xs text-gray-500">{view === "pages" ? t("pages.engraving") : "…"}</span>}
         {eng && view === "pages" && <span className="text-xs text-gray-500">{fill(t("pages.count"), { n: eng.pages.length })}</span>}
-        {code !== undefined && (
-          <div className="relative ml-auto">
-            <button onClick={() => setMenu((m) => !m)} disabled={!score} className={btn} aria-expanded={menu}>
-              {t("export")} ▾
-            </button>
-            {menu && score && (
-              <div
-                className="absolute right-0 z-20 mt-1 flex w-72 flex-col rounded-lg border border-gray-200 bg-white p-1 text-sm shadow-lg"
-                onMouseLeave={() => setMenu(false)}
-              >
-                {[
-                  ["export.musicxml", () => download(`${name}.musicxml`, score.musicxml, "application/vnd.recordare.musicxml+xml")],
-                  ["export.midi", async () => download(`${name}.mid`, (await midiFile()) as BlobPart, "audio/midi")],
-                  ["export.print", async () => printPages((await engravePages(score, { stand, minRest, mode: planOn ? "plan" : "plain" })).pages, score.title)],
-                  ["export.code", () => download(`${name}.py`, code, "text/x-python")],
-                ].map(([k, f]) => (
-                  <button
-                    key={k as string}
-                    onClick={() => (setMenu(false), void (f as () => unknown)())}
-                    className="rounded-md px-3 py-2 text-left hover:bg-gray-100"
-                  >
-                    {t(k as string)}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {view === "pages" && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-          {allParts && allParts.length > 1 && (
-            <label className="flex items-center gap-1.5">
-              {t("pages.part")}
-              <select
-                value={part ?? -1}
-                onChange={(e) => onPart?.(Number(e.target.value) < 0 ? null : Number(e.target.value))}
-                className="rounded border border-gray-300 bg-white px-1.5 py-0.5"
-                data-testid="part-picker"
-              >
-                <option value={-1}>{t("pages.full")}</option>
-                {allParts.map((p, i) => (
-                  <option key={i} value={i}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
           <label className="flex items-center gap-1.5">
             {t("pages.stand")}
             <select value={stand} onChange={(e) => setStand(e.target.value as Stand)} className="rounded border border-gray-300 bg-white px-1.5 py-0.5">
@@ -201,6 +511,54 @@ export default function ScoreView({ score, part, onPart, allParts, code, pagesVi
             <input type="checkbox" checked={planOn} onChange={(e) => setPlanOn(e.target.checked)} data-testid="plan-toggle" />
             {t("pages.plan")}
           </label>
+          {onLayout && (
+            <>
+              <span className="hidden h-5 border-l border-gray-300 sm:block" />
+              <label className="flex items-center gap-1.5">
+                {t("layout.barsPerLine")}
+                <select
+                  value={layout.barsPerLine}
+                  onChange={(e) => onLayout({ ...layout, barsPerLine: Number(e.target.value) })}
+                  className="rounded border border-gray-300 bg-white px-1.5 py-0.5"
+                  data-testid="bars-per-line"
+                >
+                  <option value={0}>{t("layout.auto")}</option>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5">
+                {t("layout.scale")}
+                <input
+                  type="range"
+                  min={30}
+                  max={80}
+                  step={5}
+                  value={layout.scale}
+                  onChange={(e) => onLayout({ ...layout, scale: Number(e.target.value) })}
+                  className="w-24"
+                  title={`${layout.scale}%`}
+                />
+              </label>
+              <button
+                onClick={() => setEditing((x) => !x)}
+                aria-pressed={editing}
+                className={`rounded-md border px-2 py-0.5 ${editing ? "border-(--lk-accent) bg-(--lk-accent) text-white" : "border-gray-300 bg-white hover:bg-gray-100"}`}
+                data-testid="edit-breaks"
+              >
+                <Icon icon={PencilLine} /> {t("layout.edit")}
+              </button>
+              {(layout.lineBreaks.length > 0 || layout.pageBreaks.length > 0) && (
+                <button onClick={() => onLayout({ ...layout, lineBreaks: [], pageBreaks: [] })} className="text-(--lk-accent) hover:underline">
+                  {t("layout.clear")}
+                </button>
+              )}
+              {editing && <span className="basis-full text-xs text-gray-500">{t("layout.editHint")}</span>}
+            </>
+          )}
         </div>
       )}
 
@@ -227,19 +585,85 @@ export default function ScoreView({ score, part, onPart, allParts, code, pagesVi
         </div>
       )}
 
-      <div ref={box} className="pz-score min-h-0 flex-1 overflow-auto bg-gray-100 p-3" data-testid="score">
+      <ProgressLine />
+      {view === "score" && noteEdit && <p className="border-b border-gray-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900">{t("edit.hint")}</p>}
+      <div ref={box} className="pz-score relative min-h-0 flex-1 overflow-auto bg-gray-100 p-3" data-testid="score">
+        {/* export and full screen: just above the sheet, staying in view while the score scrolls */}
+        <div className="pointer-events-none sticky top-0 z-20 -mb-2 flex justify-end gap-1.5 [&>*]:pointer-events-auto" data-testid="score-actions">
+          {onExportCode !== undefined && (
+            <div className="relative">
+              <button onClick={() => setMenu((m) => !m)} disabled={!score} className={small} aria-expanded={menu}>
+                <Icon icon={Download} /> {t("export")} <Icon icon={ChevronDown} className="h-3.5 w-3.5" />
+              </button>
+              {menu && score && (
+                <div
+                  className="absolute right-0 z-20 mt-1 flex w-72 flex-col rounded-lg border border-gray-200 bg-white p-1 text-sm shadow-lg"
+                  onMouseLeave={() => setMenu(false)}
+                >
+                  {[
+                    ["export.musicxml", () => download(`${name}.musicxml`, score.musicxml, "application/vnd.recordare.musicxml+xml")],
+                    ["export.midi", async () => download(`${name}.mid`, (await midiFile()) as BlobPart, "audio/midi")],
+                    ["export.print", async () => printPages((await engravePages(score, { stand, minRest, mode: planOn ? "plan" : "plain", layout })).pages, score.title)],
+                    ["export.code", onExportCode],
+                  ].map(([k, f]) => (
+                    <button
+                      key={k as string}
+                      onClick={() => (setMenu(false), void (f as () => unknown)())}
+                      className="rounded-md px-3 py-2 text-left hover:bg-gray-100"
+                    >
+                      {t(k as string)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <button
+            onClick={toggleFull}
+            className={small}
+            title={t(full ? "full.exit" : "full.enter")}
+            aria-label={t(full ? "full.exit" : "full.enter")}
+            aria-pressed={full}
+            data-testid="fullscreen"
+          >
+            <Icon icon={full ? Minimize2 : Maximize2} />
+          </button>
+        </div>
+        {bar && (
+          <BarEditor
+            bar={bar}
+            onChange={(text) => setBar({ ...bar, text })}
+            onApply={() => {
+              onEditBar?.(bar.part, bar.n, bar.text.trim());
+              setBar(null);
+            }}
+            onClose={() => setBar(null)}
+          />
+        )}
         {err && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">{err}</p>}
         {!score && !err && <p className="p-6 text-center text-sm text-gray-500">{t("view.empty")}</p>}
         {eng &&
           (view === "pages" ? (
-            <div className="flex flex-wrap justify-center gap-4">
+            <div className={`flex flex-wrap justify-center gap-4 ${editing ? "pz-edit" : clickPlay ? "pz-clickable" : ""}`} onClick={(e) => (editing ? onPagesClick(e) : onNote(e))}>
               {eng.pages.map((svg, i) => (
-                <div key={i} className="relative">
+                <div key={i} className="relative [content-visibility:auto] [contain-intrinsic-size:auto_600px]">
                   <div
-                    className="w-[min(100%,420px)] min-w-[280px] bg-white shadow-md [aspect-ratio:210/297] [&>svg]:h-full [&>svg]:w-full"
+                    data-page={i}
+                    className={`${full ? "w-[min(100%,calc((100vh-9rem)*210/297))]" : "w-[min(100%,420px)]"} min-w-[280px] bg-white shadow-md [aspect-ratio:210/297] [&>svg]:h-full [&>svg]:w-full`}
                     // Verovio's own SVG output
                     dangerouslySetInnerHTML={{ __html: svg }}
                   />
+                  {marks
+                    .filter((m) => m.page === i)
+                    .map((m) => (
+                      <span
+                        key={`${m.kind}-${m.bar}`}
+                        className={`pointer-events-none absolute w-1 rounded-full ${m.kind === "page" ? "bg-(--lk-accent)" : "bg-sky-500"}`}
+                        style={{ left: `calc(${m.left}% - 3px)`, top: `${m.top}%`, height: `${Math.max(2, m.height)}%` }}
+                        title={t(m.kind === "page" ? "layout.page" : "layout.line")}
+                        data-testid={`mark-${m.kind}`}
+                      />
+                    ))}
                   <span className="absolute -bottom-5 left-0 right-0 text-center text-xs text-gray-500">
                     {i + 1}
                     {eng.plan?.turns.some((x) => x.afterPage === i + 1) ? " ↻" : ""}
@@ -248,11 +672,127 @@ export default function ScoreView({ score, part, onPart, allParts, code, pagesVi
               ))}
             </div>
           ) : (
-            eng.pages.map((svg, i) => (
-              <div key={i} className="mx-auto bg-white shadow-sm [&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />
-            ))
+            <div className={noteEdit ? "pz-edit" : clickPlay ? "pz-clickable" : ""} onClick={(e) => (noteEdit ? void onScoreClick(e) : onNote(e))}>
+            {eng.pages.map((svg, i) => (
+              <div
+                key={i}
+                className="mx-auto bg-white shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_800px] [&>svg]:h-auto [&>svg]:w-full"
+                dangerouslySetInnerHTML={{ __html: svg }}
+              />
+            ))}
+            </div>
           ))}
       </div>
+    </div>
+  );
+}
+
+/** The note editor for one bar: its notes as text (tinyNotation, chords as <c e g>4), applied as an edit_bar() line. */
+function BarEditor({
+  bar,
+  onChange,
+  onApply,
+  onClose,
+}: {
+  bar: { x: number; y: number; part: string; n: number; text: string; lost: string[]; error?: string };
+  onChange: (text: string) => void;
+  onApply: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useLang();
+  return (
+    <div
+      className="absolute z-30 w-[min(28rem,calc(100%-1.5rem))] rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-lg"
+      style={{ left: Math.max(12, Math.min(bar.x - 40, 9999)), top: bar.y + 14 }}
+      role="dialog"
+      aria-label={t("edit.title")}
+      data-testid="bar-editor"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center gap-2">
+        <b className="text-gray-900">{fill(t("edit.title"), { part: bar.part, bar: bar.n })}</b>
+        <button onClick={onClose} aria-label={t("sound.close")} className="ml-auto px-1 text-lg leading-none text-gray-400 hover:text-gray-700">
+          <Icon icon={X} />
+        </button>
+      </div>
+      {bar.error ? (
+        <p className="mt-2 text-red-700">{bar.error}</p>
+      ) : (
+        <>
+          <input
+            autoFocus
+            value={bar.text}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onApply();
+              if (e.key === "Escape") onClose();
+            }}
+            spellCheck={false}
+            className="mt-2 w-full rounded border border-gray-300 px-2 py-1 font-mono text-sm focus:border-(--lk-accent) focus:outline-none"
+            data-testid="bar-text"
+          />
+          <p className="mt-1.5 text-xs text-gray-500">{t("edit.syntax")}</p>
+          {bar.lost.length > 0 && <p className="mt-1 text-xs text-amber-800">⚠ {fill(t("edit.lost"), { what: bar.lost.join(", ") })}</p>}
+          <div className="mt-2 flex justify-end gap-2">
+            <button onClick={onClose} className="rounded-md border border-gray-300 px-2.5 py-1 text-gray-700 hover:bg-gray-50">
+              {t("edit.cancel")}
+            </button>
+            <button onClick={onApply} className="rounded-md bg-(--lk-accent) px-3 py-1 font-medium text-white hover:opacity-90" data-testid="bar-apply">
+              {t("edit.apply")}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** the thin compile-progress line over the score: stage ranges from progress.ts, creeping within a stage */
+function ProgressLine() {
+  const { pick } = useLang();
+  const [stage, since] = useStage();
+  const [pct, setPct] = useState(0);
+  useEffect(() => {
+    if (stage === "idle") return setPct(0);
+    const [from, to] = RANGE[stage];
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (still || from === to) return setPct(to === 100 && from === 100 ? 100 : from);
+    let raf = 0;
+    const tick = () => {
+      // ease out towards the stage's end, never quite reaching it
+      const s = (performance.now() - since) / 1000;
+      setPct(from + (to - from) * 0.9 * (1 - Math.exp(-s / 1.5)));
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, [stage, since]);
+  const names: Record<string, [string, string]> = {
+    python: ["starting Python", "啟動 Python"],
+    music21: ["loading music21", "載入 music21"],
+    run: ["running the code", "執行程式碼"],
+    engrave: ["engraving", "排版"],
+    render: ["drawing the pages", "繪製頁面"],
+    done: ["done", "完成"],
+    error: ["failed", "失敗"],
+  };
+  const label = stage === "idle" ? "" : `${pick(["Compiling", "編譯中"])}: ${pick(names[stage])}…`;
+  return (
+    <div className="relative h-0.5 shrink-0 overflow-hidden bg-transparent" aria-hidden={stage === "idle"}>
+      {stage !== "idle" && (
+        <div
+          role="progressbar"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(pct)}
+          title={label}
+          data-testid="compile-progress"
+          data-stage={stage}
+          className={`h-full transition-[width,opacity] duration-300 ${stage === "error" ? "bg-red-600" : "bg-(--lk-accent)"} ${stage === "done" ? "opacity-0 delay-150" : "opacity-100"}`}
+          style={{ width: `${pct}%` }}
+        />
+      )}
     </div>
   );
 }

@@ -1,0 +1,14 @@
+Polyphonizer
+Copyright 2026 Jacky Ko
+
+This product includes software developed as part of Tensorizer (https://github.com/jackyko1991/tensorizer),
+licensed under the Apache License, Version 2.0.
+
+Third-party material, with its own licence:
+- music21 (https://github.com/cuthbertLab/music21), BSD 3-Clause; its corpus of public-domain scores is used through
+  music21 at run time.
+- Verovio (https://www.verovio.org), LGPL-3.0, used unmodified as an npm package.
+- Pyodide (https://pyodide.org), MPL-2.0, loaded from its CDN.
+- Score collections opened from the Library keep their licences, shown with each work: OpenScore Lieder and String
+  Quartets (CC0), Craig Stuart Sapp's Humdrum editions (CC BY-NC-SA 4.0).
+- Pictures of the History page: see frontend/public/history/CREDITS.md.
