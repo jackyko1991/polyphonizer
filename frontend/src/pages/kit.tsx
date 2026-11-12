@@ -289,7 +289,7 @@ export function TryIn({ ids }: { ids: string[] }) {
         const p = PROBLEMS.find((q) => q.id === id);
         if (!p) throw new Error(`TryIn: no problem ${id}`);
         return (
-          <button key={id} onClick={() => go("learn", id)} className="rounded-full bg-rose-50 px-2.5 py-1 text-(--lk-accent) hover:bg-rose-100">
+          <button key={id} onClick={() => go("learn", "code", id)} className="rounded-full bg-rose-50 px-2.5 py-1 text-(--lk-accent) hover:bg-rose-100">
             {p.level} · {plainText(pick(p.title))}
           </button>
         );

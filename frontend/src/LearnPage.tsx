@@ -1,6 +1,7 @@
 /**
- * Learn (#/learn, #/learn/<problem>), in Formalizer's and Tensorizer's Problems layout. Wide screens (≥ xl), three
- * columns at full height:
+ * Learn to ▾ Code (#/learn/code/<problem>; #/learn and #/learn/<problem> still work) and Play (#/learn/play, a
+ * placeholder until the keyboard lessons). Code is in Formalizer's and Tensorizer's Problems layout. Wide screens
+ * (≥ xl), three columns at full height:
  *   1. the library (foldable): search, then each topic folds open to its items grouped by level; Track 0, the
  *      syntax lessons, comes first;
  *   2. the lesson or problem: title, chips (and "uses: lesson N" links back), the verdict; tabs below:
@@ -11,7 +12,7 @@
  * For single-part code, a note clicked in the score selects its token in the code and the cursor in a tiny("…")
  * string lights up its note. Ctrl/⌘+S saves and checks. Nothing is locked. Phones show one part at a time.
  */
-import { go, plainText, RichText, useLang } from "@learnkit/web";
+import { plainText, RichText, useLang } from "@learnkit/web";
 import type { EditorView } from "@codemirror/view";
 import { useEffect, useMemo, useRef, useState } from "react";
 import CodePane from "./CodePane.tsx";
@@ -26,6 +27,7 @@ import { LEVEL_STYLE } from "./learn/levels.ts";
 import { TECH_BODY, TECH_TARGETS } from "./learn/techniqueLessons.tsx";
 import { ruleLabel } from "./learn/ruleText.ts";
 import { noteTokens, tinyTokens } from "./learn/tokens.ts";
+import { goCode, parseLearn } from "./learn/route.ts";
 import { fillIn, UI } from "./learn/ui.ts";
 import { CATEGORIES, LEVELS, PROBLEMS, type Problem } from "./problems.ts";
 import ScoreView from "./ScoreView.tsx";
@@ -67,13 +69,41 @@ function useTitle() {
   return (p: Problem) => (p.lesson ? `${p.lesson} · ${pick(p.title)}` : pick(p.title));
 }
 
-export default function LearnPage({ id }: { id: string | null }) {
+export default function LearnPage({ tab, section }: { tab: string | null; section: string | null }) {
+  const route = parseLearn(tab, section);
+  // an address from before the split (#/learn/<problem>): show it as #/learn/code/<problem>
+  useEffect(() => {
+    if (route.redirect) window.location.replace(route.redirect);
+  }, [route.redirect]);
+  return route.tab === "play" ? <PlayPage /> : <CodePage id={route.id} />;
+}
+
+/** Learn to ▸ Play: the keyboard lessons come with the Toolbox */
+function PlayPage() {
+  const { pick } = useLang();
+  return (
+    <div className="mx-auto max-w-2xl px-5 py-16 text-center" data-testid="learn-play">
+      <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{pick(["Learn to play", "學習彈奏"])}</h1>
+      <p className="mt-4 text-gray-600">
+        {pick([
+          "Lessons in playing on a keyboard are coming with the Toolbox: play what you see, and hear and see what you play.",
+          "鍵盤彈奏課程將與工具箱一起推出：彈出你看到的，並聽見、看見你彈的。",
+        ])}
+      </p>
+      <p className="mt-6">
+        <Button onClick={() => goCode("")}>{pick(["Learn to code music meanwhile", "先學寫音樂程式"])}</Button>
+      </p>
+    </div>
+  );
+}
+
+function CodePage({ id }: { id: string | null }) {
   const { t, pick } = useLang();
   const title = useTitle();
   const problem = PROBLEMS.find((p) => p.id === id) ?? PROBLEMS[0];
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [passed, setPassed] = useState(passedSet);
-  const select = (next: string) => go("learn", next);
+  const select = (next: string) => goCode(next);
   const onPassed = (pid: string) =>
     setPassed((s) => {
       if (s.has(pid)) return s;
@@ -594,7 +624,7 @@ function ProblemView({ problem, done, onPassed }: { problem: Problem; done: bool
                 return (
                   <button
                     key={u}
-                    onClick={() => go("learn", u)}
+                    onClick={() => goCode(u)}
                     title={plainText(pick(l.title))}
                     className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-sky-800 hover:bg-sky-100"
                   >
@@ -637,7 +667,7 @@ function ProblemView({ problem, done, onPassed }: { problem: Problem; done: bool
               </div>
               {next && (
                 <div className="flex justify-end">
-                  <Button onClick={() => go("learn", next.id)} data-testid="next">
+                  <Button onClick={() => goCode(next.id)} data-testid="next">
                     {pick(UI.next)}: {title(next)}
                     <Icon icon={ArrowRight} />
                   </Button>

@@ -3,6 +3,7 @@ import { Component, lazy, Suspense, type ComponentType, type ErrorInfo, type Rea
 import EditorPage from "./EditorPage.tsx";
 import LearnPage from "./LearnPage.tsx";
 import { SCROLL } from "./pages/kit.tsx";
+import { LEARN_TABS } from "./learn/route.ts";
 import RoadmapPage from "./RoadmapPage.tsx";
 import { STRINGS } from "./strings.ts";
 
@@ -48,7 +49,12 @@ export default function App() {
   const pages: ShellPage[] = [
     { id: "editor", label: t("page.editor") },
     { id: "library", label: t("page.library") },
-    { id: "learn", label: t("page.learn") },
+    {
+      id: "learn",
+      label: t("page.learn"),
+      // Learn to ▾ Code / Play
+      tabs: LEARN_TABS.map((id) => ({ id, label: t(`learn.tab.${id}`) })),
+    },
     {
       id: "concept",
       label: t("page.concept"),
@@ -117,7 +123,7 @@ export default function App() {
         {route.page === "library" ? (
           <LibraryPage />
         ) : route.page === "learn" ? (
-          <LearnPage id={route.tab} />
+          <LearnPage tab={route.tab} section={route.section} />
         ) : route.page === "concept" ? (
           tabOf(CONCEPT_TABS) === "history" ? (
             <HistoryPage section={route.section} />

@@ -11,7 +11,9 @@ export const LANGS: Language[] = [
 export const STRINGS = {
   tagline: ["Music scores written as code, checked, played and laid out for the stand", "以程式碼寫樂譜：檢查、播放、排版到譜架上"],
   "page.editor": ["Score editor", "樂譜編輯器"],
-  "page.learn": ["Learn to Code", "學寫程式"],
+  "page.learn": ["Learn to", "學習"],
+  "learn.tab.code": ["Code", "寫程式"],
+  "learn.tab.play": ["Play", "彈奏"],
   "page.roadmap": ["Roadmap", "路線圖"],
   "page.library": ["Library", "曲庫"],
   "page.concept": ["Concept", "概念"],
