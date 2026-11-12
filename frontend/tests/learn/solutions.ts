@@ -87,6 +87,39 @@ score = right
 fingering(violin, "0 1 2 3 4 1 2 3 4 1 2 3 4 1 2")
 score = violin
 `,
+  "arr-octave-cello": `violin = tiny("c4 d e c c d e c e f g2 e4 f g2 g8 a g f e4 c g8 a g f e4 c c4 G c2 c4 G c2", name="Violin", inst="violin")
+cello = tiny("C4 D E C C D E C E F G2 E4 F G2 G8 A G F E4 C G8 A G F E4 C C4 GG C2 C4 GG C2", name="Cello", inst="cello", clef_="bass")
+score = together(violin, cello, bpm=100)
+`,
+  "arr-flute-key": `flute = tiny("e4 e f g g f e d c c d e e4. d8 d2", name="Flute", inst="flute", key_sig="C")
+score = flute
+`,
+  "arr-drone": `flute = tiny("d4 d d e f#2 e2 d4 f# e e d1 d4 d d e f#2 e2 d4 f# e e d1", name="Flute", inst="flute", key_sig="D")
+cello = tiny("<D A>1 <D A> <D A> <D A> <D A> <D A> <D A> <D A>", name="Cello", inst="cello", clef_="bass", key_sig="D")
+score = together(flute, cello, bpm=100)
+`,
+  "arr-root-bass": `flute = tiny("c'4 c' g' g' a' a' g'2 f'4 f' e' e' d' d' c'2", time="2/4", name="Flute", inst="flute")
+cello = tiny("C2 C F C F C GG C", time="2/4", name="Cello", inst="cello", clef_="bass")
+score = together(flute, cello, bpm=96)
+`,
+  "arr-block-chords": `right = tiny("d'4 g8 a b c' d'4 g g e' c'8 d' e' f'# g'4 g g c' d'8 c' b a b4 c'8 b a g f#4 g8 a b g a2.", time="3/4", name="Right hand", inst="piano", key_sig="G")
+left = tiny("<GG BB D>2. <GG BB D>2. <C E G>2. <GG BB D>2. <C E G>2. <GG BB D>2. <AA D F#>2. <AA D F#>2.", time="3/4", name="Left hand", inst="piano", clef_="bass", key_sig="G")
+score = together(right, left, bpm=112)
+`,
+  "arr-alberti": `right = tiny("c'4 c' g' g' a' a' g'2 f'4 f' e' e' d' d' c'2", time="2/4", name="Right hand", inst="piano")
+left = tiny("C8 G E G C G E G C A F A C G E G C A F A C G E G BB G D G C G E G", time="2/4", name="Left hand", inst="piano", clef_="bass")
+score = together(right, left, bpm=96)
+`,
+  "arr-counter-line": `flute = tiny("e'4 e' f' g' g' f' e' d' c' c' d' e' e'4. d'8 d'2", name="Flute", inst="flute")
+violin = tiny("e4 g f e e f g g a a f c g4. b8 b2", name="Violin", inst="violin")
+score = together(flute, violin, bpm=100)
+`,
+  "arr-quartet": `violin1 = tiny("e'1 e' f' d' c'", name="Violin I", inst="violin")
+violin2 = tiny("c'1 c' c' b g", name="Violin II", inst="violin")
+viola = tiny("g1 a a g e", name="Viola", inst="viola", clef_="alto")
+cello = tiny("C1 A F G C", name="Cello", inst="cello", clef_="bass")
+score = together(violin1, violin2, viola, cello, bpm=72)
+`,
 };
 
 /** wrong answers a student might write: each must fail (id → [code, the rule ids that must fail]) */
@@ -126,6 +159,87 @@ fingering(right, "1 2 3 4 1 2 3 4 1 2 3 4 1 2 3")
 score = right
 `, ["thumbUnder"]]],
   "scale-g-violin": [[`score = tiny("g4 a b c' d' e' f'# g' a' b' c'' d'' e'' f''# g'' f''# e'' d'' c'' b' a' g' f'# e' d' c' b a g")\n`, ["starts", "highest", "ends"]]],
+  "arr-octave-cello": [
+    // two octaves down: below the cello's C2
+    [
+      `violin = tiny("c4 d e c c d e c e f g2 e4 f g2 g8 a g f e4 c g8 a g f e4 c c4 G c2 c4 G c2", name="Violin", inst="violin")
+cello = violin.transpose("-P15")
+score = together(violin, cello, bpm=100)
+`,
+      ["transposed", "range"],
+    ],
+  ],
+  "arr-flute-key": [
+    // a fifth up but the dotted rhythm made even
+    [
+      `flute = tiny("f#4 f# g a a g f# e d d e f# f# e e2", name="Flute", inst="flute", key_sig="D")
+score = flute
+`,
+      ["sameRhythm"],
+    ],
+  ],
+  "arr-drone": [
+    // A at the bottom; and half notes
+    [
+      `flute = tiny("d4 d d e f#2 e2 d4 f# e e d1 d4 d d e f#2 e2 d4 f# e e d1", name="Flute", inst="flute", key_sig="D")
+cello = tiny("<AA D>1 <D A> <D A> <D A> <D A> <D A> <D A> D2 D", name="Cello", inst="cello", clef_="bass", key_sig="D")
+score = together(flute, cello, bpm=100)
+`,
+      ["chordTones", "rhythm"],
+    ],
+  ],
+  "arr-root-bass": [
+    // the third of the chord in bar 3, and the bass above middle C in bar 7
+    [
+      `flute = tiny("c'4 c' g' g' a' a' g'2 f'4 f' e' e' d' d' c'2", time="2/4", name="Flute", inst="flute")
+cello = tiny("C2 C A C F C g C", time="2/4", name="Cello", inst="cello", clef_="bass")
+score = together(flute, cello, bpm=96)
+`,
+      ["chordTones", "range"],
+    ],
+  ],
+  "arr-block-chords": [
+    // bar 3 keeps the G chord; bar 7 is missing its F sharp
+    [
+      `right = tiny("d'4 g8 a b c' d'4 g g e' c'8 d' e' f'# g'4 g g c' d'8 c' b a b4 c'8 b a g f#4 g8 a b g a2.", time="3/4", name="Right hand", inst="piano", key_sig="G")
+left = tiny("<GG BB D>2. <GG BB D>2. <GG BB D>2. <GG BB D>2. <C E G>2. <GG BB D>2. <AA D>2. <AA D F#>2.", time="3/4", name="Left hand", inst="piano", clef_="bass", key_sig="G")
+score = together(right, left, bpm=112)
+`,
+      ["fullChords"],
+    ],
+  ],
+  "arr-alberti": [
+    // low-middle-high-middle is a broken chord, not an Alberti bass
+    [
+      `right = tiny("c'4 c' g' g' a' a' g'2 f'4 f' e' e' d' d' c'2", time="2/4", name="Right hand", inst="piano")
+left = tiny("C8 E G E C E G E C F A F C E G E C F A F C E G E BB D G D C E G E", time="2/4", name="Left hand", inst="piano", clef_="bass")
+score = together(right, left, bpm=96)
+`,
+      ["alberti"],
+    ],
+  ],
+  "arr-counter-line": [
+    // thirds below all the way: consonant, but parallel, never contrary
+    [
+      `flute = tiny("e'4 e' f' g' g' f' e' d' c' c' d' e' e'4. d'8 d'2", name="Flute", inst="flute")
+violin = tiny("c'4 c' d' e' e' d' c' b a a b c' c'4. b8 b2", name="Violin", inst="violin")
+score = together(flute, violin, bpm=100)
+`,
+      ["contraryMostly"],
+    ],
+  ],
+  "arr-quartet": [
+    // parallel fifths between viola and cello (bars 1-2), and the F chord has no A
+    [
+      `violin1 = tiny("e'1 e' f' d' c'", name="Violin I", inst="violin")
+violin2 = tiny("c'1 c' c' b g", name="Violin II", inst="violin")
+viola = tiny("g1 e f g e", name="Viola", inst="viola", clef_="alto")
+cello = tiny("C1 A F G C", name="Cello", inst="cello", clef_="bass")
+score = together(violin1, violin2, viola, cello, bpm=72)
+`,
+      ["fullChords", "noParallelsAll"],
+    ],
+  ],
 };
 
 /** every markings.py helper at least once (what each one writes, and that Verovio engraves it: tests/learn.test.ts) */

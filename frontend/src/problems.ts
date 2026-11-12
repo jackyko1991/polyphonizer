@@ -1,7 +1,8 @@
 /**
  * The Learn track. A problem is a short task, starter code, and the rules that grade it (engine/checker.ts):
  * the rules are the test, written first, as in Tensorizer. Melodies are public domain (Fux 1725, Beethoven 1824,
- * the French folk tune "Ah ! vous dirai-je, maman").
+ * Petzold's Minuet in G, c. 1725, and the French folk tunes "Ah ! vous dirai-je, maman", "Frère Jacques" and
+ * "Au clair de la lune").
  */
 import { scaleRun, type AnyRule } from "./engine/checker.ts";
 import { TECHNIQUE_LESSONS, TECHNIQUE_PROBLEMS } from "./learn/techniques.ts";
@@ -45,6 +46,27 @@ const ODE = [64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 64, 62, 62];
 const ODE_DURS = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.5, 0.5, 2];
 const TWINKLE = [72, 72, 79, 79, 81, 81, 79, 77, 77, 76, 76, 74, 74, 72];
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
+// arranging: tunes as MIDI numbers (matching the starters' tinyNotation), chords as pitch classes, root first
+const FRERE = [
+  60, 62, 64, 60, 60, 62, 64, 60, 64, 65, 67, 64, 65, 67, 67, 69, 67, 65, 64, 60, 67, 69, 67, 65, 64, 60, 60, 55, 60, 60, 55, 60,
+];
+const FRERE_DURS = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 2, 0.5, 0.5, 0.5, 0.5, 1, 1, 0.5, 0.5, 0.5, 0.5, 1, 1, 1, 1, 2, 1, 1, 2];
+/** Ode to Joy in G major, a fifth below ODE: too low for a flute */
+const ODE_LOW = ODE.map((m) => m - 5);
+const AU_CLAIR = [62, 62, 62, 64, 66, 64, 62, 66, 64, 64, 62];
+const MINUET = [
+  74, 67, 69, 71, 72, 74, 67, 67, 76, 72, 74, 76, 78, 79, 67, 67, 72, 74, 72, 71, 69, 71, 72, 71, 69, 67, 66, 67, 69, 71, 67, 69,
+];
+const [C, D, F, G, AM] = [
+  [0, 4, 7],
+  [2, 6, 9],
+  [5, 9, 0],
+  [7, 11, 2],
+  [9, 0, 4],
+];
+/** Twinkle in 2/4, one chord a bar */
+const TWINKLE_CHORDS = [C, C, F, C, F, C, G, C];
+const TWINKLE_2_4 = `tiny("c'4 c' g' g' a' a' g'2 f'4 f' e' e' d' d' c'2", time="2/4"`;
 /** one octave of steps going up, in semitones */
 const MAJOR_STEPS = [2, 2, 1, 2, 2, 2, 1];
 const NATURAL_MINOR_STEPS = [2, 1, 2, 2, 1, 2, 2];
@@ -332,6 +354,225 @@ score = together(flute, violin, bpm=96)
       { id: "range", part: 1, low: 55, high: 100 },
       { id: "endOctave", upper: 0, lower: 1 },
       { id: "imperfectMostly", upper: 0, lower: 1 },
+    ],
+  },
+  {
+    id: "arr-octave-cello",
+    category: "arranging",
+    uses: ["syntax-note", "syntax-part", "syntax-score"],
+    level: "L0",
+    title: ["Double the tune an octave down", "低八度重複旋律"],
+    task: [
+      'The violin plays the French round "Frère Jacques". Give the cello the same tune an octave lower, note for note, with the same rhythm. In `tiny()`, capitals are an octave down: `C` is the octave below `c`, and `GG` the octave below `G`.',
+      "小提琴演奏法國輪唱曲〈兩隻老虎〉（Frère Jacques）。讓大提琴低八度演奏同一個旋律，一個音一個音照抄，節奏不變。在 `tiny()` 裡，大寫字母低一個八度：`C` 比 `c` 低八度，`GG` 比 `G` 低八度。",
+    ],
+    why: [
+      'Doubling a line an octave down makes it fuller without adding a new note. Orchestras do it all the time: cellos under the violins, double basses under the cellos. (`violin.transpose("-P8")` does it in one line, but write it out once to see the notes.)',
+      '把旋律在低八度重複，不加新的音就讓聲音更飽滿。管弦樂團常這樣做：大提琴在小提琴下方，低音提琴又在大提琴下方。（`violin.transpose("-P8")` 一行就能做到，但先自己寫一次，看看是哪些音。）',
+    ],
+    starter: `violin = tiny("c4 d e c c d e c e f g2 e4 f g2 g8 a g f e4 c g8 a g f e4 c c4 G c2 c4 G c2", name="Violin", inst="violin")  # given
+cello = tiny("C4 D", name="Cello", inst="cello", clef_="bass")  # yours: an octave lower
+score = together(violin, cello, bpm=100)
+`,
+    rules: [
+      { id: "parts", count: 2 },
+      { id: "pitches", part: 0, midi: FRERE },
+      { id: "transposed", part: 1, from: FRERE, by: -12 },
+      { id: "sameRhythm", part: 1, durs: FRERE_DURS },
+      { id: "range", part: 1, low: 36, high: 69 },
+    ],
+  },
+  {
+    id: "arr-flute-key",
+    category: "arranging",
+    uses: ["syntax-note", "syntax-rhythm-dots", "syntax-part"],
+    level: "L0",
+    title: ["A key for the flute", "替長笛找個調"],
+    task: [
+      "This Ode to Joy is in G major, but it goes down to the G below middle C, and the flute's lowest note is middle C (C4). Move it to a key where every note fits the flute (C4 to C7), keeping every interval and the rhythm. Any key that fits is right; change `key_sig` to match.",
+      "這段〈快樂頌〉是 G 大調，但它低到中央 C 下方的 G，而長笛最低只到中央 C（C4）。把它移到每個音都在長笛音域內（C4 到 C7）的調，每個音程和節奏都不變。放得下的調都對；記得把 `key_sig` 也改成新的調。",
+    ],
+    why: [
+      "Every instrument has a range, and a tune that doesn't fit has to move. Up an octave is the simplest move, but up a fourth (C major) or a fifth (D major) fits too: arrangers pick the key where the instrument sounds best. The checker tests the intervals, so it takes any of them.",
+      "每種樂器都有音域，放不下的旋律就得移調。升高八度最簡單，但升四度（C 大調）或升五度（D 大調）也放得下：編曲者會挑樂器聽起來最好的調。檢查器測的是音程，所以哪一個都接受。",
+    ],
+    starter: `# Ode to Joy in G major: too low for a flute. Move it into the flute's range.
+flute = tiny("B4 B c d d c B A G G A B B4. A8 A2", name="Flute", inst="flute", key_sig="G")
+score = flute
+`,
+    rules: [
+      { id: "parts", count: 1 },
+      { id: "sameShape", part: 0, from: ODE_LOW },
+      { id: "sameRhythm", part: 0, durs: ODE_DURS },
+      { id: "range", part: 0, low: 60, high: 96 },
+    ],
+  },
+  {
+    id: "arr-drone",
+    category: "arranging",
+    uses: ["syntax-note", "syntax-part", "syntax-score"],
+    level: "L0",
+    title: ["A drone under a folk tune", "民謠下的持續低音"],
+    task: [
+      'The flute plays "Au clair de la lune" in D major, eight bars. Under it, give the cello a drone: one whole note a bar, using only D (the tonic) and A (the fifth), with D at the bottom. Two notes at once are written `<D A>1`.',
+      "長笛以 D 大調演奏〈在月光下〉（Au clair de la lune），共八小節。在它下方讓大提琴奏持續低音：每小節一個全音符，只用 D（主音）和 A（五度音），D 在最低。同時奏兩個音寫成 `<D A>1`。",
+    ],
+    why: [
+      "A drone is the oldest accompaniment there is: bagpipes, the hurdy-gurdy and the Indian tanpura hold the tonic, often with its fifth, while the tune moves above. It fits any tune that stays in its key.",
+      "持續低音是最古老的伴奏：風笛、手搖弦琴和印度的坦普拉琴，都一直撐著主音（常加上五度），讓旋律在上面移動。只要旋律不離開它的調，就配得上。",
+    ],
+    starter: `flute = tiny("d4 d d e f#2 e2 d4 f# e e d1 d4 d d e f#2 e2 d4 f# e e d1", name="Flute", inst="flute", key_sig="D")  # given
+cello = tiny("D1", name="Cello", inst="cello", clef_="bass", key_sig="D")  # yours: eight bars
+score = together(flute, cello, bpm=100)
+`,
+    rules: [
+      { id: "parts", count: 2 },
+      { id: "pitches", part: 0, midi: [...AU_CLAIR, ...AU_CLAIR] },
+      { id: "chordTones", part: 1, chords: Array.from({ length: 8 }, () => [2, 9]), root: true },
+      { id: "rhythm", part: 1, durs: Array.from({ length: 8 }, () => 4) },
+      { id: "range", part: 1, low: 36, high: 69 },
+    ],
+  },
+  {
+    id: "arr-root-bass",
+    category: "arranging",
+    uses: ["syntax-note", "syntax-rhythm-time", "syntax-score"],
+    level: "L0",
+    title: ["Roots under Twinkle", "為〈小星星〉配根音"],
+    task: [
+      "The flute plays Twinkle, Twinkle in 2/4, and the chords are given, one a bar: C | C | F | C | F | C | G | C. Write the cello's bass: one half note a bar, the root of each chord (the note it is named after), below middle C.",
+      "長笛以 2/4 拍演奏〈小星星〉，和弦已經給好，每小節一個：C | C | F | C | F | C | G | C。寫出大提琴的低音：每小節一個二分音符，用每個和弦的根音（和弦名稱的那個音），在中央 C 以下。",
+    ],
+    why: [
+      'Chord symbols are an arranger\'s shorthand: "F" means F, A and C. A root in the bass is the strongest way to state a chord, and three chords, I, IV and V (here C, F and G), are enough for thousands of folk songs.',
+      "和弦代號是編曲者的速記：「F」代表 F、A、C。把根音放在低音，是表明和弦最有力的方式；I、IV、V 三個和弦（這裡是 C、F、G）就夠為成千上萬首民謠配和聲。",
+    ],
+    starter: `# Chords, one a bar: C | C | F | C | F | C | G | C
+flute = ${TWINKLE_2_4}, name="Flute", inst="flute")  # given
+cello = tiny("C2 C", time="2/4", name="Cello", inst="cello", clef_="bass")  # yours: the root of each chord
+score = together(flute, cello, bpm=96)
+`,
+    rules: [
+      { id: "parts", count: 2 },
+      { id: "pitches", part: 0, midi: TWINKLE },
+      { id: "chordTones", part: 1, chords: TWINKLE_CHORDS, root: true },
+      { id: "rhythm", part: 1, durs: Array.from({ length: 8 }, () => 2) },
+      { id: "range", part: 1, low: 36, high: 60 },
+    ],
+  },
+  {
+    id: "arr-block-chords",
+    category: "arranging",
+    uses: ["syntax-rhythm-dots", "syntax-rhythm-time", "syntax-score"],
+    level: "L1",
+    title: ["Block chords for the Minuet in G", "為〈G 大調小步舞曲〉配柱式和弦"],
+    task: [
+      "The right hand plays the Minuet in G (Petzold, long credited to Bach). Write the left hand: one block chord a bar, a dotted half note, with all three notes of the bar's chord and nothing else: G | G | C | G | C | G | D | D. Write a chord as `<GG BB D>2.`, and keep it between C2 and E4.",
+      "右手彈〈G 大調小步舞曲〉（佩措爾德作，長久以來被當成巴赫的作品）。寫出左手：每小節一個柱式和弦，附點二分音符，包含該小節和弦的三個音、沒有別的音：G | G | C | G | C | G | D | D。和弦寫成 `<GG BB D>2.`，並保持在 C2 到 E4 之間。",
+    ],
+    why: [
+      "Chords played all at once under the tune are the plainest piano accompaniment, and the place to start: once the chords are right, they can be broken into patterns (next: the Alberti bass). Close and low, but not too low, keeps the left hand out of the right hand's way without sounding muddy.",
+      "在旋律下方同時彈出的和弦，是最樸素的鋼琴伴奏，也是起點：和弦對了，之後才能拆成各種音型（下一步：阿爾貝提低音）。排得緊密、放低一點但別太低，左手就不會擋到右手，聲音也不會混濁。",
+    ],
+    starter: `right = tiny("d'4 g8 a b c' d'4 g g e' c'8 d' e' f'# g'4 g g c' d'8 c' b a b4 c'8 b a g f#4 g8 a b g a2.", time="3/4", name="Right hand", inst="piano", key_sig="G")  # given
+left = tiny("<GG BB D>2.", time="3/4", name="Left hand", inst="piano", clef_="bass", key_sig="G")  # yours: one chord a bar
+score = together(right, left, bpm=112)
+`,
+    rules: [
+      { id: "parts", count: 2 },
+      { id: "pitches", part: 0, midi: MINUET },
+      { id: "fullChords", parts: [1], chords: [G, G, C, G, C, G, D, D] },
+      { id: "range", part: 1, low: 36, high: 64 },
+    ],
+  },
+  {
+    id: "arr-alberti",
+    category: "arranging",
+    uses: ["syntax-rhythm-values", "syntax-rhythm-time", "syntax-score"],
+    level: "L1",
+    title: ["An Alberti bass for Twinkle", "為〈小星星〉寫阿爾貝提低音"],
+    task: [
+      'The same tune and chords as "Roots under Twinkle": C | C | F | C | F | C | G | C. Now the left hand plays an Alberti bass: four eighth notes a bar, the chord\'s lowest, highest, middle and highest notes, like `C8 G E G` for C. Use every note of each chord and nothing else, between C2 and E4.',
+      "和「為〈小星星〉配根音」同一個旋律、同樣的和弦：C | C | F | C | F | C | G | C。這次左手彈阿爾貝提低音：每小節四個八分音符，依序是和弦的最低、最高、中間、最高音，例如 C 和弦是 `C8 G E G`。用到每個和弦的所有音、不用別的音，保持在 C2 到 E4 之間。",
+    ],
+    why: [
+      "Domenico Alberti made this pattern popular around 1740, and Mozart used it everywhere: his Sonata in C, K. 545, opens with it. It keeps the chord moving under the tune without getting in its way. Good voicings move little: from C G E G to C A F A, the C stays and the rest move by step.",
+      "阿爾貝提（Domenico Alberti）在 1740 年前後讓這個音型流行起來，莫札特到處都用：他的 C 大調奏鳴曲 K. 545 一開頭就是。它讓和弦在旋律下方持續流動，又不搶旋律。好的排法移動很少：從 C G E G 到 C A F A，C 不動，其他音級進。",
+    ],
+    starter: `# Chords, one a bar: C | C | F | C | F | C | G | C
+right = ${TWINKLE_2_4}, name="Right hand", inst="piano")  # given
+left = tiny("C8 G E G", time="2/4", name="Left hand", inst="piano", clef_="bass")  # yours: low, high, middle, high
+score = together(right, left, bpm=96)
+`,
+    rules: [
+      { id: "parts", count: 2 },
+      { id: "pitches", part: 0, midi: TWINKLE },
+      { id: "chordTones", part: 1, chords: TWINKLE_CHORDS, all: true },
+      { id: "alberti", part: 1 },
+      { id: "range", part: 1, low: 36, high: 64 },
+    ],
+  },
+  {
+    id: "arr-counter-line",
+    category: "arranging",
+    uses: ["syntax-rhythm-dots", "syntax-part", "syntax-score"],
+    level: "L1",
+    title: ["A counter-line in contrary motion", "反向進行的對旋律"],
+    task: [
+      "The flute plays the start of Ode to Joy. Write a violin line below it in C major, one note against each flute note (the same rhythm), every pair consonant, no parallel fifths or octaves, never above the flute and within a tenth of it. When both parts move, go the opposite way at least half the time: flute up, violin down.",
+      "長笛演奏〈快樂頌〉的開頭。在它下方用 C 大調寫一條小提琴旋律：一音對一音（節奏相同），每對音都協和，沒有平行五度或八度，不高過長笛，且相距不超過十度。兩個聲部都移動時，至少一半要反方向：長笛往上，小提琴就往下。",
+    ],
+    why: [
+      "Contrary motion is what makes two lines sound independent: when one rises while the other falls, the ear hears two voices, not one voice made thicker. Parallel thirds and sixths sound sweet (as in the Twinkle duet); contrary motion gives the second line a shape of its own.",
+      "反向進行讓兩條旋律聽起來各自獨立：一條上行、一條下行，耳朵聽到的是兩個聲部，而不是一個加厚的聲部。平行的三度、六度很甜美（像〈小星星〉二重奏那題）；反向進行則讓第二條旋律有自己的輪廓。",
+    ],
+    starter: `flute = tiny("e'4 e' f' g' g' f' e' d' c' c' d' e' e'4. d'8 d'2", name="Flute", inst="flute")  # given
+violin = tiny("c'4", name="Violin", inst="violin")  # yours: one note against each flute note
+score = together(flute, violin, bpm=100)
+`,
+    rules: [
+      { id: "parts", count: 2 },
+      { id: "pitches", part: 0, midi: ODE.map((m) => m + 12) },
+      { id: "noteAgainstNote", a: 1, b: 0 },
+      { id: "consonant", upper: 0, lower: 1 },
+      { id: "contraryMostly", upper: 0, lower: 1 },
+      { id: "noParallels", upper: 0, lower: 1 },
+      { id: "noCrossing", upper: 0, lower: 1, maxApart: 16 },
+      { id: "scale", part: 1, pcs: MAJOR },
+      { id: "range", part: 1, low: 55, high: 100 },
+    ],
+  },
+  {
+    id: "arr-quartet",
+    category: "arranging",
+    uses: ["syntax-note", "syntax-part", "syntax-score"],
+    level: "L1",
+    title: ["A progression for string quartet", "為弦樂四重奏排和弦"],
+    task: [
+      "Voice the progression C | Am | F | G | C for string quartet, one whole-note chord a bar; violin I's tune is given. Write violin II, viola and cello so that every chord is complete (all three notes, nothing else), the cello plays the root, the parts don't cross, the upper three stay within an octave of their neighbours, and there are no parallel fifths or octaves. Ranges: violin from G3, viola from C3, cello from C2.",
+      "把和弦進行 C | Am | F | G | C 排給弦樂四重奏，每小節一個全音符和弦；第一小提琴的旋律已經給好。寫出第二小提琴、中提琴和大提琴，使每個和弦都完整（三個音都有、沒有別的音），大提琴奏根音，聲部不交叉，上方三個聲部與相鄰聲部相距不超過八度，沒有平行五度或八度。音域：小提琴從 G3、中提琴從 C3、大提琴從 C2 起。",
+    ],
+    why: [
+      "Four-part writing is the backbone of the chorale and the string quartet. A chord has three notes and the quartet four players, so one note is doubled, usually the root. Keep the upper parts close, leave the space below to the cello, and move each part as little as you can from chord to chord.",
+      "四部寫作是聖詠與弦樂四重奏的骨幹。和弦有三個音、四重奏有四位演奏者，所以有一個音要重複，通常是根音。上方聲部靠近一點，下方的空間留給大提琴；從一個和弦到下一個，每個聲部都盡量少移動。",
+    ],
+    starter: `# Chords, one a bar: C | Am | F | G | C
+violin1 = tiny("e'1 e' f' d' c'", name="Violin I", inst="violin")  # given
+violin2 = tiny("c'1", name="Violin II", inst="violin")  # yours
+viola = tiny("g1", name="Viola", inst="viola", clef_="alto")  # yours
+cello = tiny("C1", name="Cello", inst="cello", clef_="bass")  # yours
+score = together(violin1, violin2, viola, cello, bpm=72)
+`,
+    rules: [
+      { id: "parts", count: 4 },
+      { id: "pitches", part: 0, midi: [76, 76, 77, 74, 72] },
+      { id: "fullChords", parts: [0, 1, 2, 3], chords: [C, AM, F, G, C] },
+      { id: "chordTones", part: 3, chords: [C, AM, F, G, C], root: true },
+      { id: "spacing", parts: [0, 1, 2, 3], maxApart: [12, 12, 24] },
+      { id: "noParallelsAll", parts: [0, 1, 2, 3] },
+      { id: "range", part: 1, low: 55, high: 100 },
+      { id: "range", part: 2, low: 48, high: 88 },
+      { id: "range", part: 3, low: 36, high: 72 },
     ],
   },
 ];

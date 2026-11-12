@@ -59,6 +59,27 @@ test("wrong answers fail the rules that catch them", () => {
   }
 });
 
+test("arranging: the given parts match their MIDI numbers in the starters; the flute starter fails only its range", () => {
+  for (const p of PROBLEMS.filter((q) => q.category === "arranging" && q.id in SOLUTIONS)) {
+    const s = run(p.starter) as ScoreData;
+    for (const r of p.rules.filter((x) => x.id === "pitches")) assert.ok(checkRule(s, r).ok, `${p.id}: the given part`);
+  }
+  assert.deepEqual(failing(run(PROBLEMS.find((p) => p.id === "arr-flute-key")!.starter) as ScoreData, "arr-flute-key"), ["range"]);
+});
+
+test("tiny() writes chords as <C E G>2: one event, all its notes, ties kept", () => {
+  const drone = run(SOLUTIONS["arr-drone"]) as ScoreData;
+  const cello = drone.notes.filter((n) => n.part === 1);
+  assert.equal(cello.length, 8);
+  assert.deepEqual(cello[0].midi, [50, 57]);
+  const left = (run(SOLUTIONS["arr-block-chords"]) as ScoreData).notes.filter((n) => n.part === 1);
+  // bar : length : notes
+  assert.deepEqual(
+    left.slice(0, 3).map((n) => `${n.measure}:${n.dur}:${n.midi.length}`),
+    ["1:3:3", "2:3:3", "3:3:3"],
+  );
+});
+
 test("Track 0 comes first, and every 'uses' chip names a lesson", () => {
   const track0 = PROBLEMS.filter((p) => p.category === "syntax");
   assert.ok(track0.length >= 6 && track0.every((l) => l.lesson));
