@@ -126,6 +126,20 @@ test("two voices become two staves, with key, carried accidentals, triplets and 
   assert.deepEqual(midi.sort((a, b) => a - b), [50, 50, 52, 53, 54, 74, 74, 74, 78, 78, 78, 79, 80, 81, 81]);
 });
 
+test("a chord's length after its brackets counts ([CEG]4 is a whole note, as [C4E4G4])", async () => {
+  const t = new VerovioToolkit(await createVerovioModule());
+  const durs = (abc: string) => {
+    t.loadData(abc);
+    return [...t.getMEI({}).matchAll(/<(?:chord|note)\b[^>]*\bdur="(\d+)"/g)].map((m) => m[1]);
+  };
+  const abc = "X:1\nM:4/4\nL:1/4\nK:C\n[CEG]4 | [DF]2 [EG]2 |]";
+  // Verovio alone: the length after the bracket is lost
+  assert.ok(durs(abc).some((d) => d === "4"));
+  assert.ok(!durs(exampleData(abc)).includes("4"));
+  assert.ok(durs(exampleData(abc)).includes("1") && durs(exampleData(abc)).includes("2"));
+  assert.equal(exampleData("X:1\nK:G\n[K:D] [C2E2]4 |]"), "X:1\nK:G\n[K:D] [C2E2]4 |]");
+});
+
 test("every music example on the pages is valid and drawn by Verovio", async () => {
   const all = examples();
   const t = new VerovioToolkit(await createVerovioModule());

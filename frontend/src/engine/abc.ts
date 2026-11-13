@@ -225,7 +225,25 @@ export function abcToMei(abc: string): string {
 /** what to give Verovio for a page example: the ABC itself, or MEI when it has several voices */
 export function exampleData(abc: string): string {
   const voices = new Set([...abc.matchAll(/^V:\s*(\S+)/gm)].map((m) => m[1]));
-  return voices.size > 1 ? abcToMei(abc) : abc;
+  return voices.size > 1 ? abcToMei(abc) : chordLengthsInside(abc);
+}
+
+/**
+ * Verovio's ABC reader ignores a length written after a chord: `[CEG]2` is drawn and played as one unit, not two.
+ * Standard ABC allows both, so a chord's length is moved onto its notes (`[C2E2G2]`) before Verovio reads it. Header
+ * lines (`K:`, `M:` …) and inline fields (`[K:G]`) are left alone, and so are chords whose notes have lengths already.
+ */
+export function chordLengthsInside(abc: string): string {
+  return abc
+    .split("\n")
+    .map((line) =>
+      /^[A-Za-z]:/.test(line)
+        ? line
+        : line.replace(/\[([^\]:]+)\]([\d/]+)/g, (all, inner: string, len: string) =>
+            /[\d/]/.test(inner) ? all : `[${inner.replace(/([_^=]*[A-Ga-g][,']*)/g, `$1${len}`)}]`,
+          ),
+    )
+    .join("\n");
 }
 
 /**
