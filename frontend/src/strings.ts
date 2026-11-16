@@ -278,6 +278,7 @@ export const STRINGS = {
     "Harmony analyses: When in Rome, Mark Gotham and colleagues, CC BY-SA 4.0 (attribution, share alike).",
     "和聲分析：When in Rome，Mark Gotham 等人，CC BY-SA 4.0（姓名標示、相同方式分享）。",
   ],
+  "lib.alsoAt": ["Also at:", "其他版本："],
   "lib.urtext": ["Urtext", "原典版"],
   "lib.urtextHint": ["Find a printed urtext edition (Henle, Bärenreiter …) on Amazon UK", "在 Amazon UK 尋找印刷的原典版（Henle、Bärenreiter …）"],
   "lib.urtextNote": ["The Urtext links are Amazon affiliate links.", "「原典版」連結是 Amazon 聯盟連結。"],

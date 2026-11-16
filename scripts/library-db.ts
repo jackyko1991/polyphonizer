@@ -19,7 +19,7 @@
  *   meta              when it was built, and counts
  */
 import { DatabaseSync } from "node:sqlite";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { analysisKey, type Analyses } from "../frontend/src/library/analyses.ts";
@@ -61,6 +61,35 @@ function extraText(r: Row, sources: Record<string, Source>): string {
   const insts = [...new Set(r[11] ?? [])].map((i) => `${INSTRUMENTS[i]?.en.join(" ") ?? i} ${INSTRUMENTS[i]?.zh ?? ""}${VOICES.has(i) ? " voice voices 人聲" : ""}`);
   const source = r[13] ? sources[r[13]] : undefined;
   return [r[9], r[10], COMPOSER_ZH[r[4]] ?? "", COLLECTIONS[r[0]]?.join(" ") ?? "", source?.name.join(" ") ?? "", ...insts, ...(r[12] ?? [])].join(" ");
+}
+
+/** a work's editions in other sources: the same composer and a catalogue number in common (scheme and number, as the
+ * page reads them: "d:328", "k:331"), not in its own source. Keyed by the page's row key (path#number); each edition
+ * [source, link, title]. Only the Library's own works (not IMSLP's) are keys. */
+export function siblingsOf(rows: Row[]): Map<string, [string, string, string][]> {
+  const byKey = new Map<string, number[]>();
+  const keysOf = rows.map((r, i) => {
+    const keys = catalogIds(idText(r), r[4]).map((id) => `${r[4]}|${id}`);
+    for (const k of keys) byKey.set(k, [...(byKey.get(k) ?? []), i]);
+    return keys;
+  });
+  const out = new Map<string, [string, string, string][]>();
+  rows.forEach((r, i) => {
+    const source = r[13] ?? MUSIC21;
+    if (source === IMSLP) return;
+    const seen = new Set<number>();
+    const found: [string, string, string][] = [];
+    for (const k of keysOf[i])
+      for (const j of byKey.get(k) ?? []) {
+        const o = rows[j];
+        const other = o[13] ?? MUSIC21;
+        if (j === i || other === source || seen.has(j)) continue;
+        seen.add(j);
+        found.push([other, o[1], o[3]]);
+      }
+    if (found.length) out.set(`${r[1]}#${r[2] ?? ""}`, found.slice(0, 8));
+  });
+  return out;
 }
 
 export function build(path = DB_PATH): { works: number } {
@@ -131,6 +160,8 @@ export function build(path = DB_PATH): { works: number } {
     VACUUM;
   `);
   db.close();
+  // each Library work's editions in other sources, for the page (small; fetched with the Library)
+  writeFileSync(join(dirname(path), "siblings.json"), JSON.stringify(Object.fromEntries(siblingsOf(rows))));
   return { works: rows.length };
 }
 

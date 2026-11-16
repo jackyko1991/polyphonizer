@@ -49,6 +49,14 @@ export default function LibraryPage() {
   // When in Rome's harmonic analyses, by Library row; and the filter for works that have one
   const [analyses, setAnalyses] = useState<Analyses>({ sha: "", works: {} });
   const [withHarmony, setWithHarmony] = useState(false);
+  // each Library work's editions in other sources (built with the catalogue database: same composer, same catalogue
+  // number), fetched with the Library
+  const [siblings, setSiblings] = useState<Record<string, [string, string, string][]>>({});
+  useEffect(() => {
+    fetch(`${import.meta.env.BASE_URL}library/siblings.json`)
+      .then((res) => (res.ok ? res.json() : {}))
+      .then(setSiblings, () => undefined);
+  }, []);
   const analysisOf = (x: Row) => {
     const k = analysisKey(x);
     return k ? analyses.works[k] : undefined;
@@ -383,6 +391,23 @@ export default function LibraryPage() {
                 <p className="truncate text-xs text-gray-600">{mu[4]}</p>
               ) : (
                 <PartsLine row={r} open={openParts.has(r[1] + (r[2] ?? ""))} onToggle={() => setOpenParts((o) => { const k = r[1] + (r[2] ?? ""); const n = new Set(o); if (!n.delete(k)) n.add(k); return n; })} />
+              )}
+              {siblings[`${r[1]}#${r[2] ?? ""}`] && (
+                <p className="truncate text-xs text-gray-500" data-testid="lib-also">
+                  {t("lib.alsoAt")}{" "}
+                  {siblings[`${r[1]}#${r[2] ?? ""}`].map(([src, link, title], i) => (
+                    <span key={i}>
+                      {i > 0 && " · "}
+                      {src === "imslp" || src === MUTOPIA ? (
+                        <a href={link} target="_blank" rel="noopener noreferrer" title={title} className="text-(--lk-accent) hover:underline">
+                          {src === "imslp" ? "IMSLP" : "Mutopia"} ↗
+                        </a>
+                      ) : (
+                        <span title={title}>{sourceName(src)}</span>
+                      )}
+                    </span>
+                  ))}
+                </p>
               )}
               {mu ? (
                 <p className="truncate text-xs text-gray-500" data-testid="lib-credit">

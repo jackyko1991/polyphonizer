@@ -55,3 +55,25 @@ test("one spelling per composer: aliases end where they point, and the sources' 
   const liszt = await db.query<{ source: string }>("SELECT DISTINCT w.source FROM works w JOIN composers c ON c.id = w.composer WHERE c.name = 'Franz Liszt'");
   for (const s of ["asap", "mutopia", "imslp"]) assert.ok(liszt.some((r) => r.source === s), s);
 });
+
+import { siblingsOf } from "../../scripts/library-db.ts";
+import type { Row } from "../src/library/collections.ts";
+
+test("the same work across sources: one composer and one catalogue number; not within a source; to the work's page", () => {
+  const row = (source: string, path: string, title: string, composer: string, set = ""): Row => [source, path, null, title, composer, 2, null, "", "", set, "", [], [], source === "music21" ? undefined : source];
+  const rows: Row[] = [
+    row("openscore-lieder", "https://raw/lc1.mxl", "Der Erlkönig, D.328", "Franz Schubert"),
+    row("imslp", "https://imslp.org/index.php?curid=77", "Erlkönig, D.328", "Franz Schubert"),
+    row("mutopia", "https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=5", "Erlkönig", "Franz Schubert", "D 328"),
+    row("imslp", "https://imslp.org/index.php?curid=78", "Erlkönig, Op.1", "Carl Loewe"), // another composer
+    row("asap", "https://raw/a.musicxml", "Piano Sonata No. 11 · 3", "Wolfgang Amadeus Mozart", "K. 331"),
+    row("asap", "https://raw/b.musicxml", "Piano Sonata No. 11 · 1", "Wolfgang Amadeus Mozart", "K. 331"), // same source
+    row("imslp", "https://imslp.org/index.php?curid=99", "Piano Sonata No.11, K.331/300i", "Wolfgang Amadeus Mozart"),
+  ];
+  const s = siblingsOf(rows);
+  assert.deepEqual(s.get("https://raw/lc1.mxl#")?.map((x) => x[0]).sort(), ["imslp", "mutopia"]);
+  assert.equal(s.get("https://raw/lc1.mxl#")?.find((x) => x[0] === "imslp")?.[1], "https://imslp.org/index.php?curid=77");
+  assert.deepEqual(s.get("https://raw/a.musicxml#")?.map((x) => x[1]), ["https://imslp.org/index.php?curid=99"]);
+  // IMSLP's rows are not keys (only the Library's own works show their editions elsewhere)
+  assert.ok(![...s.keys()].some((k) => k.includes("imslp.org")));
+});
