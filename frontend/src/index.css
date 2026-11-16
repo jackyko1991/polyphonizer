@@ -79,3 +79,7 @@ pre,
     animation: none !important;
   }
 }
+
+/* fingering on Learn to Play's music, by hand (engine/fingering.ts): the right hand amber, the left blue */
+.fing.pz-rh text, .fing.pz-rh tspan { fill: #b45309; }
+.fing.pz-lh text, .fing.pz-lh tspan { fill: #0369a1; }

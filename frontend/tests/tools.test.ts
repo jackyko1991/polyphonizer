@@ -162,6 +162,38 @@ test("keyboard layouts: Musical Typing and two-row piano (two hands, ~2½ octave
   assert.equal(keyLabelFor("typing", 60, b), "A");
 });
 
+test("keyboard for advanced players: overlap keys, hold Shift/Option for an octave, every letter a key has, hand zones, how to reach a note", async () => {
+  const { keyMidi, keyLabelFor, keyLabelsFor, handZone, reachFor } = await import("../src/tools/keyLayouts.ts");
+  const b = { high: 60, low: 48 };
+  // the overlap: the left hand's , . / reach C4 D4 E4; the right hand's Tab is B3
+  assert.deepEqual(["Comma", "Period", "Slash", "Tab"].map((k) => keyMidi("tworow", k, b)), [60, 62, 64, 59]);
+  // held Shift: an octave up, held Option (Alt): an octave down, in either layout
+  assert.equal(keyMidi("tworow", "KeyQ", b, { shift: true }), 72);
+  assert.equal(keyMidi("tworow", "KeyZ", b, { alt: true }), 36);
+  assert.equal(keyMidi("typing", "KeyA", b, { shift: true }), 72);
+  assert.equal(keyMidi("tworow", "ArrowUp", b, { shift: true }), null);
+  // a key both hands reach shows both letters (the right hand's first); one shown alone keeps the right hand's
+  assert.deepEqual(keyLabelsFor("tworow", 60, b), ["Q", ","]);
+  assert.deepEqual(keyLabelsFor("tworow", 59, b), ["Tab", "M"]);
+  assert.deepEqual(keyLabelsFor("tworow", 48, b), ["Z"]);
+  assert.equal(keyLabelFor("tworow", 60, b), "Q");
+  // hand zones: the left hand's keys, the right hand's, the overlap
+  assert.equal(handZone("tworow", 50, b), "left");
+  assert.equal(handZone("tworow", 70, b), "right");
+  assert.equal(handZone("tworow", 62, b), "both");
+  assert.equal(handZone("tworow", 30, b), null);
+  assert.equal(handZone("typing", 62, b), "right");
+  // how to play a note: its key; with Shift or Option when an octave away; else which way to move the hand
+  assert.deepEqual(reachFor("tworow", 64, b, "right"), { key: "E" });
+  assert.deepEqual(reachFor("tworow", 64, b, "left"), { key: "/" });
+  assert.deepEqual(reachFor("tworow", 84, b, "right"), { key: "I", mod: "shift" }); // C6: Shift + I (C5)
+  assert.deepEqual(reachFor("tworow", 36, b, "left"), { key: "Z", mod: "alt" });
+  assert.deepEqual(reachFor("tworow", 100, b, "right"), { move: "up" });
+  assert.deepEqual(reachFor("typing", 40, b), { move: "down" });
+  // the right hand moved up an octave (C5): its E4 is Option + its own E, not the left hand's /
+  assert.deepEqual(reachFor("tworow", 64, { high: 72, low: 48 }, "right"), { key: "E", mod: "alt" });
+});
+
 test("live staff: Backspace takes off the last note or chord, a bar is four chords from the first, the staff shows the last two bars", async () => {
   const { chordStarts, dropLast, dropBar, liveAbc, groupChords } = await import("../src/tools/liveStaff.ts");
   // C, then an E-G chord (10 ms apart), then six more single notes: 8 chords = 2 bars

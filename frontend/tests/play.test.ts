@@ -144,7 +144,7 @@ test("every lesson fits the computer keys from middle C (both-hands lessons: the
   assert.ok(PLAY_LESSONS.filter((l) => l.hands === "two").length >= 4);
 });
 
-import { fingerTokens, shownFingers } from "../src/engine/fingering.ts";
+import { fingerTokens, meiMidi, shownFingers } from "../src/engine/fingering.ts";
 
 /** an ABC voice's notes and chords (rests and bar lines skipped) */
 const events = (body: string) => body.replace(/"[^"]*"|![^!]*!/g, "").match(/\[[^\]:|]+\]|[_^=]*[A-Ga-g][,']*/g) ?? [];
@@ -177,4 +177,12 @@ test("basic fingering shows only where the hand moves", () => {
   assert.deepEqual(shownFingers([[21], [22]], ["5", "4"], true, "basic"), ["5", ""]);
   // chords: when their fingers change
   assert.deepEqual(shownFingers([[28, 30, 32], [31, 33, 35], [28, 30, 32]], ["135", "135", "125"], false, "basic"), ["135", "", "125"]);
+});
+
+test("an MEI note's MIDI number, with written or key-signature accidentals (for the Computer keys labels)", () => {
+  assert.equal(meiMidi("c", 4), 60);
+  assert.equal(meiMidi("f", 4, "s"), 66);
+  assert.equal(meiMidi("b", 3, "f"), 58);
+  assert.equal(meiMidi("g", 2), 43);
+  assert.equal(meiMidi("e", 5, "n"), 76);
 });

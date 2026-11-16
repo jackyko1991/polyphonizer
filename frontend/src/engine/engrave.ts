@@ -41,7 +41,7 @@ export async function engraveSnippet(
   zoom = 38,
   abc?: string,
   fit = false,
-  fingering?: { fingers: string[][]; show: FingerShow },
+  fingering?: { fingers: string[][]; show: FingerShow; keyFor?: (midi: number, hand: "left" | "right") => string },
 ): Promise<{ svg: string; sounds: Sound[] }> {
   snippetTk ??= verovio().then(([m, esm]) => new esm.VerovioToolkit(m));
   const t = await snippetTk;
@@ -62,7 +62,7 @@ export async function engraveSnippet(
   if (!t.loadData(data)) throw new Error("Verovio could not read this example");
   // single-voice ABC: correct the key that Verovio's ABC reader carries over from the previous example
   if (abc !== undefined && !data.startsWith("<")) t.loadData(fixAbcKeys(t.getMEI({}), abc));
-  if (fingering && fingering.show !== "none") t.loadData(addFingering(t.getMEI({}), fingering.fingers, fingering.show));
+  if (fingering && fingering.show !== "none") t.loadData(addFingering(t.getMEI({}), fingering.fingers, fingering.show, fingering.keyFor));
   return { svg: untitled(t.renderToSVG(1)), sounds: timeline(t) };
 }
 

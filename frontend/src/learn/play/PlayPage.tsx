@@ -15,6 +15,7 @@ import { now, tick } from "../../tools/liveSound.ts";
 import { subscribeNotes } from "../../tools/noteInput.ts";
 import { armKeyboard, openTool, requestKeyboardBase, setKeyHint } from "../../tools/toolboxState.ts";
 import { FINGER_SHOWS, type FingerShow } from "../../engine/fingering.ts";
+import { keyboardPlace, onPlace, reachFor, reachLabel } from "../../tools/keyLayouts.ts";
 import { INSTRUMENTS, PLAY_LESSONS, type PlayLesson, type PlayMode } from "./lessons.ts";
 import { gradeInTime, gradeWait, pressWait, startWait, steps, type Grade, type Mark, type TargetNote, type WaitState } from "./matcher.ts";
 
@@ -253,17 +254,23 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
     }
   };
 
+  // where the hands are on the computer keyboard (layout, octaves): the key labels and the hint follow it
+  const [place, setPlace] = useState(keyboardPlace);
+  useEffect(() => onPlace(() => setPlace(keyboardPlace())), []);
+  const keyFor = (midi: number, hand: "left" | "right") => reachLabel(reachFor(place.layout, midi, place.bases, hand));
+
   // the music, engraved
   useEffect(() => {
     let live = true;
-    const fingers = lesson.fingers ? { fingers: lesson.fingers.map((f) => [f]), show: fingering } : undefined;
+    const fingers = lesson.fingers || fingering === "keys" ? { fingers: (lesson.fingers ?? []).map((f) => [f]), show: fingering, keyFor } : undefined;
     Promise.all([import("../../engine/engrave.ts"), import("../../engine/abc.ts")])
       .then(([e, a]) => e.engraveSnippet(a.exampleData(lesson.abc), 760, 42, lesson.abc, false, fingers))
       .then((r) => live && (setSvg(r.svg), setSounds(r.sounds)));
     return () => {
       live = false;
     };
-  }, [lesson.abc, lesson.fingers, fingering]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson.abc, lesson.fingers, fingering, fingering === "keys" ? JSON.stringify(place) : ""]);
 
   // open the keyboard with the computer keys on: home row from middle C, or for both hands the two rows (left from C3)
   useEffect(() => {
@@ -273,6 +280,20 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
     else requestKeyboardBase(60);
     return () => setKeyHint([]);
   }, [lesson.hands]);
+
+  /** the keys each hand needs for this lesson, from where the hands are now: the top staff the right hand, the others
+   * the left (one staff: the right hand) */
+  const keyHint = useMemo(() => {
+    const staves = new Set(sounds.map((x) => x.staff)).size;
+    const hands: ("left" | "right")[] = staves > 1 ? ["left", "right"] : ["right"];
+    return hands
+      .map((hand) => {
+        const pitches = [...new Set(sounds.filter((x) => (hand === "right" ? x.staff === 0 : x.staff > 0)).map((x) => x.pitch))].sort((a, b) => a - b);
+        return { hand: staves > 1 ? hand : null, keys: [...new Set(pitches.map((m) => keyFor(m, hand)))].join(" ") };
+      })
+      .filter((h) => h.keys);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sounds, place]);
 
   /** the target at the chosen tempo (the engraving's times are at the marked tempo) */
   const target: TargetNote[] = useMemo(() => {
@@ -417,7 +438,15 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
         </p>
         <p className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
           {pick(["Computer keys:", "電腦鍵盤："])}
-          <kbd className="rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5 font-mono text-gray-800">{lesson.keys}</kbd>
+          {/* the keys this lesson's notes need, from where the hands are now (the lesson's own list until the music is in) */}
+          {(keyHint.length ? keyHint : [{ hand: null, keys: lesson.keys }]).map((h, i) => (
+            <span key={i} className="inline-flex items-center gap-1">
+              {h.hand && <span className={h.hand === "left" ? "text-sky-700" : "text-amber-700"}>{h.hand === "left" ? pick(["Left hand", "左手"]) : pick(["Right hand", "右手"])}</span>}
+              <kbd className="rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5 font-mono text-gray-800" data-testid="play-keys">
+                {h.keys}
+              </kbd>
+            </span>
+          ))}
           {pick(["(the keyboard is open at the bottom; Esc stops the computer keys)", "（鍵盤在下方；Esc 停止電腦鍵盤）"])}
         </p>
 
@@ -469,6 +498,7 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
                 <option value="none">{pick(["None", "不顯示"])}</option>
                 <option value="basic">{pick(["Basic (where the hand moves)", "基本（換手位處）"])}</option>
                 <option value="all">{pick(["All", "全部"])}</option>
+                <option value="keys">{pick(["Computer keys (⇧ hold Shift, ⌥ Option, ↑↓ move the octave)", "電腦鍵（⇧ 按住 Shift、⌥ Option、↑↓ 換八度）"])}</option>
               </select>
             </label>
           )}

@@ -11,7 +11,7 @@ import { Button, IconButton } from "../Button.tsx";
 import { CHECK, FIELD } from "../ui.ts";
 import { noteOn, prepare } from "./liveSound.ts";
 import { clearStaff, undoBar, undoStaff } from "./liveStaff.ts";
-import { keyAction, keyLabelFor, keyMidi, LAYOUTS, layoutHelp, type LayoutId } from "./keyLayouts.ts";
+import { announcePlace, handZone, KEYBOARD_PREFS, keyAction, keyLabelsFor, keyMidi, LAYOUTS, layoutHelp, type LayoutId } from "./keyLayouts.ts";
 import { isBlack, keysBetween, letter, noteName, RANGES } from "./music.ts";
 import { publishNote, type NoteSource } from "./noteInput.ts";
 import { armKeyboard, setRunning, useToolbox } from "./toolboxState.ts";
@@ -57,7 +57,7 @@ interface KeyboardPrefs {
   layout?: LayoutId;
   velocity: number;
 }
-const KEY = "polyphonizer.keyboard";
+const KEY = KEYBOARD_PREFS;
 const DEFAULTS: KeyboardPrefs = { size: 37, low: 48, names: true, keys: true, program: 0, baseC: 60, velocity: 0.8 };
 function load(): KeyboardPrefs {
   try {
@@ -94,6 +94,28 @@ export default function KeyboardTool() {
   }, [baseRequest]);
   const [lit, setLit] = useState<Set<number>>(new Set());
   const [midiState, setMidiState] = useState<"off" | "on" | "none">("off");
+  // the key test: how many keys the computer keyboard reports at once (many laptops stop at 2 to 6)
+  const [rollover, setRollover] = useState<{ now: number; most: number } | null>(null);
+  const testing = rollover !== null;
+  useEffect(() => {
+    if (!testing) return;
+    const down = new Set<string>();
+    const count = () => setRollover((r) => r && { now: down.size, most: Math.max(r.most, down.size) });
+    const on = (e: KeyboardEvent) => {
+      if (/^(Shift|Alt|Control|Meta|Escape)/.test(e.code) || e.repeat) return;
+      down.add(e.code);
+      count();
+    };
+    const off = (e: KeyboardEvent) => {
+      down.delete(e.code);
+      count();
+    };
+    const esc = (e: KeyboardEvent) => e.code === "Escape" && setRollover(null);
+    window.addEventListener("keydown", on, true);
+    window.addEventListener("keyup", off, true);
+    window.addEventListener("keydown", esc);
+    return () => (window.removeEventListener("keydown", on, true), window.removeEventListener("keyup", off, true), window.removeEventListener("keydown", esc));
+  }, [testing]);
   const held = useRef(new Map<string, () => void>());
   const sustained = useRef(new Map<string, () => void>());
   const sustain = useRef(false);
@@ -108,6 +130,8 @@ export default function KeyboardTool() {
       } catch {
         /* storage unavailable */
       }
+      // (pages that label notes with their keys follow the hands)
+      if (c.layout !== undefined || c.baseC !== undefined || c.lowC !== undefined) queueMicrotask(announcePlace);
       return next;
     });
 
@@ -155,7 +179,8 @@ export default function KeyboardTool() {
     const codeMidi = new Map<string, number>();
     const down = (e: KeyboardEvent) => {
       // the live staff handles its own keys while it has focus (← → pick, Backspace removes)
-      if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || (e.target as HTMLElement)?.closest?.("[data-live-staff]")) return;
+      // (Option and Shift are part of playing: held, an octave down or up)
+      if (e.metaKey || e.ctrlKey || typing(e.target) || (e.target as HTMLElement)?.closest?.("[data-live-staff]")) return;
       // Backspace: the last note off the staff; Shift+Backspace / Delete: the last bar; Esc: all (Esc on an empty staff:
       // computer keys off)
       if (e.code === "Backspace" || e.code === "Delete") {
@@ -165,12 +190,13 @@ export default function KeyboardTool() {
       if (e.code === "Escape") return void (clearStaff() || setArmed(false));
       const lay = prefs.current.layout ?? "typing";
       const bases = { high: prefs.current.baseC, low: prefs.current.lowC ?? prefs.current.baseC - 12 };
-      const midi = keyMidi(lay, e.code, bases);
-      const action = keyAction(lay, e.code);
+      const midi = keyMidi(lay, e.code, bases, { shift: e.shiftKey, alt: e.altKey });
+      const action = e.altKey || e.shiftKey ? null : keyAction(lay, e.code);
       const clamp = (m: number) => Math.min(96, Math.max(24, m));
       if (midi !== null) {
         e.preventDefault();
         if (e.repeat) return;
+        // (the note sounds until its key is let go, at the pitch it started, whatever happens to Shift)
         codeMidi.set(e.code, midi);
         start(e.code, midi, "keys");
       } else if (action) {
@@ -331,6 +357,35 @@ export default function KeyboardTool() {
             MIDI
           </Button>
         )}
+        <span className="relative">
+          <Button
+            variant={testing ? "on" : "secondary"}
+            onClick={() => setRollover((r) => (r ? null : { now: 0, most: 0 }))}
+            title={pick(["How many keys your computer keyboard can press at once", "你的電腦鍵盤能同時按下幾個鍵"])}
+            data-testid="kb-rollover"
+          >
+            {pick(["Key test", "按鍵測試"])}
+          </Button>
+          {rollover && (
+            <span className="absolute bottom-full left-0 z-30 mb-2 block w-72 rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-700 shadow-lg" role="status" data-testid="kb-rollover-panel">
+              <b className="block text-sm text-gray-900">{pick(["Hold down as many keys as you can", "盡量同時按住多個鍵"])}</b>
+              <span className="mt-1 block tabular-nums">
+                {pick(["Held now", "目前按住"])}: <b>{rollover.now}</b> · {pick(["most at once", "最多同時"])}: <b>{rollover.most}</b>
+              </span>
+              <span className="mt-1 block text-gray-600">
+                {rollover.most === 0
+                  ? pick(["Try a chord in each hand, e.g. Z C B and Q E T together.", "試著每隻手各按一個和弦，例如同時按 Z C B 和 Q E T。"])
+                  : rollover.most < 6
+                    ? pick([
+                        "Your keyboard stops counting there: more keys at once are lost (common on laptops). For chords in both hands, play one hand at a time, or use a MIDI keyboard.",
+                        "你的鍵盤數到這裡就停了：再多的鍵會被忽略（筆電常見）。雙手和弦請一次練一隻手，或改用 MIDI 鍵盤。",
+                      ])
+                    : pick(["Enough for chords in both hands.", "足夠雙手同時按和弦。"])}
+              </span>
+              <span className="mt-1 block text-gray-400">{pick(["Esc or the button again to close", "按 Esc 或再按一次按鈕關閉"])}</span>
+            </span>
+          )}
+        </span>
         {midiState === "none" && <span className="text-xs text-red-700">{pick(["No MIDI access", "無法使用 MIDI"])}</span>}
         <span className="ml-auto text-xs text-gray-500 max-sm:hidden">
           {armed
@@ -360,7 +415,8 @@ export default function KeyboardTool() {
               lit={lit.has(m)}
               next={hint.includes(m)}
               label={p.names ? `${letter(m)}${m % 12 === 0 ? Math.floor(m / 12) - 1 : ""}` : ""}
-              keyLetter={p.keys && armed ? keyLabelFor(p.layout ?? "typing", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }) : null}
+              keyLetter={p.keys && armed ? keyLabelsFor(p.layout ?? "typing", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }).join(" ") || null : null}
+              zone={armed && p.layout === "tworow" ? handZone("tworow", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }) : null}
               middle={m === 60}
               onStart={(id, v) => start(id, m, "mouse", v)}
               onEnd={(id) => end(id, m, "mouse")}
@@ -379,7 +435,8 @@ export default function KeyboardTool() {
                 lit={lit.has(m)}
                 next={hint.includes(m)}
                 label=""
-                keyLetter={p.keys && armed ? keyLabelFor(p.layout ?? "typing", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }) : null}
+                keyLetter={p.keys && armed ? keyLabelsFor(p.layout ?? "typing", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }).join(" ") || null : null}
+                zone={armed && p.layout === "tworow" ? handZone("tworow", m, { high: p.baseC, low: p.lowC ?? p.baseC - 12 }) : null}
                 onStart={(id, v) => start(id, m, "mouse", v)}
                 onEnd={(id) => end(id, m, "mouse")}
                 className="absolute top-0 h-[60%] -translate-x-1/2 rounded-b-md bg-gray-900"
@@ -400,6 +457,7 @@ function Key({
   next,
   label,
   keyLetter,
+  zone,
   middle,
   black,
   className,
@@ -413,6 +471,8 @@ function Key({
   next?: boolean;
   label: string;
   keyLetter: string | null;
+  /** which hand's computer keys reach it (two rows): a strip in the hand's colour */
+  zone?: "left" | "right" | "both" | null;
   middle?: boolean;
   black?: boolean;
   className: string;
@@ -443,10 +503,18 @@ function Key({
       }}
       onKeyUp={(e) => (e.key === "Enter" || e.key === " ") && onEnd("k")}
       style={style}
-      className={`${className} flex flex-col items-center justify-end pb-1 text-[10px] leading-tight transition-colors duration-75 ${
+      // (a white key is the zone strip's frame; a black key is positioned already)
+      className={`${className} ${black ? "" : "relative"} flex flex-col items-center justify-end pb-1 text-[10px] leading-tight transition-colors duration-75 ${
         lit ? (black ? "bg-(--lk-accent)!" : "bg-rose-200!") : ""
       } ${next && !lit ? "ring-3 ring-sky-400 ring-inset" : ""} ${black ? "z-10 text-white/80" : "text-gray-500"} focus-visible:outline-2 focus-visible:outline-(--lk-accent)`}
     >
+      {zone && (
+        // left hand blue, right hand amber, both (round middle C) half and half
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute inset-x-0 top-0 h-1 ${zone === "left" ? "bg-sky-400" : zone === "right" ? "bg-amber-400" : "bg-linear-to-r from-sky-400 to-amber-400"}`}
+        />
+      )}
       {keyLetter && <span className={`font-mono font-semibold ${black ? "text-white" : "text-gray-800"}`}>{keyLetter}</span>}
       {label && <span className={middle ? "font-semibold text-(--lk-accent)" : ""}>{label}</span>}
     </button>
