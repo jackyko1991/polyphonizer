@@ -15,7 +15,7 @@ music21 = "*"
 
 [tasks]
 install = { cmd = "npm ci", cwd = "frontend", inputs = ["frontend/package.json", "frontend/package-lock.json"], outputs = ["frontend/node_modules/.package-lock.json"] }
-dev = { cmd = "npm run dev", cwd = "frontend", depends-on = ["install"], description = "the site with hot reload" }
+dev = { cmd = "npm run dev --", cwd = "frontend", depends-on = ["install"], description = "the site with hot reload" }
 test = { cmd = "npm test", cwd = "frontend", depends-on = ["install"], description = "unit tests (node --test)" }
 typecheck = { cmd = "npx tsc -b", cwd = "frontend", depends-on = ["install"] }
 build = { cmd = "npm run build", cwd = "frontend", depends-on = ["install"], description = "the static site in frontend/dist" }
