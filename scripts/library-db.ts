@@ -24,6 +24,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { analysisKey, type Analyses } from "../frontend/src/library/analyses.ts";
 import { catalogIds } from "../frontend/src/library/catalogNumbers.ts";
+import { sonataId } from "../frontend/src/library/sonatas.ts";
 import { byComposer, idText, MUSIC21, type Row, type Source } from "../frontend/src/library/collections.ts";
 import { licenceClass } from "../frontend/src/library/elsewhere.ts";
 import { IMSLP, IMSLP_SOURCE, imslpRows, parseImslp } from "../frontend/src/library/imslp.ts";
@@ -69,7 +70,9 @@ function extraText(r: Row, sources: Record<string, Source>): string {
 export function siblingsOf(rows: Row[]): Map<string, [string, string, string][]> {
   const byKey = new Map<string, number[]>();
   const keysOf = rows.map((r, i) => {
-    const keys = catalogIds(idText(r), r[4]).map((id) => `${r[4]}|${id}`);
+    // (a sonata known only by its number, ASAP's, by the catalogue number that number stands for)
+    const sonata = sonataId(r[4], r[3]);
+    const keys = [...catalogIds(idText(r), r[4]), ...(sonata ? [sonata] : [])].map((id) => `${r[4]}|${id}`);
     for (const k of keys) byKey.set(k, [...(byKey.get(k) ?? []), i]);
     return keys;
   });

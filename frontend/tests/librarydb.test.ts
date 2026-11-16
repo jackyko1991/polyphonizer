@@ -74,6 +74,12 @@ test("the same work across sources: one composer and one catalogue number; not w
   assert.deepEqual(s.get("https://raw/lc1.mxl#")?.map((x) => x[0]).sort(), ["imslp", "mutopia"]);
   assert.equal(s.get("https://raw/lc1.mxl#")?.find((x) => x[0] === "imslp")?.[1], "https://imslp.org/index.php?curid=77");
   assert.deepEqual(s.get("https://raw/a.musicxml#")?.map((x) => x[1]), ["https://imslp.org/index.php?curid=99"]);
+  // a sonata known only by its number finds its opus elsewhere
+  const sonatas = siblingsOf([
+    row("asap", "https://raw/p.musicxml", "Piano Sonata No. 8 · 2", "Ludwig van Beethoven"),
+    row("imslp", "https://imslp.org/index.php?curid=5", "Piano Sonata No.8, Op.13", "Ludwig van Beethoven"),
+  ]);
+  assert.deepEqual(sonatas.get("https://raw/p.musicxml#")?.map((x) => x[1]), ["https://imslp.org/index.php?curid=5"]);
   // IMSLP's rows are not keys (only the Library's own works show their editions elsewhere)
   assert.ok(![...s.keys()].some((k) => k.includes("imslp.org")));
 });
