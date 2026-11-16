@@ -8,7 +8,7 @@ import type { L } from "../problems.ts";
 import type { Row, Source } from "./collections.ts";
 
 export interface Elsewhere {
-  id: "imslp" | "cpdl" | "mutopia";
+  id: "imslp" | "cpdl" | "mutopia" | "musescore";
   name: string;
   home: string;
   /** a search for these words (encoded) */
@@ -38,6 +38,13 @@ export const ELSEWHERE: Elsewhere[] = [
     home: "https://www.mutopiaproject.org/",
     search: (q) => `https://www.mutopiaproject.org/cgibin/make-table.cgi?searchingfor=${q}`,
     gives: ["engraved editions: PDF and MIDI", "重新排版的樂譜：PDF 與 MIDI"],
+  },
+  {
+    id: "musescore",
+    name: "MuseScore",
+    home: "https://musescore.com/sheetmusic",
+    search: (q) => `https://musescore.com/sheetmusic?text=${q}`,
+    gives: ["scores shared by its users; downloads need an account", "使用者分享的樂譜；下載需要帳號"],
   },
 ];
 

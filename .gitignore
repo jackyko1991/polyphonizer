@@ -11,3 +11,4 @@ __pycache__/
 frontend/public/generated/
 .venv/
 runner/engines/copisteria/
+frontend/public/library/library.sqlite

@@ -17,7 +17,9 @@ import { catalogIds, idLabel, idMatches, parseQuery } from "./library/catalogNum
 import { elsewhereLinks, LICENCE_CLASSES, licenceClass, searchTerms, type LicenceClass } from "./library/elsewhere.ts";
 import { AFFILIATE_REL, urtextUrl } from "./library/urtext.ts";
 import { analysisKey, analysisUrl, codeWithHarmony, type Analyses } from "./library/analyses.ts";
-import { imslpUrl, parseImslp, searchableImslp, searchImslp, type SearchableImslp } from "./library/imslp.ts";
+import { imslpUrl } from "./library/imslp.ts";
+import { searchWorks, type FoundWork, type Sql } from "./library/db.ts";
+import { catalogueDb } from "./library/dbClient.ts";
 import { MUTOPIA, MUTOPIA_LICENCES, MUTOPIA_SOURCE, mutopiaLinks, mutopiaRow, type MutopiaRow } from "./library/mutopia.ts";
 import { byComposer, codeFor, idText, MUSIC21, sourceOf, type Row, type Source } from "./library/collections.ts";
 import { addRecent } from "./project.ts";
@@ -50,22 +52,18 @@ export default function LibraryPage() {
     const k = analysisKey(x);
     return k ? analyses.works[k] : undefined;
   };
-  // IMSLP's index: large, fetched only when asked for (its source chosen, or "also search IMSLP")
+  // IMSLP's works, searched in the catalogue database (read over HTTP, only what a search needs) when ticked
   const [imslp, setImslp] = useState<"off" | "loading" | "on" | "error">("off");
-  const [imslpIx, setImslpIx] = useState<SearchableImslp | null>(null);
+  const [imslpDb, setImslpDb] = useState<Sql | null>(null);
   const [imslpShown, setImslpShown] = useState(50);
+  const [imslpOn, setImslpOn] = useState(false);
   const loadImslp = () => {
-    if (imslp !== "off" && imslp !== "error") return;
+    if (imslp === "loading" || imslp === "on") return;
     setImslp("loading");
-    fetch(`${import.meta.env.BASE_URL}library/imslp.tsv`)
-      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
-      .then((tsv) => {
-        // kept apart from the Library's own rows (a quarter of a million works would slow every filter): searched on
-        // its own, below the Library's results
-        setImslpIx(searchableImslp(parseImslp(tsv), fold));
-        setImslp("on");
-      })
-      .catch(() => setImslp("error"));
+    catalogueDb().then(
+      (d) => (setImslpDb(d), setImslp("on")),
+      () => setImslp("error"),
+    );
   };
   const [source, setSource] = useState("");
   const [collection, setCollection] = useState("");
@@ -318,7 +316,7 @@ export default function LibraryPage() {
         {t("lib.withHarmony")} ({Object.keys(analyses.works).length})
       </label>
       <label className="mt-2 inline-flex items-center gap-1.5 text-sm text-gray-700" data-testid="lib-imslp-toggle">
-        <input type="checkbox" checked={imslp === "on" || imslp === "loading"} disabled={imslp === "loading" || imslp === "on"} onChange={() => loadImslp()} />
+        <input type="checkbox" checked={imslpOn && imslp !== "error"} disabled={imslp === "loading"} onChange={(e) => (setImslpOn(e.target.checked), e.target.checked && loadImslp())} />
         {imslp === "loading" ? t("lib.imslpLoading") : imslp === "error" ? t("lib.imslpError") : t("lib.imslpAlso")}
       </label>
       {/* the same search in libraries this page can't open from: one line under the filters */}
@@ -459,7 +457,7 @@ export default function LibraryPage() {
         })}
         {rows && filtered.length === 0 && <li className="px-4 py-6 text-center text-sm text-gray-500">{t("lib.none")}</li>}
       </ul>
-      {imslpIx && <ImslpResults ix={imslpIx} words={rest} composer={activeComposer} shown={imslpShown} onMore={() => setImslpShown((n) => n + 50)} />}
+      {imslpOn && imslpDb && <ImslpResults db={imslpDb} words={rest} composer={activeComposer} shown={imslpShown} onMore={() => setImslpShown((n) => n + 50)} />}
       {filtered.length > shown && (
         <button onClick={() => setShown((n) => n + PAGE)} className="mx-auto mt-4 block rounded-md border border-gray-300 bg-white px-4 py-1.5 text-sm hover:bg-gray-50">
           {fill(t("lib.more"), { n: Math.min(PAGE, filtered.length - shown) })}
@@ -570,29 +568,39 @@ function PartsLine({ row, open, onToggle }: { row: Row; open: boolean; onToggle:
 }
 
 /** IMSLP's works matching the search (or the composer chosen), below the Library's own: each links to its IMSLP page */
-function ImslpResults({ ix, words, composer, shown, onMore }: { ix: SearchableImslp; words: string[]; composer: string; shown: number; onMore: () => void }) {
+function ImslpResults({ db, words, composer, shown, onMore }: { db: Sql; words: string[]; composer: string; shown: number; onMore: () => void }) {
   const { t } = useLang();
-  const hits = useMemo(() => searchImslp(ix, words, composer, shown + 1), [ix, words.join(" "), composer, shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [hits, setHits] = useState<FoundWork[] | null>(null);
+  const key = `${words.join(" ")}|${composer}|${shown}`;
+  useEffect(() => {
+    let live = true;
+    setHits(null);
+    // (a short pause while typing, so each key doesn't start a search)
+    const timer = window.setTimeout(
+      () => void searchWorks(db, { words, composer, source: "imslp", limit: shown + 1 }).then((h) => live && setHits(h), () => live && setHits([])),
+      200,
+    );
+    return () => ((live = false), window.clearTimeout(timer));
+  }, [db, key]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!words.length && !composer) return <p className="mt-4 text-sm text-gray-500" data-testid="lib-imslp-results">{t("lib.imslpType")}</p>;
   return (
     <section className="mt-6" data-testid="lib-imslp-results">
       <h2 className="text-sm font-semibold text-gray-900">
-        {t("lib.onImslp")} <span className="font-normal text-gray-500">({hits.length > shown ? `${shown}+` : hits.length})</span>
+        {t("lib.onImslp")} <span className="font-normal text-gray-500">({hits === null ? "…" : hits.length > shown ? `${shown}+` : hits.length})</span>
       </h2>
       <p className="text-xs text-gray-500">{t("lib.imslpHow")}</p>
       <ul className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
-        {hits.slice(0, shown).map((i) => {
-          const [id, who, title, cat] = ix.works[i];
-          const urtext = urtextUrl(["imslp", "", null, title, who, 0, null, "", "", "", "", [], []]);
+        {(hits ?? []).slice(0, shown).map((w) => {
+          const urtext = urtextUrl(["imslp", "", null, w.title, w.composer, 0, null, "", "", "", "", [], []]);
           return (
-            <li key={id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
+            <li key={w.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium text-(--lk-accent)">
-                  {who}
-                  {cat && <span className="font-normal text-gray-500"> · {cat}</span>}
+                  {w.composer}
+                  {w.set_name && <span className="font-normal text-gray-500"> · {w.set_name}</span>}
                 </p>
-                <p className="truncate text-sm text-gray-900" title={title}>
-                  {title}
+                <p className="truncate text-sm text-gray-900" title={w.title}>
+                  {w.title}
                 </p>
               </div>
               {urtext && (
@@ -600,15 +608,15 @@ function ImslpResults({ ix, words, composer, shown, onMore }: { ix: SearchableIm
                   {t("lib.urtext")} ↗
                 </a>
               )}
-              <a href={imslpUrl(id)} target="_blank" rel="noopener noreferrer" className="rounded-md border border-gray-300 px-3 py-1 text-sm font-medium text-gray-800 hover:border-(--lk-accent) hover:text-(--lk-accent)" data-testid="lib-imslp">
+              <a href={imslpUrl(w.path)} target="_blank" rel="noopener noreferrer" className="rounded-md border border-gray-300 px-3 py-1 text-sm font-medium text-gray-800 hover:border-(--lk-accent) hover:text-(--lk-accent)" data-testid="lib-imslp">
                 IMSLP ↗
               </a>
             </li>
           );
         })}
-        {!hits.length && <li className="px-4 py-4 text-center text-sm text-gray-500">{t("lib.none")}</li>}
+        {hits !== null && !hits.length && <li className="px-4 py-4 text-center text-sm text-gray-500">{t("lib.none")}</li>}
       </ul>
-      {hits.length > shown && (
+      {hits !== null && hits.length > shown && (
         <button onClick={onMore} className="mx-auto mt-3 block rounded-md border border-gray-300 bg-white px-4 py-1.5 text-sm hover:bg-gray-50">
           {t("lib.imslpMore")}
         </button>

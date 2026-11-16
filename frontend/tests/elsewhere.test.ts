@@ -18,10 +18,11 @@ test("the search terms: the composer's surname and the title without catalogue c
 test("find elsewhere: IMSLP, CPDL and Mutopia searches, the terms encoded", () => {
   assert.deepEqual(
     ELSEWHERE.map((s) => s.id),
-    ["imslp", "cpdl", "mutopia"],
+    ["imslp", "cpdl", "mutopia", "musescore"],
   );
   const links = elsewhereLinks("Schubert Der Erlkönig");
-  assert.equal(links.length, 3);
+  assert.equal(links.length, 4);
+  assert.equal(links[3].url, "https://musescore.com/sheetmusic?text=Schubert%20Der%20Erlk%C3%B6nig");
   assert.equal(links[0].url, "https://imslp.org/index.php?title=Special:Search&search=Schubert%20Der%20Erlk%C3%B6nig");
   assert.equal(links[1].url, "https://www.cpdl.org/wiki/index.php?title=Special:Search&search=Schubert%20Der%20Erlk%C3%B6nig");
   assert.equal(links[2].url, "https://www.mutopiaproject.org/cgibin/make-table.cgi?searchingfor=Schubert%20Der%20Erlk%C3%B6nig");
@@ -29,7 +30,7 @@ test("find elsewhere: IMSLP, CPDL and Mutopia searches, the terms encoded", () =
   // nothing to search: each site's front page
   assert.deepEqual(
     elsewhereLinks("").map((l) => l.url),
-    ["https://imslp.org/", "https://www.cpdl.org/", "https://www.mutopiaproject.org/"],
+    ["https://imslp.org/", "https://www.cpdl.org/", "https://www.mutopiaproject.org/", "https://musescore.com/sheetmusic"],
   );
   // what each gives, to say on the link
   assert.ok(ELSEWHERE.every((s) => s.gives[0] && s.gives[1]));

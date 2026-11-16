@@ -1,4 +1,4 @@
-"""Write the Library's index of IMSLP's works (frontend/public/library/imslp.tsv).
+"""Write the Library's index of IMSLP's works (data/imslp.tsv, built into the Library's database by scripts/library-db.ts).
 
     python scripts/imslp_catalog.py            # pixi run imslp; about ten minutes, one page a second or so
 
@@ -22,7 +22,7 @@ from datetime import date
 from pathlib import Path
 
 API = "https://imslp.org/imslpscripts/API.ISCR.php?account=worklist/disclaimer=accepted/sort=id/type=2/start={start}/retformat=json"
-OUT = Path(__file__).resolve().parent.parent / "frontend" / "public" / "library" / "imslp.tsv"
+OUT = Path(__file__).resolve().parent.parent / "data" / "imslp.tsv"
 AGENT = "polyphonizer-catalog (+https://github.com/jackyko1991/polyphonizer)"
 PAUSE = 1.0
 
