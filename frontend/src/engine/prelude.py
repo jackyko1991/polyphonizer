@@ -385,6 +385,7 @@ def _titled(s):
 # printing papers, and screens (portrait; orientation="landscape" turns them): the size in mm sets the shape and how
 # large the music is relative to the page
 _PAPERS = {
+    "Fit": (210.0, 297.0),  # no paper: one continuous page as wide as the window (the size only stands in, e.g. printing)
     "A4": (210.0, 297.0),
     "Letter": (215.9, 279.4),
     "A3": (297.0, 420.0),

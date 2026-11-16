@@ -25,8 +25,11 @@ export interface PageSetup {
   page_breaks: number[];
 }
 
-/** printing papers and screens, portrait (keep in step with prelude.py's _PAPERS) */
+/** printing papers and screens, portrait (keep in step with prelude.py's _PAPERS). "Fit" is no paper: one continuous
+ * page as wide as the window (its size here only stands in, e.g. for printing, which uses A4) */
+export const FIT = "Fit";
 export const PAPERS: Record<string, [number, number]> = {
+  [FIT]: [210, 297],
   A4: [210, 297],
   Letter: [215.9, 279.4],
   A3: [297, 420],
@@ -67,10 +70,16 @@ export const DEFAULT_SETUP: PageSetup = {
   page_breaks: [],
 };
 
-/** the setup of one sheet (part name, or null for the full score): its pages(...) call, or the defaults */
+/** is this setup the continuous, fit-to-window layout (no pages) */
+export const isFit = (s: PageSetup) => s.paper === FIT;
+
+/** a sheet with no pages(...) line at all: continuous, fit to the window (a pages() line without paper= is A4) */
+export const UNSET_SETUP: PageSetup = { ...DEFAULT_SETUP, paper: FIT };
+
+/** the setup of one sheet (part name, or null for the full score): its pages(...) call, or fit to the window */
 export function setupFor(layouts: PageSetup[] | undefined, part: string | null): PageSetup {
   const found = layouts?.find((l) => (l.part ?? null) === part);
-  return found ? { ...DEFAULT_SETUP, ...found } : { ...DEFAULT_SETUP, part };
+  return found ? { ...DEFAULT_SETUP, ...found } : { ...UNSET_SETUP, part };
 }
 
 /** the setup with a new paper or orientation: its page size follows */

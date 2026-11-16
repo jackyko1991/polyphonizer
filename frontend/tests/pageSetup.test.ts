@@ -26,7 +26,10 @@ test("each sheet finds its own setup, or the defaults", () => {
   const layouts = [{ ...DEFAULT_SETUP, stand: "single" as const }, { ...DEFAULT_SETUP, part: "Cello", min_rest: 5 }];
   assert.equal(setupFor(layouts, null).stand, "single");
   assert.equal(setupFor(layouts, "Cello").min_rest, 5);
-  assert.deepEqual(setupFor(layouts, "Viola"), { ...DEFAULT_SETUP, part: "Viola" });
+  // no pages(...) line: continuous, fit to the window; a pages() line without paper= keeps meaning A4
+  assert.deepEqual(setupFor(layouts, "Viola"), { ...DEFAULT_SETUP, paper: "Fit", part: "Viola" });
+  assert.equal(setupFor(layouts, null).paper, "A4");
+  assert.equal(setupCode({ ...DEFAULT_SETUP, paper: "Fit" }), 'pages(paper="Fit")');
   assert.deepEqual(withPaper(DEFAULT_SETUP, "A4", "landscape").width_mm, 297);
 });
 

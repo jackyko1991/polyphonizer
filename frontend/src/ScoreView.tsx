@@ -3,12 +3,12 @@
  * button that lights up the notes as they sound; export. The Pages view is also the layout editor: bars per line,
  * staff size, and line and page breaks set by clicking a bar, with page turns planned around them.
  */
-import { ChevronDown, ChevronLeft, ChevronRight, Download, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, RotateCcw, Square, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Download, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, RotateCcw, Square, X } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { engravePages, engraveScroll, midiFile, timelineOf, type Engraving } from "./engine/engrave.ts";
-import { barIndices, barNumbers, DEFAULT_SETUP, PAPERS, SCREENS, screenPaper, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
+import { barIndices, barNumbers, FIT, isFit, PAPERS, SCREENS, screenPaper, UNSET_SETUP, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
 import { play, stop } from "./engine/player.ts";
 import type { ScoreData } from "./engine/types.ts";
 import { cursorAt, onsetTable, type Onset } from "./engine/cursor.ts";
@@ -100,8 +100,9 @@ export default function ScoreView({
   const [width, setWidth] = useState(800);
   // full screen only zooms: the layout keeps the width it had when full screen began (no re-flow)
   const [frozenWidth, setFrozenWidth] = useState<number | null>(null);
-  // phones: the Pages view's setup is folded until asked for
+  // the Page setup dialog (both views, every screen size), and the page-turn details (Pages view)
   const [setupOpen, setSetupOpen] = useState(false);
+  const [turnsOpen, setTurnsOpen] = useState(false);
   // the full-screen page reader (Pages view): the panel's size, and the first page on show
   const [boxW, setBoxW] = useState(800);
   const [boxH, setBoxH] = useState(600);
@@ -113,15 +114,9 @@ export default function ScoreView({
   const [playing, setPlaying] = useState(false);
   const [full, setFull] = useState(false);
   // the page setup: from the score's code (editor), or kept here (Learn, which has no Pages view)
-  const [localSetup, setLocalSetup] = useState<PageSetup>(DEFAULT_SETUP);
+  const [localSetup, setLocalSetup] = useState<PageSetup>(UNSET_SETUP);
   const cur = setup ?? localSetup;
   const update = onSetup ?? setLocalSetup;
-  const stand = cur.stand;
-  const minRest = cur.min_rest;
-  const planOn = cur.plan_turns;
-  const setStand = (v: Stand) => update({ ...cur, stand: v });
-  const setMinRest = (v: number) => update({ ...cur, min_rest: Math.max(0, Math.min(30, v)) });
-  const setPlanOn = (v: boolean) => update({ ...cur, plan_turns: v });
   // breaks: bar numbers in the code, measure indices for the engraver
   const measures = score?.measures ?? [];
   const layout = {
@@ -129,7 +124,10 @@ export default function ScoreView({
     lineBreaks: barIndices(cur.line_breaks, measures),
     pageBreaks: barIndices(cur.page_breaks, measures),
   };
-  const reading = full && view === "pages";
+  // one drawing for both views, laid out by the page setup: continuous (fit to the window) or pages; the views only
+  // change the tools in the bar (Score: play, sound, edit notes; Pages: breaks, page turns), as in a word processor
+  const fit = isFit(cur);
+  const reading = full && !fit;
   const aspect = cur.width_mm / cur.height_mm;
   const perView = pagesPerView(boxW - 112, boxH - 48, aspect);
   const readerPage = pageSize(boxW - 112, boxH - 48, aspect, perView);
@@ -192,10 +190,15 @@ export default function ScoreView({
     setStage("engrave");
     stop();
     setPlaying(false);
-    (view === "pages"
+    (!fit
       ? engravePages(score, cur)
-      : // a phone-width panel draws the music a little smaller, so a line holds more than a bar or two
-        engraveScroll(score.musicxml, Math.max(320, layoutWidth(width, frozenWidth) - 24), scrollZoom(layoutWidth(width, frozenWidth)))
+      : // continuous: a narrow panel draws the music smaller (so a line holds more than a bar or two); the setup's
+        // staff size scales it (7 mm = as drawn by default)
+        engraveScroll(
+          score.musicxml,
+          Math.max(320, layoutWidth(width, frozenWidth) - 24),
+          Math.round(scrollZoom(layoutWidth(width, frozenWidth)) * (cur.staff_size / 7)),
+        )
     )
       .then((e) => {
         if (!live) return;
@@ -211,12 +214,12 @@ export default function ScoreView({
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [score, view, view === "pages" ? 0 : layoutWidth(width, frozenWidth), JSON.stringify(cur)]);
+  }, [score, fit ? layoutWidth(width, frozenWidth) : 0, JSON.stringify(cur)]);
 
   // where the forced breaks are on the pages (drawn as markers at the start of their bars)
   useLayoutEffect(() => {
     const el = box.current;
-    if (!el || view !== "pages" || !eng?.measureIds.length) return setMarks([]);
+    if (!el || fit || !eng?.measureIds.length) return setMarks([]);
     const out: typeof marks = [];
     const pages = [...el.querySelectorAll<HTMLElement>("[data-page]")];
     for (const [kind, list] of [["line", layout.lineBreaks], ["page", layout.pageBreaks]] as const) {
@@ -234,7 +237,7 @@ export default function ScoreView({
     }
     setMarks(out);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eng, view, width, JSON.stringify(cur.line_breaks), JSON.stringify(cur.page_breaks)]);
+  }, [eng, fit, width, JSON.stringify(cur.line_breaks), JSON.stringify(cur.page_breaks)]);
 
   /** Score view, editing notes: a click on a bar of one staff opens its notes as text */
   const onScoreClick = async (e: React.MouseEvent) => {
@@ -291,7 +294,7 @@ export default function ScoreView({
     const onKey = (e: KeyboardEvent) => {
       // page turns (arrows, Page Up/Down from a page-turn pedal, Space …), unless typing in a field
       const typing = (e.target as HTMLElement)?.closest?.("input, textarea, select, .cm-editor");
-      if (view === "pages" && !typing) {
+      if (reading && !typing) {
         const k = keyTurn(e.key);
         if (k !== null) {
           e.preventDefault();
@@ -500,6 +503,12 @@ export default function ScoreView({
   const small = `${BUTTON} shadow-sm`;
   const btn = BUTTON;
 
+  // a click on the music does what the view's tools say: Score edits a bar's notes (Edit notes on), Pages places
+  // breaks (Edit breaks on); otherwise it plays from the note
+  const onSheetClick = (e: React.MouseEvent) =>
+    view === "pages" && editing && !fit ? onPagesClick(e) : view === "score" && noteEdit ? void onScoreClick(e) : onNote(e);
+  const clickClass = (view === "pages" && editing && !fit) || (view === "score" && noteEdit) ? "pz-edit" : clickPlay ? "pz-clickable" : "";
+
   return (
     <div
       ref={panel}
@@ -593,7 +602,7 @@ export default function ScoreView({
         </button>
         {loading && <span className="text-xs text-gray-500">{t("play.loading")}</span>}
 
-        <div className="relative">
+        {view === "score" && <div className="relative">
           <button
             onClick={() => setSoundOpen((o) => !o)}
             disabled={!score}
@@ -605,7 +614,7 @@ export default function ScoreView({
             <Icon icon={Music} /> {t("sound.button")}
           </button>
           {soundOpen && score && <SoundPanel parts={score.parts} programs={score.programs ?? []} onClose={() => setSoundOpen(false)} />}
-        </div>
+        </div>}
         {view === "score" && onEditBar && (
           <button
             onClick={() => (setNoteEdit((x) => !x), setBar(null))}
@@ -635,144 +644,59 @@ export default function ScoreView({
           />
           {t("click.label")}
         </label>
-        {busy && <span className="text-xs text-gray-500">{view === "pages" ? t("pages.engraving") : "…"}</span>}
-        {eng && view === "pages" && <span className="text-xs text-gray-500">{fill(t("pages.count"), { n: eng.pages.length })}</span>}
-      </div>
-
-      {/* phones: the page setup and the turns fold into one line, so the pages show first (as the Score view does) */}
-      {view === "pages" && !reading && (
-        <button
-          type="button"
-          onClick={() => setSetupOpen((o) => !o)}
-          aria-expanded={setupOpen}
-          className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-1.5 text-left text-sm text-gray-700 lg:hidden"
-          data-testid="pages-setup-toggle"
-        >
-          <Icon icon={ChevronDown} className={`h-4 w-4 transition-transform ${setupOpen ? "" : "-rotate-90"}`} />
-          <span className="font-medium">{t("pages.setup")}</span>
-          {eng?.plan && eng.plan.turns.length > 0 && (
-            <span className="ml-auto text-xs">
-              {t("pages.turns")}: <span className="text-emerald-700">✓ {eng.plan.turns.filter((x) => x.ok).length}</span>
-              {eng.plan.turns.some((x) => !x.ok) && <span className="ml-1.5 text-red-700">✗ {eng.plan.turns.filter((x) => !x.ok).length}</span>}
-            </span>
-          )}
-        </button>
-      )}
-      {view === "pages" && !reading && (
-        <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 ${setupOpen ? "" : "max-lg:hidden"}`}>
-          <label className="flex items-center gap-1.5">
-            {t("pages.stand")}
-            <select value={stand} onChange={(e) => setStand(e.target.value as Stand)} className="rounded border border-gray-300 bg-white px-1.5 py-0.5">
-              {(["single", "spread", "spread-right"] as Stand[]).map((s) => (
-                <option key={s} value={s}>
-                  {t(`stand.${s}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5">
-            {t("pages.minRest")}
-            <input
-              type="number"
-              min={0}
-              max={20}
-              step={0.5}
-              value={minRest}
-              onChange={(e) => setMinRest(Number(e.target.value))}
-              className="w-16 rounded border border-gray-300 bg-white px-1.5 py-0.5"
-            />
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input type="checkbox" checked={planOn} onChange={(e) => setPlanOn(e.target.checked)} data-testid="plan-toggle" />
-            {t("pages.plan")}
-          </label>
-          <label className="flex items-center gap-1.5">
-            {t("layout.paper")}
-            <select
-              value={typeof cur.paper === "string" ? cur.paper : ""}
-              onChange={(e) =>
-                update(e.target.value === "fit" ? withPaper(cur, screenPaper(window.screen.width, window.screen.height)) : withPaper(cur, e.target.value))
-              }
-              className="rounded border border-gray-300 bg-white px-1.5 py-0.5"
-              data-testid="paper"
+        {/* Pages: the layout's tools (breaks, page turns) */}
+        {view === "pages" && (
+          <>
+            <button
+              onClick={() => setEditing((x) => !x)}
+              disabled={fit}
+              aria-pressed={editing}
+              className={editing ? BUTTON_ON : BUTTON}
+              title={fit ? t("layout.breaksNeedPages") : t("layout.editHint")}
+              data-testid="edit-breaks"
             >
-              {typeof cur.paper !== "string" && <option value="">{`${cur.width_mm} × ${cur.height_mm} mm`}</option>}
-              <optgroup label={t("layout.papers")}>
-                {Object.keys(PAPERS)
-                  .filter((p) => !SCREENS.has(p))
-                  .map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-              </optgroup>
-              <optgroup label={t("layout.screens")}>
-                {Object.keys(PAPERS)
-                  .filter((p) => SCREENS.has(p))
-                  .map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                <option value="fit">{t("layout.fitScreen")}</option>
-              </optgroup>
-            </select>
-          </label>
-          {(
-            <>
-              <span className="hidden h-5 border-l border-gray-300 sm:block" />
-              <label className="flex items-center gap-1.5">
-                {t("layout.barsPerLine")}
-                <select
-                  value={layout.barsPerLine}
-                  onChange={(e) => onLayout({ ...layout, barsPerLine: Number(e.target.value) })}
-                  className="rounded border border-gray-300 bg-white px-1.5 py-0.5"
-                  data-testid="bars-per-line"
-                >
-                  <option value={0}>{t("layout.auto")}</option>
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center gap-1.5">
-                {t("layout.scale")}
-                <select
-                  value={cur.staff_size}
-                  onChange={(e) => update({ ...cur, staff_size: Number(e.target.value) })}
-                  className="rounded border border-gray-300 bg-white px-1.5 py-0.5"
-                  data-testid="staff-size"
-                >
-                  {[5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9].map((mm) => (
-                    <option key={mm} value={mm}>
-                      {mm} mm
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                onClick={() => setEditing((x) => !x)}
-                aria-pressed={editing}
-                className={`rounded-md border px-2 py-0.5 ${editing ? "border-(--lk-accent) bg-(--lk-accent) text-white" : "border-gray-300 bg-white hover:bg-gray-100"}`}
-                data-testid="edit-breaks"
-              >
-                <Icon icon={PencilLine} /> {t("layout.edit")}
+              <Icon icon={PencilLine} /> {t("layout.edit")}
+            </button>
+            {!fit && (layout.lineBreaks.length > 0 || layout.pageBreaks.length > 0) && (
+              <button onClick={() => onLayout({ ...layout, lineBreaks: [], pageBreaks: [] })} className="text-sm text-(--lk-accent) hover:underline">
+                {t("layout.clear")}
               </button>
-              {(layout.lineBreaks.length > 0 || layout.pageBreaks.length > 0) && (
-                <button onClick={() => onLayout({ ...layout, lineBreaks: [], pageBreaks: [] })} className="text-(--lk-accent) hover:underline">
-                  {t("layout.clear")}
-                </button>
-              )}
-              {editing && <span className="basis-full text-xs text-gray-500">{t("layout.editHint")}</span>}
-            </>
-          )}
-        </div>
-      )}
+            )}
+            {!fit && eng?.plan && (
+              <button
+                onClick={() => setTurnsOpen((o) => !o)}
+                aria-expanded={turnsOpen}
+                className={BUTTON}
+                title={t("pages.turns")}
+                data-testid="turns-summary"
+              >
+                {t("pages.turns")}:{" "}
+                {eng.plan.turns.length === 0 ? (
+                  <span className="text-emerald-700">✓</span>
+                ) : (
+                  <>
+                    <span className="text-emerald-700">✓ {eng.plan.turns.filter((x) => x.ok).length}</span>
+                    {eng.plan.turns.some((x) => !x.ok) && <span className="text-red-700">✗ {eng.plan.turns.filter((x) => !x.ok).length}</span>}
+                  </>
+                )}
+                <Icon icon={ChevronDown} className={`h-3.5 w-3.5 transition-transform ${turnsOpen ? "rotate-180" : ""}`} />
+              </button>
+            )}
+          </>
+        )}
+        {/* the page setup: the same dialog from either view */}
+        {pagesView && (
+          <button onClick={() => setSetupOpen(true)} disabled={!score} className={BUTTON} data-testid="page-setup">
+            <Icon icon={FileCog} /> {t("pages.setup")}
+          </button>
+        )}
+        {busy && <span className="text-xs text-gray-500">{fit ? "…" : t("pages.engraving")}</span>}
+        {eng && !fit && <span className="text-xs text-gray-500">{fill(t("pages.count"), { n: eng.pages.length })}</span>}
+      </div>
+      {setupOpen && <PageSetupDialog setup={cur} onChange={update} onLayout={(n) => onLayout({ ...layout, barsPerLine: n })} barsPerLine={layout.barsPerLine} onClose={() => setSetupOpen(false)} />}
 
-      {view === "pages" && !reading && eng?.plan && (
-        <div className={`border-b border-gray-200 bg-white px-3 py-2 text-sm ${setupOpen ? "" : "max-lg:hidden"}`} data-testid="turns">
+      {view === "pages" && turnsOpen && !reading && !fit && eng?.plan && (
+        <div className="border-b border-gray-200 bg-white px-3 py-2 text-sm" data-testid="turns">
           <span className="font-medium text-gray-900">{t("pages.turns")}: </span>
           {eng.plan.turns.length === 0 ? (
             <span className="text-gray-600">{t("pages.noTurns")}</span>
@@ -796,6 +720,7 @@ export default function ScoreView({
 
       <ProgressLine />
       {view === "score" && noteEdit && <p className="border-b border-gray-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900">{t("edit.hint")}</p>}
+      {view === "pages" && editing && !fit && <p className="border-b border-gray-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">{t("layout.editHint")}</p>}
       <div ref={box} className={`pz-score relative min-h-0 flex-1 bg-gray-100 p-3 ${reading ? "overflow-hidden" : "overflow-auto"}`} data-testid="score">
         {/* export and full screen: just above the sheet, staying in view while the score scrolls */}
         <div className="pointer-events-none sticky top-0 z-20 -mb-2 flex justify-end gap-1.5 [&>*]:pointer-events-auto" data-testid="score-actions">
@@ -908,13 +833,17 @@ export default function ScoreView({
                 {perView === 2 && readerAt + 1 < pageCount ? `${readerAt + 1}–${readerAt + 2}` : readerAt + 1} / {pageCount}
               </span>
             </div>
-          ) : view === "pages" ? (
-            <div className={`flex flex-wrap justify-center gap-4 ${editing ? "pz-edit" : clickPlay ? "pz-clickable" : ""}`} onClick={(e) => (editing ? onPagesClick(e) : onNote(e))}>
+          ) : !fit ? (
+            <div className={`flex flex-wrap justify-center gap-4 ${clickClass}`} onClick={onSheetClick}>
               {eng.pages.map((svg, i) => (
                 <div key={i} className="relative [content-visibility:auto] [contain-intrinsic-size:auto_600px]">
                   <div
                     data-page={i}
-                    className={`${full ? "w-[min(100%,calc((100vh-9rem)*210/297))]" : "w-[min(100%,420px)]"} min-w-[280px] bg-white shadow-md [aspect-ratio:210/297] [&>svg]:h-full [&>svg]:w-full`}
+                    className={`${full ? "" : "w-[min(100%,420px)]"} min-w-[240px] bg-white shadow-md [&>svg]:h-full [&>svg]:w-full`}
+                    style={{
+                      aspectRatio: `${cur.width_mm} / ${cur.height_mm}`,
+                      ...(full ? { width: `min(100%, calc((100vh - 9rem) * ${cur.width_mm / cur.height_mm}))` } : {}),
+                    }}
                     // Verovio's own SVG output
                     dangerouslySetInnerHTML={{ __html: svg }}
                   />
@@ -937,7 +866,7 @@ export default function ScoreView({
               ))}
             </div>
           ) : (
-            <div className={noteEdit ? "pz-edit" : clickPlay ? "pz-clickable" : ""} onClick={(e) => (noteEdit ? void onScoreClick(e) : onNote(e))}>
+            <div className={clickClass} onClick={onSheetClick}>
             {eng.pages.map((svg, i) => (
               <div
                 key={i}
@@ -1058,6 +987,163 @@ function ProgressLine() {
           style={{ width: `${pct}%` }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Page setup (as a word processor's File ▸ Page setup), the same from the Score and Pages views on every screen: the
+ * paper or screen (or continuous, fit to the window), orientation, staff size, bars per line, and the page turns.
+ * It changes the score's pages(...) line, so the setup is saved with the code.
+ */
+function PageSetupDialog({
+  setup,
+  onChange,
+  barsPerLine,
+  onLayout,
+  onClose,
+}: {
+  setup: PageSetup;
+  onChange: (s: PageSetup) => void;
+  barsPerLine: number;
+  onLayout: (barsPerLine: number) => void;
+  onClose: () => void;
+}) {
+  const { t } = useLang();
+  const fit = isFit(setup);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const row = "flex items-center justify-between gap-3";
+  const field = `${FIELD} max-w-[60%]`;
+  return (
+    <div className="fixed inset-0 z-[68] flex items-center justify-center bg-black/30 p-4" onClick={onClose} data-testid="page-setup-dialog">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("pages.setup")}
+        className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-5 text-sm text-gray-700 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center">
+          <h2 className="text-base font-semibold text-gray-900">{t("pages.setup")}</h2>
+          <button onClick={onClose} aria-label={t("sound.close")} className="ml-auto rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+            <Icon icon={X} />
+          </button>
+        </div>
+        <div className="space-y-3">
+          <label className={row}>
+            {t("layout.paper")}
+            <select
+              value={typeof setup.paper === "string" ? setup.paper : ""}
+              onChange={(e) =>
+                onChange(e.target.value === "fit-screen" ? withPaper(setup, screenPaper(window.screen.width, window.screen.height)) : withPaper(setup, e.target.value))
+              }
+              className={field}
+              data-testid="paper"
+            >
+              {typeof setup.paper !== "string" && <option value="">{`${setup.width_mm} × ${setup.height_mm} mm`}</option>}
+              <option value={FIT}>{t("layout.fit")}</option>
+              <optgroup label={t("layout.papers")}>
+                {Object.keys(PAPERS)
+                  .filter((p) => p !== FIT && !SCREENS.has(p))
+                  .map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+              </optgroup>
+              <optgroup label={t("layout.screens")}>
+                {Object.keys(PAPERS)
+                  .filter((p) => SCREENS.has(p))
+                  .map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                <option value="fit-screen">{t("layout.fitScreen")}</option>
+              </optgroup>
+            </select>
+          </label>
+          {fit ? (
+            <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">{t("layout.fitNote")}</p>
+          ) : (
+            typeof setup.paper === "string" && (
+              <label className={row}>
+                {t("layout.orientation")}
+                <select
+                  value={setup.orientation}
+                  onChange={(e) => onChange(withPaper(setup, setup.paper as string, e.target.value as "portrait" | "landscape"))}
+                  className={field}
+                  data-testid="orientation"
+                >
+                  <option value="portrait">{t("layout.portrait")}</option>
+                  <option value="landscape">{t("layout.landscape")}</option>
+                </select>
+              </label>
+            )
+          )}
+          <label className={row}>
+            {fit ? t("layout.musicSize") : t("layout.scale")}
+            <select value={setup.staff_size} onChange={(e) => onChange({ ...setup, staff_size: Number(e.target.value) })} className={field} data-testid="staff-size">
+              {[5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9].map((mm) => (
+                <option key={mm} value={mm}>
+                  {fit ? `${Math.round((mm / 7) * 100)}%` : `${mm} mm`}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!fit && (
+            <>
+              <label className={row}>
+                {t("layout.barsPerLine")}
+                <select value={barsPerLine} onChange={(e) => onLayout(Number(e.target.value))} className={field} data-testid="bars-per-line">
+                  <option value={0}>{t("layout.auto")}</option>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <h3 className="border-t border-gray-200 pt-3 font-semibold text-gray-900">{t("layout.turning")}</h3>
+              <label className={row}>
+                {t("pages.stand")}
+                <select value={setup.stand} onChange={(e) => onChange({ ...setup, stand: e.target.value as Stand })} className={field}>
+                  {(["single", "spread", "spread-right"] as Stand[]).map((v) => (
+                    <option key={v} value={v}>
+                      {t(`stand.${v}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={row}>
+                {t("pages.minRest")}
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  step={0.5}
+                  value={setup.min_rest}
+                  onChange={(e) => onChange({ ...setup, min_rest: Math.max(0, Math.min(30, Number(e.target.value))) })}
+                  className={`${FIELD} w-20`}
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={setup.plan_turns} onChange={(e) => onChange({ ...setup, plan_turns: e.target.checked })} data-testid="plan-toggle" />
+                {t("pages.plan")}
+              </label>
+            </>
+          )}
+        </div>
+        <div className="mt-5 flex justify-end">
+          <button onClick={onClose} className={`${BUTTON} bg-(--lk-accent)! text-white! hover:opacity-90`} data-testid="page-setup-done">
+            {t("layout.done")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
