@@ -128,14 +128,15 @@ export default function ScoreTree({
   const ownName = ws.ownLabel || t("ws.newLabel");
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="score-tree">
-      <div className="flex shrink-0 gap-1.5 border-b border-gray-200 p-2">
-        <button onClick={onNew} className={`${BUTTON} flex-1 justify-center`} title={t("ws.new")} data-testid="tree-new">
+      {/* New and Import side by side, Transcribe under them: three don't fit the panel's width */}
+      <div className="grid shrink-0 grid-cols-2 gap-1.5 border-b border-gray-200 p-2">
+        <button onClick={onNew} className={`${BUTTON} min-w-0 justify-center`} title={t("ws.new")} data-testid="tree-new">
           <Icon icon={Plus} /> {t("tree.new")}
         </button>
-        <button onClick={onImport} className={`${BUTTON} flex-1 justify-center`} title={t("import.hint")} data-testid="upload">
+        <button onClick={onImport} className={`${BUTTON} min-w-0 justify-center`} title={t("import.hint")} data-testid="upload">
           <Icon icon={Upload} /> {t("tree.import")}
         </button>
-        <button onClick={onTranscribe} className={`${BUTTON} flex-1 justify-center`} title={t("tree.transcribeHint")} data-testid="tree-transcribe">
+        <button onClick={onTranscribe} className={`${BUTTON} col-span-2 justify-center`} title={t("tree.transcribeHint")} data-testid="tree-transcribe">
           <Icon icon={AudioLines} /> {t("tree.transcribe")}
         </button>
       </div>
