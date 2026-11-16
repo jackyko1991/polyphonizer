@@ -39,6 +39,9 @@ export interface PlayLesson {
   keys: string;
   /** piano fingering, one string per staff: a finger per note or chord, bars as | (engine/fingering.ts) */
   fingers?: string[];
+  /** both hands: the keyboard's two-row layout, the left hand's row (Z X C V B …) from C3, the right hand's
+   * (Q W E R T …) from middle C; the music has a staff per hand, the left hand's in the bass clef */
+  hands?: "two";
 }
 
 const head = (q: number, m = "4/4", k = "C") => `X:1\nM:${m}\nL:1/4\nQ:1/4=${q}\nK:${k}\n`;
@@ -314,5 +317,93 @@ export const PLAY_LESSONS: PlayLesson[] = [
     tolerance: 130,
     keys: "A S D F G",
     fingers: ["3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 3 2 2 | 3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 2 1 1"],
+  },
+  // ---- both hands: the two-row layout, the left hand on the bottom row from C3, the right on the top row from C4
+  {
+    id: "hands-parallel",
+    instrument: "keyboard",
+    level: "L1",
+    n: "H1",
+    hands: "two",
+    title: ["Hands together: the same five notes", "雙手一起：同樣的五個音"],
+    task: [
+      "Both hands play C D E F G and back, an octave apart. Left hand on **Z X C V B**, right hand on **Q W E R T**.",
+      "雙手同時彈 C D E F G 再回來，相差一個八度。左手在 **Z X C V B**，右手在 **Q W E R T**。",
+    ],
+    how: [
+      "The hands are mirror images: the right thumb starts on C, the left little finger does. Same notes, different fingers: say the right hand's numbers aloud the first time, the left's the second.",
+      "兩手是鏡像：右手由大拇指從 C 開始，左手由小指從 C 開始。同樣的音、不同的手指：第一次念出右手的指法，第二次念左手的。",
+    ],
+    abc: `${head(72)}V:1\nC D E F | G4 | G F E D | C4 |]\nV:2 clef=bass\nC, D, E, F, | G,4 | G, F, E, D, | C,4 |]`,
+    mode: "wait",
+    tolerance: 200,
+    keys: "Z X C V B + Q W E R T",
+    fingers: ["1 2 3 4 | 5 | 5 4 3 2 | 1", "5 4 3 2 | 1 | 1 2 3 4 | 5"],
+  },
+  {
+    id: "hands-contrary",
+    instrument: "keyboard",
+    level: "L1",
+    n: "H2",
+    hands: "two",
+    title: ["Contrary motion", "反向進行"],
+    task: [
+      "The hands move apart and come back: the right hand climbs C to G while the left hand falls G to C.",
+      "雙手向外分開再回來：右手從 C 往上到 G，同時左手從 G 往下到 C。",
+    ],
+    how: [
+      "Here both hands use the same fingers at the same time (thumbs, then 2, 3 …): easier than it looks. Contrary motion is how two-part music keeps its voices apart.",
+      "這裡兩手同時用一樣的手指（大拇指，然後 2、3 …）：比看起來容易。反向進行讓兩個聲部保持分開，是二聲部音樂的基本手法。",
+    ],
+    abc: `${head(72)}V:1\nC D E F | G4 | G F E D | C4 |]\nV:2 clef=bass\nG, F, E, D, | C,4 | C, D, E, F, | G,4 |]`,
+    mode: "wait",
+    tolerance: 200,
+    keys: "B V C X Z + Q W E R T",
+    fingers: ["1 2 3 4 | 5 | 5 4 3 2 | 1", "1 2 3 4 | 5 | 5 4 3 2 | 1"],
+  },
+  {
+    id: "ode-hands",
+    instrument: "keyboard",
+    level: "L2",
+    n: "H3",
+    hands: "two",
+    title: ["Ode to Joy with a bass", "快樂頌加上低音"],
+    task: [
+      "The tune in the right hand; under it the left hand holds C or G, one note a bar (two in bars 4 and 8).",
+      "右手彈旋律；左手在下面按住 C 或 G，每小節一個音（第 4、8 小節兩個）。",
+    ],
+    how: [
+      "The bass is the harmony: C under the bars that rest on C, G under those that lean towards it. Learn the left hand alone first (it is only two keys, **Z** and **B**), then put the hands together slowly.",
+      "低音就是和聲：落在 C 的小節下面放 C，傾向 C 的小節下面放 G。先單獨練左手（只有 **Z** 和 **B** 兩個鍵），再慢慢雙手合起來。",
+    ],
+    abc: `${head(92)}V:1\nE E F G | G F E D | C C D E | E3/2 D/2 D2 | E E F G | G F E D | C C D E | D3/2 C/2 C2 |]\nV:2 clef=bass\nC,4 | G,4 | C,4 | G,2 G,2 | C,4 | G,4 | C,4 | G,2 C,2 |]`,
+    mode: "wait",
+    tolerance: 160,
+    keys: "Z B + Q W E R T",
+    fingers: ["3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 3 2 2 | 3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 2 1 1", "5 | 1 | 5 | 1 1 | 5 | 1 | 5 | 1 5"],
+  },
+  {
+    id: "twinkle-hands",
+    instrument: "keyboard",
+    level: "L3",
+    n: "H4",
+    hands: "two",
+    title: ["Twinkle, Twinkle with a bass", "小星星加上低音"],
+    task: [
+      "The whole tune in the right hand, in time; the left hand changes every half bar between C, F and G.",
+      "右手彈全曲並跟著拍子；左手每半小節在 C、F、G 之間換音。",
+    ],
+    how: [
+      "The left hand stays in one place (little finger on C, thumb on G) and plays the three chords' roots, the I, IV and V every simple tune is built on.",
+      "左手停在同一個位置（小指在 C，大拇指在 G），彈三個和弦的根音：每首簡單曲子都建立在這三個和弦（I、IV、V）上。",
+    ],
+    abc: `${head(88)}V:1\nC C G G | A A G2 | F F E E | D D C2 | G G F F | E E D2 | G G F F | E E D2 | C C G G | A A G2 | F F E E | D D C2 |]\nV:2 clef=bass\nC,4 | F,2 C,2 | F,2 C,2 | G,2 C,2 | C,2 F,2 | C,2 G,2 | C,2 F,2 | C,2 G,2 | C,4 | F,2 C,2 | F,2 C,2 | G,2 C,2 |]`,
+    mode: "time",
+    tolerance: 140,
+    keys: "Z V B + Q W E R T Y",
+    fingers: [
+      "1 1 4 4 | 5 5 4 | 4 4 3 3 | 2 2 1 | 5 5 4 4 | 3 3 2 | 5 5 4 4 | 3 3 2 | 1 1 4 4 | 5 5 4 | 4 4 3 3 | 2 2 1",
+      "5 | 2 5 | 2 5 | 1 5 | 5 2 | 5 1 | 5 2 | 5 1 | 5 | 2 5 | 2 5 | 1 5",
+    ],
   },
 ];

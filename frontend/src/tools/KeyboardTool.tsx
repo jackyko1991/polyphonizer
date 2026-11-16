@@ -88,7 +88,8 @@ export default function KeyboardTool() {
   const setArmed = (v: boolean | ((a: boolean) => boolean)) => armKeyboard(typeof v === "function" ? v(armed) : v);
   // a lesson asked for the home-row layout with its C here
   useEffect(() => {
-    if (baseRequest) update({ baseC: baseRequest.c, layout: "typing" });
+    // (both hands: the two-row layout, the left hand's row from its own C)
+    if (baseRequest) update(baseRequest.low !== undefined ? { baseC: baseRequest.c, lowC: baseRequest.low, layout: "tworow" } : { baseC: baseRequest.c, layout: "typing" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseRequest]);
   const [lit, setLit] = useState<Set<number>>(new Set());

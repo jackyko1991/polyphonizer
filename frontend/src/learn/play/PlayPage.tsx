@@ -265,13 +265,14 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
     };
   }, [lesson.abc, lesson.fingers, fingering]);
 
-  // open the keyboard with the computer keys on, home row from middle C
+  // open the keyboard with the computer keys on: home row from middle C, or for both hands the two rows (left from C3)
   useEffect(() => {
     openTool("keyboard");
     armKeyboard(true);
-    requestKeyboardBase(60);
+    if (lesson.hands === "two") requestKeyboardBase(60, 48);
+    else requestKeyboardBase(60);
     return () => setKeyHint([]);
-  }, []);
+  }, [lesson.hands]);
 
   /** the target at the chosen tempo (the engraving's times are at the marked tempo) */
   const target: TargetNote[] = useMemo(() => {

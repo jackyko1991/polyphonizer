@@ -84,6 +84,7 @@ import { VerovioToolkit } from "verovio/esm";
 import { exampleData, fixAbcKeys } from "../src/engine/abc.ts";
 import { PLAY_LESSONS } from "../src/learn/play/lessons.ts";
 import { KEY_OFFSETS } from "../src/tools/music.ts";
+import { keyLabelFor } from "../src/tools/keyLayouts.ts";
 
 /** the pitches every lesson must contain, in time order (chords low to high) */
 const EXPECTED: Record<string, number[]> = {
@@ -101,6 +102,11 @@ const EXPECTED: Record<string, number[]> = {
   "melody-bass": [60, 76, 74, 72, 74, 60, 76, 76, 76, 67, 74, 74, 74, 60, 76, 76, 76],
   twinkle: [60, 60, 67, 67, 69, 69, 67, 65, 65, 64, 64, 62, 62, 60, 67, 67, 65, 65, 64, 64, 62, 67, 67, 65, 65, 64, 64, 62, 60, 60, 67, 67, 69, 69, 67, 65, 65, 64, 64, 62, 62, 60],
   "ode-whole": [64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 64, 62, 62, 64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 62, 60, 60],
+  // both hands: the left hand's notes (C3 …) sound with the right hand's
+  "hands-parallel": [48, 60, 50, 62, 52, 64, 53, 65, 55, 67, 55, 67, 53, 65, 52, 64, 50, 62, 48, 60],
+  "hands-contrary": [55, 60, 53, 62, 52, 64, 50, 65, 48, 67, 48, 67, 50, 65, 52, 64, 53, 62, 55, 60],
+  "ode-hands": [48, 64, 64, 65, 67, 55, 67, 65, 64, 62, 48, 60, 60, 62, 64, 55, 64, 62, 55, 62, 48, 64, 64, 65, 67, 55, 67, 65, 64, 62, 48, 60, 60, 62, 64, 55, 62, 60, 48, 60],
+  "twinkle-hands": [48, 60, 60, 67, 67, 53, 69, 69, 48, 67, 53, 65, 65, 48, 64, 64, 55, 62, 62, 48, 60, 48, 67, 67, 53, 65, 65, 48, 64, 64, 55, 62, 48, 67, 67, 53, 65, 65, 48, 64, 64, 55, 62, 48, 60, 60, 67, 67, 53, 69, 69, 48, 67, 53, 65, 65, 48, 64, 64, 55, 62, 62, 48, 60],
 };
 
 test("every Play lesson's music is drawn by Verovio with exactly the expected notes, bars full", async () => {
@@ -127,12 +133,15 @@ test("every Play lesson's music is drawn by Verovio with exactly the expected no
   }
 });
 
-test("every lesson fits the computer keys from middle C, except the octave lesson", () => {
+test("every lesson fits the computer keys from middle C (both-hands lessons: the two rows, left from C3), except the octave lesson", () => {
   const reach = new Set(Object.values(KEY_OFFSETS).map((o) => 60 + o));
+  const twoRows = (m: number) => keyLabelFor("tworow", m, { high: 60, low: 48 }) !== null;
   for (const id of Object.keys(EXPECTED)) {
     if (id === "two-octaves") continue;
-    for (const m of EXPECTED[id]) assert.ok(reach.has(m), `${id}: ${m} is out of reach`);
+    const hands = PLAY_LESSONS.find((l) => l.id === id)!.hands === "two";
+    for (const m of EXPECTED[id]) assert.ok(hands ? twoRows(m) : reach.has(m), `${id}: ${m} is out of reach`);
   }
+  assert.ok(PLAY_LESSONS.filter((l) => l.hands === "two").length >= 4);
 });
 
 import { fingerTokens, shownFingers } from "../src/engine/fingering.ts";

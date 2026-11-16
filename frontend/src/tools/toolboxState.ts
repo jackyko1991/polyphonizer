@@ -21,7 +21,8 @@ export interface ToolboxState {
   /** keys to outline as the next ones to play (Learn to Play) */
   hint: number[];
   /** a lesson's request: the home-row ("typing") layout with its C here (a counter, so the same value repeats) */
-  baseRequest: { c: number; n: number } | null;
+  /** a lesson's request: the right hand's C (one row), and with `low` the left hand's too (the two-row layout) */
+  baseRequest: { c: number; n: number; low?: number } | null;
 }
 
 const KEY = "polyphonizer.toolbox";
@@ -100,4 +101,4 @@ export const moveTool = (id: ToolId, to: number) => set({ ...state, open: moved(
 
 export const armKeyboard = (on: boolean) => state.keyboardArmed !== on && set({ ...state, keyboardArmed: on });
 export const setKeyHint = (keys: number[]) => set({ ...state, hint: keys });
-export const requestKeyboardBase = (c: number) => set({ ...state, baseRequest: { c, n: (state.baseRequest?.n ?? 0) + 1 } });
+export const requestKeyboardBase = (c: number, low?: number) => set({ ...state, baseRequest: { c, low, n: (state.baseRequest?.n ?? 0) + 1 } });
