@@ -15,6 +15,7 @@ export const SCORE_SOURCES = [
   "https://raw.githubusercontent.com/craigsapp/scarlatti-keyboard-sonatas/",
   "https://raw.githubusercontent.com/fosfrancesco/asap-dataset/",
   "https://raw.githubusercontent.com/josquin-research-project/jrp-scores/",
+  "https://raw.githubusercontent.com/MarkGotham/When-in-Rome/",
 ];
 
 /** the Cache API cache the downloaded scores live in */
@@ -39,7 +40,7 @@ export function scoreUrlsIn(code: string): string[] {
 export async function localPathFor(url: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(url));
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  const ext = /\.(mxl|musicxml|xml|krn|abc|mid|midi|mei)$/i.exec(url)?.[1].toLowerCase() ?? "mxl";
+  const ext = /\.(mxl|musicxml|xml|krn|abc|mid|midi|mei|txt)$/i.exec(url)?.[1].toLowerCase() ?? "mxl";
   return `/files/fetched/${hex}.${ext}`;
 }
 

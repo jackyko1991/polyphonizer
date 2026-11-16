@@ -16,6 +16,8 @@ import { useEffect, useMemo, useState } from "react";
 import { catalogIds, idLabel, idMatches, parseQuery } from "./library/catalogNumbers.ts";
 import { elsewhereLinks, LICENCE_CLASSES, licenceClass, searchTerms, type LicenceClass } from "./library/elsewhere.ts";
 import { AFFILIATE_REL, urtextUrl } from "./library/urtext.ts";
+import { analysisKey, analysisUrl, codeWithHarmony, type Analyses } from "./library/analyses.ts";
+import { IMSLP, IMSLP_SOURCE, imslpRows, parseImslp } from "./library/imslp.ts";
 import { MUTOPIA, MUTOPIA_LICENCES, MUTOPIA_SOURCE, mutopiaLinks, mutopiaRow, type MutopiaRow } from "./library/mutopia.ts";
 import { byComposer, codeFor, idText, MUSIC21, sourceOf, type Row, type Source } from "./library/collections.ts";
 import { addRecent } from "./project.ts";
@@ -212,6 +214,29 @@ export default function LibraryPage() {
   const [sources, setSources] = useState<Record<string, Source>>({});
   // Mutopia's pieces by their page (their files are downloaded there, not opened here)
   const [mutopia, setMutopia] = useState<Map<string, MutopiaRow>>(new Map());
+  // When in Rome's harmonic analyses, by Library row; and the filter for works that have one
+  const [analyses, setAnalyses] = useState<Analyses>({ sha: "", works: {} });
+  const [withHarmony, setWithHarmony] = useState(false);
+  const analysisOf = (x: Row) => {
+    const k = analysisKey(x);
+    return k ? analyses.works[k] : undefined;
+  };
+  // IMSLP's index: large, fetched only when asked for (its source chosen, or "also search IMSLP")
+  const [imslp, setImslp] = useState<"off" | "loading" | "on" | "error">("off");
+  const loadImslp = () => {
+    if (imslp !== "off" && imslp !== "error") return;
+    setImslp("loading");
+    fetch(`${import.meta.env.BASE_URL}library/imslp.tsv`)
+      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
+      .then((tsv) => {
+        setRows((old) => {
+          const eras = new Map((old ?? []).map((x) => [x[4], x[8]] as const));
+          return [...(old ?? []), ...imslpRows(parseImslp(tsv), eras)].sort(byComposer);
+        });
+        setImslp("on");
+      })
+      .catch(() => setImslp("error"));
+  };
   const [source, setSource] = useState("");
   const [collection, setCollection] = useState("");
   const [composer, setComposer] = useState("");
@@ -222,22 +247,23 @@ export default function LibraryPage() {
   const [openParts, setOpenParts] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState(PAGE);
   useEffect(() => {
-    void Promise.all([import("./library/catalog.json"), import("./library/collections.json"), import("./library/mutopia.json")]).then(([m, o, mu]) => {
+    void Promise.all([import("./library/catalog.json"), import("./library/collections.json"), import("./library/mutopia.json"), import("./library/analyses.json")]).then(([m, o, mu, an]) => {
+      setAnalyses((an.default ?? an) as unknown as Analyses);
       const data = (m.default ?? m) as unknown as { music21: string; works: Row[] };
       const open = (o.default ?? o) as unknown as { sources: Record<string, Source>; works: Row[] };
       const mutopia = ((mu.default ?? mu) as unknown as { works: MutopiaRow[] }).works;
       setMutopia(new Map(mutopia.map((w) => [mutopiaLinks(w).page, w])));
       setRows([...data.works, ...open.works, ...mutopia.map(mutopiaRow)].sort(byComposer));
-      setSources({ ...open.sources, [MUTOPIA]: MUTOPIA_SOURCE });
+      setSources({ ...open.sources, [MUTOPIA]: MUTOPIA_SOURCE, [IMSLP]: IMSLP_SOURCE });
       setVersion(data.music21);
     });
   }, []);
-  useEffect(() => setShown(PAGE), [query, source, collection, composer, era, ensemble, instruments, licence]);
+  useEffect(() => setShown(PAGE), [query, source, collection, composer, era, ensemble, instruments, licence, withHarmony]);
 
   const composerName = (c: string) => (zh && COMPOSER_ZH[c] ? `${COMPOSER_ZH[c]}（${c}）` : c);
   const collectionName = (c: string) => (COLLECTIONS[c] ? pick(COLLECTIONS[c]) : sources[c] ? pick(sources[c].name) : c);
   const sourceName = (s: string) => (s === MUSIC21 ? t("src.music21") : sources[s] ? pick(sources[s].name) : s);
-  const inSource = (r: Row) => (!source || sourceOf(r) === source) && (!licence || licenceClass(r, sources) === licence);
+  const inSource = (r: Row) => (!source || sourceOf(r) === source) && (!licence || licenceClass(r, sources) === licence) && (!withHarmony || !!analysisOf(r));
 
   // search text per row: title, composer in both languages, music21's own spelling, tradition, collection, file
   const index = useMemo(
@@ -287,16 +313,16 @@ export default function LibraryPage() {
         rest.every((w) => index[i].includes(w)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, index, numbers, source, licence, collection, activeComposer, era, ensemble, instruments, query]);
+  }, [rows, index, numbers, source, licence, withHarmony, analyses, collection, activeComposer, era, ensemble, instruments, query]);
 
   // filter menus count what the other filters leave
   const composerCounts = useMemo(
     () => count(rows?.filter((r) => inSource(r) && (!collection || r[0] === collection) && (!era || r[8] === era)) ?? [], (r) => r[4]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, source, licence, collection, era],
+    [rows, source, licence, withHarmony, analyses, collection, era],
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const eraCounts = useMemo(() => count(rows?.filter((r) => inSource(r) && (!collection || r[0] === collection)) ?? [], (r) => r[8]), [rows, source, licence, collection]);
+  const eraCounts = useMemo(() => count(rows?.filter((r) => inSource(r) && (!collection || r[0] === collection)) ?? [], (r) => r[8]), [rows, source, licence, withHarmony, analyses, collection]);
   const ensembleCounts = useMemo(() => count(filtered, (r) => ensembleOf(r[5])), [filtered]);
   // works that have each instrument, among those the other filters leave
   const instrumentCounts = useMemo(() => {
@@ -305,7 +331,7 @@ export default function LibraryPage() {
     return c;
   }, [filtered]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const collectionCounts = useMemo(() => [...count(rows?.filter(inSource) ?? [], (r) => r[0]).entries()].sort((a, b) => b[1] - a[1]), [rows, source, licence]);
+  const collectionCounts = useMemo(() => [...count(rows?.filter(inSource) ?? [], (r) => r[0]).entries()].sort((a, b) => b[1] - a[1]), [rows, source, licence, withHarmony, analyses]);
   const sourceCounts = useMemo(() => count(rows ?? [], sourceOf), [rows]);
   const licenceCounts = useMemo(() => count(rows ?? [], (r) => licenceClass(r, sources)), [rows, sources]);
   // the same search in libraries the Library can't open from (the words typed, else the composer)
@@ -313,7 +339,9 @@ export default function LibraryPage() {
 
   // a library piece opens as a sample (a scratch copy), not over the user's own score
   const open = (r: Row) => {
-    const code = codeFor(r, sources);
+    // with When in Rome's analysis, when it has one: a line that writes the Roman numerals under the bass
+    const an = analysisOf(r);
+    const code = an ? codeWithHarmony(codeFor(r, sources), analysisUrl(analyses, an)) : codeFor(r, sources);
     const label = `${r[4]}: ${r[3]}`;
     openInEditor(r[13] ? `src:${r[1]}` : `lib:${r[1]}#${r[2] ?? ""}`, label, code);
     addRecent({ label, code });
@@ -328,15 +356,21 @@ export default function LibraryPage() {
       <p className="mt-3 text-gray-600">{t("lib.intro")}</p>
       <div className="sticky top-0 z-10 -mx-5 mt-5 border-b border-gray-200 bg-white/95 px-5 py-3 backdrop-blur">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-          <select value={source} onChange={(e) => (setSource(e.target.value), setCollection(""))} aria-label={t("lib.sourceFilter")} className={select} data-testid="lib-source">
+          <select
+            value={source}
+            onChange={(e) => (setSource(e.target.value), setCollection(""), e.target.value === IMSLP && loadImslp())}
+            aria-label={t("lib.sourceFilter")}
+            className={select}
+            data-testid="lib-source"
+          >
             <option value="">
               {t("lib.allSources")} ({rows?.length ?? "…"})
             </option>
             {[MUSIC21, ...Object.keys(sources)]
-              .filter((s) => sourceCounts.get(s))
+              .filter((s) => sourceCounts.get(s) || s === IMSLP)
               .map((s) => (
                 <option key={s} value={s}>
-                  {sourceName(s)} ({sourceCounts.get(s)})
+                  {sourceName(s)} ({sourceCounts.get(s) ?? (imslp === "loading" ? "…" : t("lib.loadsWhenChosen"))})
                 </option>
               ))}
           </select>
@@ -449,6 +483,14 @@ export default function LibraryPage() {
         {!rows && <p className="mt-2 text-xs text-gray-500">{t("lib.loading")}</p>}
       </div>
 
+      <label className="mt-2 mr-4 inline-flex items-center gap-1.5 text-sm text-gray-700" data-testid="lib-harmony-filter">
+        <input type="checkbox" checked={withHarmony} onChange={(e) => setWithHarmony(e.target.checked)} />
+        {t("lib.withHarmony")} ({Object.keys(analyses.works).length})
+      </label>
+      <label className="mt-2 inline-flex items-center gap-1.5 text-sm text-gray-700" data-testid="lib-imslp-toggle">
+        <input type="checkbox" checked={imslp === "on" || imslp === "loading"} disabled={imslp === "loading" || imslp === "on"} onChange={() => loadImslp()} />
+        {imslp === "loading" ? t("lib.imslpLoading") : imslp === "error" ? t("lib.imslpError") : t("lib.imslpAlso")}
+      </label>
       {/* the same search in libraries this page can't open from: one line under the filters */}
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm" data-testid="lib-elsewhere">
         <span className="text-gray-600">{t("lib.elsewhere")}</span>
@@ -489,6 +531,7 @@ export default function LibraryPage() {
           const ids = catalogIds(idText(r), r[4]);
           const src = r[13] ? sources[r[13]] : undefined;
           const mu = r[13] === MUTOPIA ? mutopia.get(r[1]) : undefined;
+          const isImslp = r[13] === IMSLP;
           const links = mu ? mutopiaLinks(mu) : null;
           const lic = mu ? MUTOPIA_LICENCES[mu[6]] : src ? { name: src.licence, url: src.licenceUrl } : null;
           const urtext = urtextUrl(r);
@@ -509,12 +552,16 @@ export default function LibraryPage() {
               </p>
               {mu ? (
                 <p className="truncate text-xs text-gray-600">{mu[4]}</p>
-              ) : (
+              ) : isImslp ? null : (
                 <PartsLine row={r} open={openParts.has(r[1] + (r[2] ?? ""))} onToggle={() => setOpenParts((o) => { const k = r[1] + (r[2] ?? ""); const n = new Set(o); if (!n.delete(k)) n.add(k); return n; })} />
               )}
               {mu ? (
                 <p className="truncate text-xs text-gray-500" data-testid="lib-credit">
                   {MUTOPIA_SOURCE.credit} · {t("lib.mutopiaHow")}
+                </p>
+              ) : isImslp ? (
+                <p className="truncate text-xs text-gray-500" data-testid="lib-credit">
+                  {IMSLP_SOURCE.credit} · {t("lib.imslpHow")}
                 </p>
               ) : src ? (
                 <p className="truncate text-xs text-gray-500" title={fill(t("lib.downloads"), { source: pick(src.name) })} data-testid="lib-credit">
@@ -548,6 +595,11 @@ export default function LibraryPage() {
                   {lic.name}
                 </a>
               )}
+              {analysisOf(r) && (
+                <span className="ml-2 rounded border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-800" title={t("lib.harmonyHint")} data-testid="lib-harmony">
+                  {t("lib.harmony")}
+                </span>
+              )}
               {urtext && (
                 // a printed urtext edition to buy (an affiliate link; see the disclosure at the bottom)
                 <a href={urtext} target="_blank" rel={AFFILIATE_REL} title={t("lib.urtextHint")} className="ml-2 text-[11px] text-gray-500 hover:text-(--lk-accent) hover:underline" data-testid="lib-urtext">
@@ -555,7 +607,11 @@ export default function LibraryPage() {
                 </a>
               )}
             </span>
-            {links ? (
+            {isImslp ? (
+              <a href={r[1]} target="_blank" rel="noopener noreferrer" className="rounded-md bg-(--lk-accent) px-3 py-1 text-sm font-medium text-white hover:opacity-90" data-testid="lib-imslp">
+                IMSLP ↗
+              </a>
+            ) : links ? (
               // Mutopia's files: downloaded from its site, then opened here (Import, or drop the file on the editor)
               <span className="flex items-center gap-1.5" data-testid="lib-mutopia">
                 {links.midi && (
@@ -630,6 +686,24 @@ export default function LibraryPage() {
         </a>{" "}
         <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
           CC BY-NC 4.0 ↗
+        </a>
+      </p>
+      <p className="mt-1 text-xs text-gray-500" data-testid="lib-credit-mutopia">
+        {t("lib.creditMutopia")}{" "}
+        <a href="https://www.mutopiaproject.org" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
+          mutopiaproject.org ↗
+        </a>
+      </p>
+      <p className="mt-1 text-xs text-gray-500" data-testid="lib-credit-imslp">
+        {t("lib.creditImslp")}{" "}
+        <a href="https://imslp.org" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
+          imslp.org ↗
+        </a>
+      </p>
+      <p className="mt-1 text-xs text-gray-500" data-testid="lib-credit-wir">
+        {t("lib.creditWir")}{" "}
+        <a href="https://github.com/MarkGotham/When-in-Rome" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
+          When in Rome ↗
         </a>
       </p>
       <p className="mt-4 border-t border-gray-200 pt-3 text-center text-xs text-gray-400" data-testid="lib-disclosure">

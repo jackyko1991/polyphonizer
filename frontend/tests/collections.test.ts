@@ -159,6 +159,7 @@ test("the allow-list takes exactly the collections' repositories", () => {
     `https://raw.githubusercontent.com/craigsapp/scarlatti-keyboard-sonatas/${sha}/kern/L001K514.krn`,
     `https://raw.githubusercontent.com/fosfrancesco/asap-dataset/${sha}/Chopin/Ballades/3/xml_score.musicxml`,
     `https://raw.githubusercontent.com/josquin-research-project/jrp-scores/${sha}/Jos/Jos0301a-Missa_Ave_maris_stella-Kyrie.krn`,
+    `https://raw.githubusercontent.com/MarkGotham/When-in-Rome/${sha}/Corpus/Early_Choral/Bach,_Johann_Sebastian/Chorales/001/analysis.txt`,
   ])
     assert.ok(isAllowedScoreUrl(ok), ok);
   for (const bad of [
@@ -183,7 +184,7 @@ test("prelude.py allows the same collections", () => {
   const prelude = readFileSync("src/engine/prelude.py", "utf8");
   const block = /_SCORE_SOURCES = \(([\s\S]*?)\)/.exec(prelude)![1];
   assert.deepEqual([...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]), SCORE_SOURCES);
-  assert.match(prelude, /HEADER = "from music21 import \*\\nfrom polyphonizer import tiny, together, load, edit_bar, fetch_score, pages\\n"/);
+  assert.match(prelude, /HEADER = "from music21 import \*\\nfrom polyphonizer import tiny, together, load, edit_bar, fetch_score, pages, with_harmony\\n"/);
 });
 
 test("the worker finds fetch_score string literals in the code", () => {
@@ -207,4 +208,27 @@ test("a fetched score's local file is named by the URL's SHA-1, with its extensi
   assert.match(a, /^\/files\/fetched\/[0-9a-f]{40}\.krn$/);
   assert.notEqual(a, await localPathFor("https://raw.githubusercontent.com/craigsapp/joplin/x/kern/bethena.krn"));
   assert.match(await localPathFor("https://raw.githubusercontent.com/OpenScore/Lieder/x/a.mxl"), /\.mxl$/);
+});
+
+import { analysisKey, analysisUrl, codeWithHarmony, type Analyses } from "../src/library/analyses.ts";
+
+test("a When in Rome analysis: found for a corpus work or an OpenScore song, added to main.py as one line", () => {
+  const an = JSON.parse(readFileSync("src/library/analyses.json", "utf8")) as Analyses;
+  assert.ok(Object.keys(an.works).length > 500);
+  assert.match(an.sha, /^[0-9a-f]{40}$/);
+  // a Bach chorale from music21's corpus, and an OpenScore song by its lc id
+  const chorale = corpus.works.find((r) => r[1] === "bach/bwv269.mxl")!;
+  assert.equal(analysisKey(chorale), "bach/bwv269.mxl");
+  assert.ok(an.works["bach/bwv269.mxl"]);
+  const lied = data.works.find((r) => r[13] === "openscore-lieder" && analysisKey(r) && an.works[analysisKey(r)!])!;
+  assert.match(analysisKey(lied)!, /^lc\d+$/);
+  const url = analysisUrl(an, an.works["bach/bwv269.mxl"]);
+  assert.ok(url.startsWith(`https://raw.githubusercontent.com/MarkGotham/When-in-Rome/${an.sha}/Corpus/`), url);
+  assert.ok(isAllowedScoreUrl(url));
+  const code = codeWithHarmony(codeFor(chorale, data.sources), url);
+  assert.match(code, /# Harmony: When in Rome/);
+  assert.ok(code.includes(`score = with_harmony(score, fetch_score(${JSON.stringify(url)}))`));
+  assert.deepEqual(scoreUrlsIn(code), [url]);
+  // Mutopia and IMSLP rows have no analysis key
+  assert.equal(analysisKey(["mutopia", "https://x", null, "t", "c", 0, null, "", "", "", "", [], [], "mutopia"]), null);
 });

@@ -290,7 +290,7 @@ def _summary(s):
     }
 
 
-HEADER = "from music21 import *\nfrom polyphonizer import tiny, together, load, edit_bar, fetch_score, pages\n"
+HEADER = "from music21 import *\nfrom polyphonizer import tiny, together, load, edit_bar, fetch_score, pages, with_harmony\n"
 PROJECT = "/project"
 
 
@@ -301,6 +301,7 @@ def _expose_helpers():
 
     mod = types.ModuleType("polyphonizer")
     mod.tiny, mod.together, mod.load, mod.edit_bar, mod.fetch_score = tiny, together, load, edit_bar, fetch_score
+    mod.with_harmony = with_harmony
     mod.pages = pages
     sys.modules["polyphonizer"] = mod
 
@@ -519,6 +520,7 @@ _SCORE_SOURCES = (
     "https://raw.githubusercontent.com/craigsapp/scarlatti-keyboard-sonatas/",
     "https://raw.githubusercontent.com/fosfrancesco/asap-dataset/",
     "https://raw.githubusercontent.com/josquin-research-project/jrp-scores/",
+    "https://raw.githubusercontent.com/MarkGotham/When-in-Rome/",
 )
 _FETCHED = {}
 
@@ -539,7 +541,29 @@ def fetch_score(url):
     if path is None:
         raise ValueError(f"could not get {url}: it isn't in this browser's cache and could not be downloaded "
                          "(are you offline?). fetch_score needs the URL written out in quotes.")
-    return converter.parse(path)
+    # (a When in Rome analysis is RomanText: Roman numerals by bar and beat)
+    return converter.parse(path, format="romantext") if url.endswith(".txt") else converter.parse(path)
+
+
+def with_harmony(score, analysis):
+    """The score with a harmonic analysis (RomanText, e.g. from When in Rome via fetch_score) written under its lowest
+    part: each Roman numeral as a lyric on the bass note sounding at its bar and beat. Returns the score."""
+    from music21 import roman
+
+    bass = score.parts[-1] if score.parts else score
+    measures = {m.number: m for m in bass.getElementsByClass("Measure")}
+    for m in analysis.recurse().getElementsByClass("Measure"):
+        target = measures.get(m.number)
+        if target is None:
+            continue
+        for rn in m.getElementsByClass(roman.RomanNumeral):
+            # the bass note sounding at that point of the bar: the one starting there, else the one held over it (its
+            # numerals then read in order, "I V")
+            sounding = [n for n in target.recurse().notes if n.offset <= rn.offset + 1e-6]
+            if sounding:
+                n = max(sounding, key=lambda x: x.offset)
+                n.lyric = f"{n.lyric} {rn.figure}" if n.lyric else rn.figure
+    return score
 
 
 _expose_helpers()

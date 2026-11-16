@@ -23,6 +23,8 @@ preview = { cmd = "npm run preview", cwd = "frontend", depends-on = ["build"] }
 catalog = { cmd = "python scripts/corpus_catalog.py", description = "rewrite the Library's music21 corpus catalogue" }
 collections = { cmd = "python scripts/collections_catalog.py", description = "rewrite the open-licence collections catalogue (GITHUB_TOKEN used if set)" }
 mutopia = { cmd = "python scripts/mutopia_catalog.py", description = "rewrite the Library's listing of the Mutopia Project (GITHUB_TOKEN used if set)" }
+imslp = { cmd = "python scripts/imslp_catalog.py", description = "rewrite the Library's index of IMSLP's works (frontend/public/library/imslp.tsv; ~10 min, politely paced)" }
+harmony = { cmd = "python scripts/harmony_catalog.py", description = "rewrite which Library works have a When in Rome harmonic analysis (GITHUB_TOKEN used if set)" }
 runner = { cmd = "python runner/server.py", description = "the transcription runner on 127.0.0.1:8765 (Transcribe ▸ My computer)" }
 test-runner = { cmd = "python -m unittest discover -s runner/tests -v", description = "the runner's tests" }
 
