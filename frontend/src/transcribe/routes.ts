@@ -2,7 +2,7 @@
  * Turning a picture of music (PDF, photo) or a recording (audio, video) into notes, by one of three routes that all
  * speak the same small protocol (docs/plans/transcription.md):
  * - this browser: recordings only (Spotify's Basic Pitch, in the page; nothing leaves the device);
- * - your own runner: `pixi run runner` on your computer, like Ollama for this one job (OMR with copista, piano with
+ * - your own runner: `pixi run runner` on your computer (OMR with copista, piano with
  *   Transkun);
  * - the Polyphonizer service: the same runner, hosted, as a paid tier (coming).
  *

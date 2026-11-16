@@ -19,8 +19,8 @@ const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, str
     icon: Laptop,
     name: ["My computer or my server", "我的電腦或我的伺服器"],
     about: [
-      "Free and private: start the runner with pixi run runner in the Polyphonizer folder, like Ollama. Or give the address of your own server or Space that speaks the same protocol.",
-      "免費且私密：在 Polyphonizer 資料夾執行 pixi run runner 啟動執行器，像 Ollama 一樣；或填入你自己的伺服器或 Space 位址（同樣的協定）。",
+      "Free and private: start the runner with pixi run runner in the Polyphonizer folder. Or give the address of your own server or Space that speaks the same protocol.",
+      "免費且私密：在 Polyphonizer 資料夾執行 pixi run runner 啟動執行器；或填入你自己的伺服器或 Space 位址（同樣的協定）。",
     ],
   },
   service: {

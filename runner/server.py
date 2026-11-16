@@ -2,7 +2,7 @@
 
     pixi run runner            # http://127.0.0.1:8765, for the site (Transcribe ▸ My computer)
 
-Like Ollama for this one job: the site sends a file, the runner hands it to an engine installed here and sends back
+The site sends a file, the runner hands it to an engine installed here and sends back
 MusicXML or MIDI. Nothing leaves the computer. It speaks the protocol of docs/plans/transcription.md:
 
     GET  /status                      → {"omr": bool, "transcribe": bool, "version": "…"}

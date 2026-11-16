@@ -20,7 +20,7 @@ speaking one small protocol, so the site keeps one client (`frontend/src/transcr
 | Route | Does | How | Status |
 |---|---|---|---|
 | This browser | recordings only | Spotify Basic Pitch (`@spotify/basic-pitch`, Apache-2.0, TF.js) → MIDI; music21 quantises it into a score | next (needs the npm package and its model files, a few MB) |
-| My computer | pages and recordings | the local runner, `pixi run runner` on 127.0.0.1:8765, like Ollama: KobiMusic copista (Apache-2.0, CPU, ~5–15 s a page) for OMR; Transkun (MIT, CPU) for piano | to build |
+| My computer | pages and recordings | the local runner, `pixi run runner` on 127.0.0.1:8765: KobiMusic copista (Apache-2.0, CPU, ~5–15 s a page) for OMR; Transkun (MIT, CPU) for piano | built (copista) |
 | Polyphonizer service | the same | the runner's code on a small CPU server, as a paid plan | later, if wanted |
 | Hugging Face | the same | a Space speaking this protocol, duplicated to the learner's own account (free Spaces now need PRO; ZeroGPU gives callers only minutes a day) | optional |
 
