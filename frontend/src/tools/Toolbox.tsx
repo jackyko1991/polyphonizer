@@ -96,8 +96,10 @@ export default function Toolbox() {
     <>
       {/* launcher and its menu */}
       <div
-        // always in the same place, bottom right, above everything (the dock and the phone sheet too)
-        className="fixed right-4 bottom-10 z-[70] flex flex-col items-end gap-2"
+        // always in the same place, bottom right, above everything (the dock and the phone sheet too). The box is as tall
+        // as the hidden menu, so it lets the pointer through (to the dock's Close and Full screen underneath); only the
+        // button and the open menu take it
+        className="pointer-events-none fixed right-4 bottom-10 z-[70] flex flex-col items-end gap-2"
         onMouseEnter={hoverIn}
         onMouseLeave={hoverOut}
         onKeyDown={(e) => e.key === "Escape" && setMenu(false)}
@@ -105,7 +107,7 @@ export default function Toolbox() {
         <div
           role="menu"
           aria-label={pick(["Music tools", "音樂工具"])}
-          className={`flex flex-col items-end gap-2 pb-1 ${menu ? "" : "pointer-events-none"}`}
+          className={`flex flex-col items-end gap-2 pb-1 ${menu ? "pointer-events-auto" : ""}`}
         >
           {TOOLS.map((t, i) => {
             const running = box.running.includes(t.id);
@@ -148,7 +150,7 @@ export default function Toolbox() {
           aria-label={pick(["Music tools", "音樂工具"])}
           title={pick(["Music tools: keyboard, metronome, tuner", "音樂工具：虛擬鍵盤、節拍器、調音器"])}
           data-testid="toolbox"
-          className="relative flex h-12 w-12 items-center justify-center rounded-full bg-(--lk-accent) text-white shadow-lg transition-all duration-150 ease-out hover:scale-[1.06] hover:shadow-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--lk-accent)"
+          className="pointer-events-auto relative flex h-12 w-12 items-center justify-center rounded-full bg-(--lk-accent) text-white shadow-lg transition-all duration-150 ease-out hover:scale-[1.06] hover:shadow-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--lk-accent)"
         >
           {menu ? (
             <X className="h-5 w-5 transition-transform duration-200" strokeWidth={2} aria-hidden />
