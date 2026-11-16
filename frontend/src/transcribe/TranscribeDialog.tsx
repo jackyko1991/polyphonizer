@@ -171,6 +171,9 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
                             {pick(["this computer", "這台電腦"])}
                           </button>
                         )}
+                        <a href="#/agents/runner" onClick={onClose} className="basis-full text-xs text-(--lk-accent) hover:underline" data-testid="runner-help">
+                          {pick(["How to run it on your computer, a server or a Hugging Face Space →", "如何在你的電腦、伺服器或 Hugging Face Space 上執行 →"])}
+                        </a>
                         {runner && <span className="basis-full text-xs text-emerald-700">✓ {pick(["Connected", "已連線"])} · {[runner.omr && pick(["reads pages", "讀譜"]), runner.transcribe && pick(["transcribes", "採譜"])].filter(Boolean).join(" · ") || pick(["no engine yet", "還沒有引擎"])}</span>}
                       </span>
                     )}

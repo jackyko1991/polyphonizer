@@ -15,8 +15,9 @@ An engine is a command with {in} and {out} for the files, so any tool can be use
 Found by themselves when on PATH: transkun (piano recordings), audiveris (printed pages). A video is turned into
 audio first with ffmpeg when it is installed.
 
-Only the site's own pages may call it (CORS), it listens on 127.0.0.1 only, and it keeps no files. Run on a server
-(behind HTTPS), set PZ_TOKEN: the site sends it as a bearer token (Transcribe ▸ address and token).
+Only the site's own pages may call it (CORS), it listens on 127.0.0.1 only, and it keeps no files. On a server (a VPS
+behind HTTPS, a Hugging Face Space; runner/Dockerfile): PZ_HOST=0.0.0.0 with PZ_TOKEN, which the site sends as a bearer
+token (Transcribe ▸ address and token). The site's page AI agent ▸ Runner says how.
 """
 
 import json
@@ -66,15 +67,29 @@ class Config:
 REPO = Path(__file__).resolve().parent.parent
 
 
+def bind_host(env=os.environ):
+    """where to listen: this computer only, unless PZ_HOST says otherwise (a server, a container), and then only with
+    a token, so no one else can use it"""
+    host = env.get("PZ_HOST", HOST)
+    if host not in ("127.0.0.1", "localhost", "::1") and not env.get("PZ_TOKEN"):
+        raise SystemExit(f"PZ_HOST={host} makes the runner reachable from other computers: set PZ_TOKEN too")
+    return host
+
+
 def copista_command():
-    """copisteria's command when it is installed (pixi run omr-setup): the omr environment's Python runs the wrapper"""
+    """copisteria's command when it is installed (pixi run omr-setup, or the Docker image): the omr environment's Python
+    runs the wrapper, or this Python when it has the reader (a container)"""
     sys.path.insert(0, str(Path(__file__).resolve().parent / "engines"))
     try:
         import copista
     finally:
         sys.path.pop(0)
+    import importlib.util
+
     env = REPO / ".pixi" / "envs" / "omr"
     py = env / ("python.exe" if os.name == "nt" else "bin/python")
+    if not py.exists() and importlib.util.find_spec("copisteria"):
+        py = Path(sys.executable)
     if not (copista.installed() and py.exists()):
         return None
     return f"{shlex.quote(str(py))} {shlex.quote(str(Path(copista.__file__)))} {{in}} {{out}}"
@@ -205,8 +220,9 @@ def make_server(address, cfg):
 def main():
     cfg = Config.from_env()
     port = int(os.environ.get("PZ_PORT", PORT))
-    httpd = make_server((HOST, port), cfg)
-    print(f"Polyphonizer runner {VERSION} on http://{HOST}:{port}")
+    host = bind_host()
+    httpd = make_server((host, port), cfg)
+    print(f"Polyphonizer runner {VERSION} on http://{host}:{port}" + (" (token required)" if cfg.token else ""))
     print(f"  reading pages (OMR): {cfg.omr or 'no engine (pixi run omr-setup, or set PZ_OMR)'}")
     print(f"  transcribing:        {cfg.transcribe or 'no engine (set PZ_TRANSCRIBE)'}")
     try:

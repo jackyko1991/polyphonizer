@@ -134,8 +134,14 @@ class Runner(unittest.TestCase):
         self.assertEqual(r.status, 200)
         self.assertEqual(server.Config.from_env({"PZ_TOKEN": "t"}, which=lambda n: None, copista="").token, "t")
 
-    def test_binds_to_this_computer_only(self):
+    def test_binds_to_this_computer_unless_told_and_then_only_with_a_token(self):
         self.assertEqual(server.HOST, "127.0.0.1")
+        self.assertEqual(server.bind_host({}), "127.0.0.1")
+        self.assertEqual(server.bind_host({"PZ_HOST": "127.0.0.1"}), "127.0.0.1")
+        # on a server (a VPS, a Space): every address, but never without a token
+        self.assertEqual(server.bind_host({"PZ_HOST": "0.0.0.0", "PZ_TOKEN": "long-secret"}), "0.0.0.0")
+        with self.assertRaises(SystemExit):
+            server.bind_host({"PZ_HOST": "0.0.0.0"})
 
 
 if __name__ == "__main__":

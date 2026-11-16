@@ -36,6 +36,7 @@ export const STRINGS = {
   "agents.tools": ["AI music tools", "AI 音樂工具"],
   "agents.skills": ["Skills", "Skills"],
   "agents.mcp": ["MCP", "MCP"],
+  "agents.runner": ["Runner", "執行器"],
   "agents.roadmap": ["Product roadmap", "產品路線圖"],
   "history.title": ["History of notation", "記譜史"],
   "history.intro": [

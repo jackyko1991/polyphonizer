@@ -26,7 +26,12 @@ def main():
     run("git", "fetch", "--quiet", "origin", COMMIT, cwd=READER)
     run("git", "checkout", "--quiet", COMMIT, cwd=READER)
     # the reader itself only: torch, opencv … are the omr environment's
-    run(sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "-e", str(READER))
+    import os
+    import sysconfig
+
+    # (as a user who can't write to this Python's packages, as in the Docker image: into the user's own)
+    user = [] if os.access(sysconfig.get_paths()["purelib"], os.W_OK) else ["--user"]
+    run(sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", *user, "-e", str(READER))
 
     from huggingface_hub import hf_hub_download
 
