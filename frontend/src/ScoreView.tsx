@@ -4,7 +4,7 @@
  * sound), sound, edit notes, and, with pages, edit line and page breaks (click a bar) and the page turns planned
  * around them; the Page setup dialog; export; full screen (a page reader with pages).
  */
-import { ChevronDown, ChevronLeft, ChevronRight, Download, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, RotateCcw, Square, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Download, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, Printer, RotateCcw, Square, X, ZoomIn } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -75,6 +75,22 @@ function printPages(pages: string[], title: string, numbers = true, size: [numbe
 
 /** how large the Score view draws the music: full size from 560 px, smaller on narrower panels (down to half at
  * phone width) so a line still holds three or four bars rather than one or two */
+/** how big the pages are drawn (paper sizes, not Continuous): side by side, one page as wide as the panel (read down),
+ * one whole page in view, or a percentage of the real paper size */
+type PageZoom = "auto" | "width" | "page" | number;
+const PAGE_ZOOMS: PageZoom[] = ["auto", "width", "page", 50, 75, 100, 125, 150, 200];
+const ZOOM_KEY = "polyphonizer.pageZoom";
+const loadZoom = (): PageZoom => {
+  try {
+    const v = localStorage.getItem(ZOOM_KEY) ?? "auto";
+    return PAGE_ZOOMS.find((z) => String(z) === v) ?? "auto";
+  } catch {
+    return "auto";
+  }
+};
+/** one millimetre in CSS pixels (96 per inch) */
+const MM = 96 / 25.4;
+
 export const scrollZoom = (panelPx: number) => Math.max(20, Math.min(40, Math.round(panelPx / 14)));
 
 export default function ScoreView({
@@ -163,6 +179,26 @@ export default function ScoreView({
   /** forced breaks drawn over the pages: page index, position in % of the page, kind */
   const [marks, setMarks] = useState<{ page: number; left: number; top: number; height: number; kind: "line" | "page"; bar: number }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [zoom, setZoomState] = useState<PageZoom>(loadZoom);
+  const setZoom = (z: PageZoom) => {
+    setZoomState(z);
+    try {
+      localStorage.setItem(ZOOM_KEY, String(z));
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  // the pages' width when not side by side (the panel's inner width is boxW less its padding)
+  const zoomWidth =
+    zoom === "width"
+      ? "100%"
+      : zoom === "page"
+        ? `${Math.round(Math.max(240, Math.min(boxW - 24, (boxH - 48) * (cur.width_mm / cur.height_mm))))}px`
+        : typeof zoom === "number"
+          ? `${Math.round((cur.width_mm * MM * zoom) / 100)}px`
+          : null;
+  // print or save as PDF: the pages as laid out (Continuous prints on A4)
+  const print = async () => score && printPages((await engravePages(score, cur)).pages, score.title, cur.page_numbers, [cur.width_mm, cur.height_mm]);
 
   useEffect(() => {
     const el = box.current;
@@ -670,6 +706,11 @@ export default function ScoreView({
             <Icon icon={FileCog} /> {t("pages.setup")}
           </button>
         )}
+        {pagesView && (
+          <button onClick={() => void print()} disabled={!score} className={BUTTON} title={t("export.print")} data-testid="print">
+            <Icon icon={Printer} /> {t("print")}
+          </button>
+        )}
         {busy && <span className="text-xs text-gray-500">{fit ? "…" : t("pages.engraving")}</span>}
         {eng && !fit && <span className="text-xs text-gray-500">{fill(t("pages.count"), { n: eng.pages.length })}</span>}
       </div>
@@ -704,6 +745,26 @@ export default function ScoreView({
       <div ref={box} className={`pz-score relative min-h-0 flex-1 bg-gray-100 p-3 ${reading ? "overflow-hidden" : "overflow-auto"}`} data-testid="score">
         {/* export and full screen: just above the sheet, staying in view while the score scrolls */}
         <div className="pointer-events-none sticky top-0 z-20 -mb-2 flex justify-end gap-1.5 [&>*]:pointer-events-auto" data-testid="score-actions">
+          {/* the pages' size (paper layouts; Continuous always fits the window) */}
+          {!fit && !reading && eng && (
+            <label className={`${small} relative`} title={t("zoom.title")}>
+              <Icon icon={ZoomIn} />
+              <span className="sr-only">{t("zoom.title")}</span>
+              <select
+                value={String(zoom)}
+                onChange={(e) => setZoom(PAGE_ZOOMS.find((z) => String(z) === e.target.value) ?? "auto")}
+                className="cursor-pointer appearance-none bg-transparent pr-4 outline-none"
+                data-testid="page-zoom"
+              >
+                {PAGE_ZOOMS.map((z) => (
+                  <option key={z} value={String(z)}>
+                    {typeof z === "number" ? `${z}%` : t(`zoom.${z}`)}
+                  </option>
+                ))}
+              </select>
+              <Icon icon={ChevronDown} className="pointer-events-none absolute right-2 h-3.5 w-3.5" />
+            </label>
+          )}
           {onExportCode !== undefined && (
             <div className="relative">
               <button onClick={() => setMenu((m) => !m)} disabled={!score} className={small} aria-expanded={menu}>
@@ -717,7 +778,7 @@ export default function ScoreView({
                   {[
                     ["export.musicxml", () => download(`${name}.musicxml`, score.musicxml, "application/vnd.recordare.musicxml+xml")],
                     ["export.midi", async () => download(`${name}.mid`, (await midiFile()) as BlobPart, "audio/midi")],
-                    ["export.print", async () => printPages((await engravePages(score, cur)).pages, score.title, cur.page_numbers, [cur.width_mm, cur.height_mm])],
+                    ["export.print", print],
                     ["export.code", onExportCode],
                   ].map(([k, f]) => (
                     <button
@@ -814,15 +875,18 @@ export default function ScoreView({
               </span>
             </div>
           ) : !fit ? (
-            <div className={`flex flex-wrap justify-center gap-4 ${clickClass}`} onClick={onSheetClick}>
+            <div
+              className={`flex justify-center-safe gap-4 ${zoom === "auto" ? "flex-wrap" : "flex-col items-center-safe gap-8 [&>*]:max-w-none"} ${clickClass}`}
+              onClick={onSheetClick}
+            >
               {eng.pages.map((svg, i) => (
-                <div key={i} className="relative [content-visibility:auto] [contain-intrinsic-size:auto_600px]">
+                <div key={i} className="relative shrink-0 [content-visibility:auto] [contain-intrinsic-size:auto_600px]" style={zoomWidth ? { width: zoomWidth } : undefined}>
                   <div
                     data-page={i}
-                    className={`${full ? "" : "w-[min(100%,420px)]"} min-w-[240px] bg-white shadow-md [&>svg]:h-full [&>svg]:w-full`}
+                    className={`${zoomWidth ? "w-full" : full ? "" : "w-[min(100%,420px)]"} min-w-[240px] bg-white shadow-md [&>svg]:h-full [&>svg]:w-full`}
                     style={{
                       aspectRatio: `${cur.width_mm} / ${cur.height_mm}`,
-                      ...(full ? { width: `min(100%, calc((100vh - 9rem) * ${cur.width_mm / cur.height_mm}))` } : {}),
+                      ...(full && !zoomWidth ? { width: `min(100%, calc((100vh - 9rem) * ${aspect}))` } : {}),
                     }}
                     // Verovio's own SVG output
                     dangerouslySetInnerHTML={{ __html: svg }}
