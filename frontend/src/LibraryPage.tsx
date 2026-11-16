@@ -624,7 +624,7 @@ function ImslpResults({ db, words, composer, shown, onMore }: { db: Sql; words: 
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium text-(--lk-accent)">
                   {w.composer}
-                  {w.set_name && <span className="font-normal text-gray-500"> · {w.set_name}</span>}
+                  {/* (IMSLP's own composer-catalogue numbers, "ICR 8", mean little to a reader: not shown) */}
                 </p>
                 <p className="truncate text-sm text-gray-900" title={w.title}>
                   {w.title}
