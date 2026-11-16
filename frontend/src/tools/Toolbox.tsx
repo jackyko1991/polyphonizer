@@ -26,7 +26,6 @@ export default function Toolbox() {
   const { pick } = useLang();
   const box = useToolbox();
   const [menu, setMenu] = useState(false);
-  const openTimer = useRef<number | null>(null);
   const closeTimer = useRef<number | null>(null);
   const [shown, setShown] = useState(false);
 
@@ -80,13 +79,13 @@ export default function Toolbox() {
     return () => cancelAnimationFrame(raf);
   }, [dockShown, box.height]);
 
+  // the menu opens on a click only (it sits by the dock's Close, so opening on hover got in the way); once open, it
+  // closes when the pointer has been away from it for a moment
   const hoverIn = () => {
     if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    if (!menu) openTimer.current = window.setTimeout(() => setMenu(true), 120);
   };
   const hoverOut = () => {
-    if (openTimer.current) window.clearTimeout(openTimer.current);
-    closeTimer.current = window.setTimeout(() => setMenu(false), 250);
+    if (menu) closeTimer.current = window.setTimeout(() => setMenu(false), 400);
   };
   const choose = (id: ToolId) => {
     openTool(id);
