@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileKind } from "../src/library/elsewhere.ts";
-import { backendOk, jobKind, jobUrl, resultName, routesFor, RUNNER_URL, runJob, runnerStatus } from "../src/transcribe/routes.ts";
+import { backendOk, estimateSeconds, jobKind, pdfPageCount, progressAt, jobUrl, resultName, routesFor, RUNNER_URL, runJob, runnerStatus } from "../src/transcribe/routes.ts";
 
 test("what a file needs: a picture of music is read (OMR), a recording or a video is transcribed, a score needs nothing", () => {
   assert.equal(jobKind("Erlkonig.pdf"), "omr");
@@ -105,4 +105,21 @@ test("a backend of your own: its address (http only for this computer) and a tok
     return new Response(new Uint8Array([77]), { headers: { "content-type": "audio/midi" } });
   }) as typeof fetch, "s3cret");
   assert.equal(seen[2].get("authorization"), "Bearer s3cret");
+});
+
+test("progress: a PDF's pages counted from its bytes, an estimate of the time, and a bar that waits for the answer", () => {
+  const pdf = (n: number) => new TextEncoder().encode(`%PDF-1.4\n1 0 obj << /Type /Pages /Count ${n} >>\n` + "<< /Type /Page >>\n".repeat(n) + "%%EOF");
+  assert.equal(pdfPageCount(pdf(3)), 3);
+  assert.equal(pdfPageCount(pdf(1)), 1);
+  // the page tree's /Count wins over counting (pages may be in compressed object streams)
+  assert.equal(pdfPageCount(new TextEncoder().encode("%PDF-1.5 << /Type /Pages /Kids [4 0 R] /Count 12 >>")), 12);
+  assert.equal(pdfPageCount(new TextEncoder().encode("not a pdf")), 1);
+  assert.equal(estimateSeconds("omr", 1), 30);
+  assert.equal(estimateSeconds("omr", 4), 120);
+  assert.equal(estimateSeconds("transcribe", 1), 60);
+  // never full before the answer: 95 % at most, half way at half the time
+  assert.equal(progressAt(0, 30), 0);
+  assert.equal(progressAt(15, 30), 47.5);
+  assert.equal(progressAt(30, 30), 95);
+  assert.equal(progressAt(300, 30), 95);
 });

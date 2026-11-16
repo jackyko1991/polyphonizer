@@ -100,8 +100,8 @@ def run_engine(template, src, out, outdir, timeout):
     args = [a.replace("{in}", str(src)).replace("{out}", str(out)).replace("{outdir}", str(outdir)) for a in shlex.split(template)]
     p = subprocess.run(args, capture_output=True, timeout=timeout)
     if p.returncode != 0:
-        tail = (p.stderr or p.stdout).decode("utf-8", "replace").strip().splitlines()[-3:]
-        raise RuntimeError(f"the engine stopped (exit {p.returncode}): " + " / ".join(tail))
+        tail = (p.stderr or p.stdout).decode("utf-8", "replace").strip().splitlines()[-1:]
+        raise RuntimeError(tail[0] if tail else f"the engine stopped (exit {p.returncode})")
     if out.exists():
         return out
     found = sorted(f for f in outdir.rglob("*") if f.suffix.lower() in {".mxl", ".musicxml", ".xml", ".mid", ".midi"})

@@ -64,7 +64,12 @@ def main(src: str, out: str) -> None:
         cmd = [sys.executable, "-m", "copisteria.pipeline", "--out", tmp]
         cmd += ["--pdf", str(src_p), "--range", f"1-{pdf_pages(src_p)}"] if src_p.suffix.lower() == ".pdf" else [str(src_p)]
         # (run from the reader's folder: it finds its models/ there)
-        subprocess.run(cmd, cwd=READER, check=True, stdout=sys.stderr)
+        p = subprocess.run(cmd, cwd=READER, capture_output=True, text=True)
+        sys.stderr.write(p.stdout)
+        if p.returncode != 0:
+            # the reader's own error, its last line (the runner shows it to the learner)
+            lines = [l for l in p.stderr.strip().splitlines() if l.strip()]
+            raise SystemExit(f"copisteria could not read the page: {lines[-1] if lines else f'exit {p.returncode}'}")
         pages = sorted(Path(tmp).glob("*.musicxml"), key=page_order)
         if not pages:
             raise SystemExit("the reader wrote no pages")

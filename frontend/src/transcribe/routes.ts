@@ -113,3 +113,17 @@ export async function runJob(base: string, kind: JobKind, file: File, f: typeof 
   }
   return { name: resultName(file.name, r.headers.get("content-type") ?? ""), bytes: new Uint8Array(await r.arrayBuffer()) };
 }
+
+/** a PDF's number of pages: its page tree's largest /Count, else its /Type /Page objects (1 when unsure) */
+export function pdfPageCount(bytes: Uint8Array): number {
+  const text = new TextDecoder("latin1").decode(bytes);
+  const counts = [...text.matchAll(/\/Type\s*\/Pages\b[^>]*?\/Count\s+(\d+)/g), ...text.matchAll(/\/Count\s+(\d+)[^>]*?\/Type\s*\/Pages\b/g)].map((m) => Number(m[1]));
+  if (counts.length) return Math.max(...counts);
+  return Math.max(1, (text.match(/\/Type\s*\/Page\b(?!s)/g) ?? []).length);
+}
+
+/** about how long a job takes on a runner's CPU: ~30 s a page (copista-28m), ~1 min a recording */
+export const estimateSeconds = (kind: JobKind, pages = 1) => (kind === "omr" ? 30 * Math.max(1, pages) : 60);
+
+/** the bar's width (%) after `elapsed` of an estimated `estimate` seconds: up to 95 %, the rest is the answer */
+export const progressAt = (elapsed: number, estimate: number) => Math.min(95, (elapsed / Math.max(1, estimate)) * 95);

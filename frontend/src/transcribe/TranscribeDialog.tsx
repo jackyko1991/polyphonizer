@@ -7,7 +7,7 @@ import { AudioLines, FileMusic, Laptop, Server, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../Button.tsx";
 import { BUTTON, PRIMARY } from "../ui.ts";
-import { backendOk, jobKind, loadBackend, routesFor, RUNNER_URL, runJob, runnerStatus, saveBackend, type Backend, type RouteId, type RunnerStatus } from "./routes.ts";
+import { backendOk, estimateSeconds, jobKind, loadBackend, pdfPageCount, progressAt, routesFor, RUNNER_URL, runJob, runnerStatus, saveBackend, type Backend, type RouteId, type RunnerStatus } from "./routes.ts";
 
 const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, string]; about: readonly [string, string] }> = {
   browser: {
@@ -57,6 +57,14 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
   };
   const [route, setRoute] = useState<RouteId | null>(null);
   const [busy, setBusy] = useState(false);
+  // while it works: how many pages, the estimate, and the seconds gone
+  const [job, setJob] = useState<{ pages: number; estimate: number; start: number } | null>(null);
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    if (!job) return;
+    const t = window.setInterval(() => setNow(performance.now()), 250);
+    return () => window.clearInterval(t);
+  }, [job]);
   const [error, setError] = useState("");
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -81,6 +89,9 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
     if (!file || !kind || chosen !== "runner") return;
     setBusy(true);
     setError("");
+    const pages = kind === "omr" && /\.pdf$/i.test(file.name) ? pdfPageCount(new Uint8Array(await file.arrayBuffer())) : 1;
+    setJob({ pages, estimate: estimateSeconds(kind, pages), start: performance.now() });
+    setNow(performance.now());
     try {
       const out = await runJob(backend.url, kind, file, fetch, backend.token);
       onDone(new File([out.bytes as BlobPart], out.name));
@@ -89,6 +100,7 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
       setError(String((e as Error).message ?? e));
     } finally {
       setBusy(false);
+      setJob(null);
     }
   };
 
@@ -182,6 +194,24 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
               );
             })}
           </fieldset>
+        )}
+        {job && (
+          // the estimate fills the bar to 95 %; the answer finishes it
+          <div className="mt-3" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progressAt((now - job.start) / 1000, job.estimate))} data-testid="transcribe-progress">
+            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+              <div className="h-full rounded-full bg-(--lk-accent) transition-[width] duration-300" style={{ width: `${progressAt((now - job.start) / 1000, job.estimate)}%` }} />
+            </div>
+            <p className="mt-1 flex justify-between text-xs text-gray-600 tabular-nums">
+              <span>
+                {kind === "omr"
+                  ? pick([`Reading ${job.pages} page${job.pages > 1 ? "s" : ""}…`, `正在讀取 ${job.pages} 頁…`])
+                  : pick(["Listening and writing the notes…", "正在聆聽並寫下音符…"])}
+              </span>
+              <span>
+                {Math.round((now - job.start) / 1000)} s · {pick(["about", "約"])} {job.estimate >= 90 ? `${Math.round(job.estimate / 60)} min` : `${job.estimate} s`}
+              </span>
+            </p>
+          </div>
         )}
         {error && <p className="mt-2 rounded bg-red-50 px-2 py-1.5 text-sm text-red-800">{error}</p>}
         <div className="mt-3 flex justify-end gap-2">
