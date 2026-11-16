@@ -1,0 +1,79 @@
+/**
+ * Turning a picture of music (PDF, photo) or a recording (audio, video) into notes, by one of three routes that all
+ * speak the same small protocol (docs/plans/transcription.md):
+ * - this browser: recordings only (Spotify's Basic Pitch, in the page; nothing leaves the device);
+ * - your own runner: `pixi run runner` on your computer, like Ollama for this one job (OMR with copista, piano with
+ *   Transkun);
+ * - the Polyphonizer service: the same runner, hosted, as a paid tier (coming).
+ *
+ * Protocol: GET <base>/status → { omr, transcribe, version }; POST <base>/omr or <base>/transcribe with the file as
+ * the body (its name in X-Filename) → MusicXML or MIDI, or { error } with a 4xx/5xx status.
+ */
+import { fileKind } from "../library/elsewhere.ts";
+
+export type JobKind = "omr" | "transcribe";
+export type RouteId = "browser" | "runner" | "service";
+export interface RunnerStatus {
+  omr: boolean;
+  transcribe: boolean;
+  version: string;
+}
+
+/** the local runner's address (pixi run runner) */
+export const RUNNER_URL = "http://127.0.0.1:8765";
+
+/** what a file needs to become notes: reading (a picture of music) or transcribing (a recording); null for a score */
+export function jobKind(name: string, type = ""): JobKind | null {
+  const k = fileKind(name, type);
+  return k === "pdf" || k === "image" ? "omr" : k === "audio" || k === "video" ? "transcribe" : null;
+}
+
+/** the routes for a job, each ready or not and why not */
+export function routesFor(
+  kind: JobKind,
+  have: { browser: boolean; runner: RunnerStatus | null },
+): { id: RouteId; ready: boolean; why?: "not-here" | "loading" | "not-running" | "no-engine" | "coming" }[] {
+  return [
+    kind === "transcribe" ? { id: "browser", ready: have.browser, why: have.browser ? undefined : "loading" } : { id: "browser", ready: false, why: "not-here" },
+    !have.runner ? { id: "runner", ready: false, why: "not-running" } : have.runner[kind] ? { id: "runner", ready: true } : { id: "runner", ready: false, why: "no-engine" },
+    { id: "service", ready: false, why: "coming" },
+  ];
+}
+
+export const jobUrl = (base: string, kind: JobKind) => `${base.replace(/\/+$/, "")}/${kind}`;
+
+/** the name of what comes back: the file's name with the result's extension */
+export function resultName(from: string, type: string): string {
+  const stem = from.replace(/\.[^.]+$/, "");
+  const ext = /musicxml\+xml|text\/xml|application\/xml/.test(type) ? "musicxml" : /musicxml/.test(type) ? "mxl" : /midi/.test(type) ? "mid" : "musicxml";
+  return `${stem}.${ext}`;
+}
+
+/** what a runner can do, or null when nothing answers at that address */
+export async function runnerStatus(base: string, f: typeof fetch = fetch): Promise<RunnerStatus | null> {
+  try {
+    const r = await f(`${base.replace(/\/+$/, "")}/status`, { signal: AbortSignal.timeout?.(1500) });
+    if (!r.ok) return null;
+    const s = (await r.json()) as Partial<RunnerStatus>;
+    return { omr: !!s.omr, transcribe: !!s.transcribe, version: String(s.version ?? "") };
+  } catch {
+    return null;
+  }
+}
+
+/** send a file to a runner (or the service) and get the notes back as a file */
+export async function runJob(base: string, kind: JobKind, file: File, f: typeof fetch = fetch): Promise<{ name: string; bytes: Uint8Array }> {
+  const r = await f(jobUrl(base, kind), {
+    method: "POST",
+    headers: { "content-type": file.type || "application/octet-stream", "x-filename": encodeURIComponent(file.name) },
+    body: file,
+  });
+  if (!r.ok) {
+    const msg = await r
+      .json()
+      .then((j: { error?: string }) => j.error)
+      .catch(() => "");
+    throw new Error(msg || `HTTP ${r.status}`);
+  }
+  return { name: resultName(file.name, r.headers.get("content-type") ?? ""), bytes: new Uint8Array(await r.arrayBuffer()) };
+}

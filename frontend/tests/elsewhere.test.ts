@@ -38,8 +38,10 @@ test("find elsewhere: IMSLP, CPDL and Mutopia searches, the terms encoded", () =
 test("a dropped or opened file: a score opens; a PDF or a recording needs the local runner; others are refused", () => {
   for (const n of ["a.musicxml", "a.xml", "a.MXL", "a.mid", "a.midi", "a.abc", "a.krn", "a.mei"]) assert.equal(fileKind(n), "score", n);
   assert.equal(fileKind("Schubert_Erlkonig.pdf"), "pdf");
-  for (const n of ["take.wav", "take.mp3", "take.m4a", "take.ogg", "take.flac", "take.webm"]) assert.equal(fileKind(n), "audio", n);
-  for (const n of ["photo.png", "notes.docx", "noext", "x.mscz"]) assert.equal(fileKind(n), "other", n);
+  for (const n of ["take.wav", "take.mp3", "take.m4a", "take.ogg", "take.flac"]) assert.equal(fileKind(n), "audio", n);
+  assert.equal(fileKind("take.webm", "audio/webm"), "audio");
+  assert.equal(fileKind("photo.png"), "image");
+  for (const n of ["notes.docx", "noext", "x.mscz"]) assert.equal(fileKind(n), "other", n);
   // the browser's type is used when the name has no extension
   assert.equal(fileKind("scan", "application/pdf"), "pdf");
   assert.equal(fileKind("rec", "audio/wav"), "audio");
@@ -66,6 +68,14 @@ test("the licence filter: free for any use, attribution, or non-commercial", () 
   assert.equal(licenceClass(row("Schubert", "Lied", "cc0"), sources), "free");
   assert.equal(licenceClass(row("X", "Y", "by"), sources), "attribution");
   assert.equal(licenceClass(row("Mozart", "Sonata", "nc"), sources), "nc");
+  // a work with its own licence (Mutopia's vary piece by piece)
+  const mu = (l: "pd" | "by" | "by-sa"): Row => {
+    const r = row("Bach", "Minuet", "mutopia");
+    r[14] = l;
+    return r;
+  };
+  assert.equal(licenceClass(mu("pd"), sources), "free");
+  assert.equal(licenceClass(mu("by-sa"), sources), "attribution");
   // an unknown source is not assumed free
   assert.equal(licenceClass(row("X", "Y", "missing"), sources), "nc");
 });

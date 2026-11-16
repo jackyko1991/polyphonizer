@@ -60,19 +60,24 @@ export function elsewhereLinks(terms: string): { id: Elsewhere["id"]; name: stri
   return ELSEWHERE.map((s) => ({ id: s.id, name: s.name, url: q ? s.search(q) : s.home, gives: s.gives }));
 }
 
-export type FileKind = "score" | "pdf" | "audio" | "other";
+export type FileKind = "score" | "pdf" | "image" | "audio" | "video" | "other";
 
-/** what a file is: a score the editor opens, a PDF or a recording (notes only through the local runner), or neither */
+/** what a file is: a score the editor opens; a picture of music (PDF, image) or a recording (audio, video) that has to be
+ * read or transcribed first (transcribe/routes.ts); or neither */
 export function fileKind(name: string, type = ""): FileKind {
   const ext = /\.([a-z0-9]+)$/i.exec(name)?.[1].toLowerCase();
   if (ext) {
     if (["musicxml", "xml", "mxl", "mid", "midi", "abc", "krn", "mei"].includes(ext)) return "score";
     if (ext === "pdf") return "pdf";
-    if (["wav", "mp3", "m4a", "ogg", "oga", "flac", "aac", "webm", "aif", "aiff"].includes(ext)) return "audio";
+    if (["png", "jpg", "jpeg", "tif", "tiff", "webp"].includes(ext)) return "image";
+    if (["wav", "mp3", "m4a", "ogg", "oga", "flac", "aac", "aif", "aiff"].includes(ext)) return "audio";
+    if (["mp4", "mov", "m4v", "mkv", "webm"].includes(ext)) return type.startsWith("audio/") ? "audio" : "video";
     return "other";
   }
   if (type === "application/pdf") return "pdf";
+  if (type.startsWith("image/")) return "image";
   if (type.startsWith("audio/")) return "audio";
+  if (type.startsWith("video/")) return "video";
   return "other";
 }
 
@@ -94,6 +99,7 @@ export const LICENCE_CLASSES: [LicenceClass, L][] = [
  * non-commercial (and a source not known is not assumed free) */
 export function licenceClass(r: Row, sources: Record<string, Source>): LicenceClass {
   if (!r[13]) return "free";
+  if (r[14]) return r[14] === "pd" ? "free" : "attribution";
   const s = sources[r[13]];
   if (!s || s.nonCommercial || /\bNC\b/.test(s.licence)) return "nc";
   return /^CC0|public domain/i.test(s.licence) ? "free" : "attribution";

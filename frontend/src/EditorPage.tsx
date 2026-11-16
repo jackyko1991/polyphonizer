@@ -7,7 +7,7 @@
 import { Download, GitFork, PanelLeft, Pencil, RefreshCw, RotateCcw, Save, X } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { go, useLang } from "@learnkit/web";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import CodePane from "./CodePane.tsx";
@@ -39,6 +39,9 @@ import ScoreView from "./ScoreView.tsx";
 import { midiFile } from "./engine/engrave.ts";
 import { fill } from "./strings.ts";
 import { fileKind, importCode, type FileKind } from "./library/elsewhere.ts";
+import { jobKind } from "./transcribe/routes.ts";
+
+const TranscribeDialog = lazy(() => import("./transcribe/TranscribeDialog.tsx"));
 import { BUTTON, FIELD, PRIMARY } from "./ui.ts";
 
 const FILES_KEY = "polyphonizer.editor.files";
@@ -304,12 +307,14 @@ export default function EditorPage() {
   const sample = ws.current.kind === "sample" ? ws.samples[ws.current.key] : null;
 
   // a file that is not a score (a PDF, a recording, anything else): what to do with it instead
-  const [importNote, setImportNote] = useState<{ name: string; kind: FileKind } | null>(null);
+  const [importNote, setImportNote] = useState<{ name: string; kind: FileKind; file?: File } | null>(null);
   // a file being dragged over the editor
   const [dropping, setDropping] = useState(false);
+  // the Transcribe dialog, with the file that brought it up (if any)
+  const [transcribe, setTranscribe] = useState<{ file: File | null } | null>(null);
   const onFile = async (f: File) => {
     const kind = fileKind(f.name, f.type);
-    if (kind !== "score") return setImportNote({ name: f.name, kind });
+    if (kind !== "score") return setImportNote({ name: f.name, kind, file: jobKind(f.name, f.type) ? f : undefined });
     setImportNote(null);
     const bytes = new Uint8Array(await f.arrayBuffer());
     const name = f.name.replace(/[^\w.\- ]+/g, "_");
@@ -420,11 +425,25 @@ export default function EditorPage() {
           {t("import.drop")}
         </div>
       )}
+      {transcribe && (
+        <Suspense fallback={null}>
+          <TranscribeDialog file={transcribe.file} onDone={(f) => void onFile(f)} onClose={() => setTranscribe(null)} />
+        </Suspense>
+      )}
       {importNote && (
         <div className="absolute top-12 left-1/2 z-40 w-[min(32rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 shadow-lg" role="status" data-testid="import-note">
           <div className="flex items-start gap-2">
             <p className="min-w-0 flex-1">
               <b className="break-all">{importNote.name}</b>: {t(`import.${importNote.kind}`)}
+              {importNote.file && (
+                <button
+                  onClick={() => (setTranscribe({ file: importNote.file! }), setImportNote(null))}
+                  className="mt-2 block rounded-md bg-(--lk-accent) px-3 py-1 text-sm font-medium text-white hover:opacity-90"
+                  data-testid="import-transcribe"
+                >
+                  {t("tree.transcribe")}…
+                </button>
+              )}
             </p>
             <button onClick={() => setImportNote(null)} className="shrink-0 rounded p-0.5 text-amber-700 hover:bg-amber-100" aria-label={t("sound.close")}>
               <Icon icon={X} />
@@ -475,6 +494,7 @@ export default function EditorPage() {
               onPick={pickFromTree}
               onNew={() => makeOwn((replace) => setOwn(wsRef.current, freshProject(NEW_SCORE), t("ws.newLabel"), replace), "new")}
               onImport={() => fileInput.current?.click()}
+              onTranscribe={() => setTranscribe({ file: null })}
               onRename={(name) => switchName(name)}
               onExport={exportOwn}
               onDelete={() => switchTo(deleteOwn(wsRef.current))}
@@ -486,7 +506,7 @@ export default function EditorPage() {
           type="file"
           hidden
           // scores open; a PDF or a recording is taken too, to say how it can become notes
-          accept=".musicxml,.xml,.mxl,.mid,.midi,.abc,.krn,.mei,.pdf,audio/*"
+          accept=".musicxml,.xml,.mxl,.mid,.midi,.abc,.krn,.mei,.pdf,image/*,audio/*,video/*"
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void onFile(f);

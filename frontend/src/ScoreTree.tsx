@@ -3,7 +3,7 @@
  * community quota, with rename, export and delete); Samples; Recently opened; and a way to the Library. Arrow keys
  * move through it, Enter opens, ← / → fold and unfold.
  */
-import { ChevronRight, Download, Music, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { AudioLines, ChevronRight, Download, Music, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
 import { useRef, useState, type KeyboardEvent } from "react";
@@ -24,6 +24,7 @@ export default function ScoreTree({
   onPick,
   onNew,
   onImport,
+  onTranscribe,
   onRename,
   onExport,
   onDelete,
@@ -34,6 +35,8 @@ export default function ScoreTree({
   onPick: (p: TreePick) => void;
   onNew: () => void;
   onImport: () => void;
+  /** a PDF, photo, recording or video into notes */
+  onTranscribe: () => void;
   onRename: (name: string) => void;
   /** "py": the code (.py or .zip); "musicxml" / "midi" when the score has been compiled */
   onExport: (format: "py" | "musicxml" | "midi") => void;
@@ -131,6 +134,9 @@ export default function ScoreTree({
         </button>
         <button onClick={onImport} className={`${BUTTON} flex-1 justify-center`} title={t("import.hint")} data-testid="upload">
           <Icon icon={Upload} /> {t("tree.import")}
+        </button>
+        <button onClick={onTranscribe} className={`${BUTTON} flex-1 justify-center`} title={t("tree.transcribeHint")} data-testid="tree-transcribe">
+          <Icon icon={AudioLines} /> {t("tree.transcribe")}
         </button>
       </div>
       <ul ref={tree} role="tree" aria-label={t("scores")} onKeyDown={onKey} className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
