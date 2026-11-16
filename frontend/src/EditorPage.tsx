@@ -4,7 +4,7 @@
  * load("name"). Either view can show the full score or one player's part; the Pages view lays it out on A4, with
  * the player's own layout (bars per line, forced breaks) and page turns moved to rests.
  */
-import { Download, FolderTree, GitFork, PanelLeft, Pencil, RefreshCw, RotateCcw, Save, X } from "lucide-react";
+import { Download, GitFork, PanelLeft, Pencil, RefreshCw, RotateCcw, Save, X } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { go, useLang } from "@learnkit/web";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -406,10 +406,10 @@ export default function EditorPage() {
         ))}
       </div>
       <section className={`min-h-0 flex-1 border-r border-gray-200 bg-white lg:flex lg:min-h-[22rem] lg:flex-none ${mobileView === "code" ? "flex" : "hidden"}`}>
-        {/* the score explorer: a thin rail, or the tree (a drawer on phones) */}
+        {/* the score explorer (a drawer on phones); closed, nothing: the toolbar's panel button or ⌘B opens it */}
         {treeOpen && <div className="fixed inset-0 z-30 bg-black/20 lg:hidden" onClick={() => setTree(false)} aria-hidden />}
         <div
-          className={`${treeOpen ? "fixed inset-y-0 left-0 z-40 w-64 shadow-xl lg:static lg:z-auto lg:w-60 lg:shadow-none" : "hidden w-0 lg:flex lg:w-10"} flex shrink-0 flex-col border-r border-gray-200 bg-gray-50`}
+          className={`${treeOpen ? "fixed inset-y-0 left-0 z-40 w-64 shadow-xl lg:static lg:z-auto lg:w-60 lg:shadow-none" : "hidden"} flex shrink-0 flex-col border-r border-gray-200 bg-gray-50`}
         >
           {treeOpen ? (
             <ScoreTree
@@ -423,11 +423,7 @@ export default function EditorPage() {
               onExport={exportOwn}
               onDelete={() => switchTo(deleteOwn(wsRef.current))}
             />
-          ) : (
-            <button onClick={() => setTree(true)} className="flex h-10 items-center justify-center text-gray-500 hover:text-gray-800" title={`${t("tree.open")} (${isMac ? "⌘" : "Ctrl+"}B)`} aria-label={t("tree.open")} data-testid="tree-rail">
-              <Icon icon={FolderTree} />
-            </button>
-          )}
+          ) : null}
         </div>
         <input
           ref={fileInput}
