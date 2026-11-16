@@ -38,6 +38,7 @@ import ScoreTree, { type TreePick } from "./ScoreTree.tsx";
 import ScoreView from "./ScoreView.tsx";
 import { midiFile } from "./engine/engrave.ts";
 import { fill } from "./strings.ts";
+import { fileKind, importCode, type FileKind } from "./library/elsewhere.ts";
 import { BUTTON, FIELD, PRIMARY } from "./ui.ts";
 
 const FILES_KEY = "polyphonizer.editor.files";
@@ -302,12 +303,19 @@ export default function EditorPage() {
   const isSample = ws.current.kind === "sample";
   const sample = ws.current.kind === "sample" ? ws.samples[ws.current.key] : null;
 
+  // a file that is not a score (a PDF, a recording, anything else): what to do with it instead
+  const [importNote, setImportNote] = useState<{ name: string; kind: FileKind } | null>(null);
+  // a file being dragged over the editor
+  const [dropping, setDropping] = useState(false);
   const onFile = async (f: File) => {
+    const kind = fileKind(f.name, f.type);
+    if (kind !== "score") return setImportNote({ name: f.name, kind });
+    setImportNote(null);
     const bytes = new Uint8Array(await f.arrayBuffer());
     const name = f.name.replace(/[^\w.\- ]+/g, "_");
     await addFile(name, bytes);
     if (bytes.length < 3_000_000) write(FILES_KEY, JSON.stringify({ ...savedFiles(), [name]: toB64(bytes) }));
-    const code = `# Imported: ${name}\nscore = load(${JSON.stringify(name)})\n`;
+    const code = importCode(name);
     addRecent({ label: name, code });
     // an imported file becomes the visitor's own score
     makeOwn((replace) => setOwn(wsRef.current, freshProject(code), name, replace), "import");
@@ -389,7 +397,41 @@ export default function EditorPage() {
 
   const errorHere = error && (error.file ?? MAIN) === active.name ? error.line : null;
   return (
-    <div className="flex h-[calc(100dvh-var(--pz-dock,0px)-8.75rem)] min-h-[24rem] flex-col lg:grid lg:h-full lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]" data-testid="editor-page">
+    <div
+      className="relative flex h-[calc(100dvh-var(--pz-dock,0px)-8.75rem)] min-h-[24rem] flex-col lg:grid lg:h-full lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
+      data-testid="editor-page"
+      // a score file dropped anywhere on the editor opens like Open file
+      onDragOver={(e) => {
+        if (![...e.dataTransfer.types].includes("Files")) return;
+        e.preventDefault();
+        setDropping(true);
+      }}
+      onDragLeave={(e) => e.currentTarget.contains(e.relatedTarget as Node) || setDropping(false)}
+      onDrop={(e) => {
+        const f = e.dataTransfer.files[0];
+        setDropping(false);
+        if (!f) return;
+        e.preventDefault();
+        void onFile(f);
+      }}
+    >
+      {dropping && (
+        <div className="pointer-events-none absolute inset-2 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-(--lk-accent) bg-rose-50/80 text-center text-sm font-medium text-rose-900" data-testid="drop-zone">
+          {t("import.drop")}
+        </div>
+      )}
+      {importNote && (
+        <div className="absolute top-12 left-1/2 z-40 w-[min(32rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 shadow-lg" role="status" data-testid="import-note">
+          <div className="flex items-start gap-2">
+            <p className="min-w-0 flex-1">
+              <b className="break-all">{importNote.name}</b>: {t(`import.${importNote.kind}`)}
+            </p>
+            <button onClick={() => setImportNote(null)} className="shrink-0 rounded p-0.5 text-amber-700 hover:bg-amber-100" aria-label={t("sound.close")}>
+              <Icon icon={X} />
+            </button>
+          </div>
+        </div>
+      )}
       {/* phones and tablets: one panel at a time */}
       <div className="flex shrink-0 border-b border-gray-200 bg-white lg:hidden" role="tablist" data-testid="editor-mobile-tabs">
         {/* the scores list, from either tab */}
@@ -443,7 +485,8 @@ export default function EditorPage() {
           ref={fileInput}
           type="file"
           hidden
-          accept=".musicxml,.xml,.mxl,.mid,.midi,.abc,.krn"
+          // scores open; a PDF or a recording is taken too, to say how it can become notes
+          accept=".musicxml,.xml,.mxl,.mid,.midi,.abc,.krn,.mei,.pdf,audio/*"
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void onFile(f);

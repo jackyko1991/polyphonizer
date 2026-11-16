@@ -14,6 +14,7 @@ import { Icon } from "./Button.tsx";
 import { go, useLang } from "@learnkit/web";
 import { useEffect, useMemo, useState } from "react";
 import { catalogIds, idLabel, idMatches, parseQuery } from "./library/catalogNumbers.ts";
+import { elsewhereLinks, LICENCE_CLASSES, licenceClass, searchTerms, type LicenceClass } from "./library/elsewhere.ts";
 import { byComposer, codeFor, idText, MUSIC21, sourceOf, type Row, type Source } from "./library/collections.ts";
 import { addRecent } from "./project.ts";
 import { fill } from "./strings.ts";
@@ -213,6 +214,7 @@ export default function LibraryPage() {
   const [era, setEra] = useState("");
   const [ensemble, setEnsemble] = useState("");
   const [instruments, setInstruments] = useState<string[]>([]);
+  const [licence, setLicence] = useState<LicenceClass | "">("");
   const [openParts, setOpenParts] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState(PAGE);
   useEffect(() => {
@@ -224,12 +226,12 @@ export default function LibraryPage() {
       setVersion(data.music21);
     });
   }, []);
-  useEffect(() => setShown(PAGE), [query, source, collection, composer, era, ensemble, instruments]);
+  useEffect(() => setShown(PAGE), [query, source, collection, composer, era, ensemble, instruments, licence]);
 
   const composerName = (c: string) => (zh && COMPOSER_ZH[c] ? `${COMPOSER_ZH[c]}（${c}）` : c);
   const collectionName = (c: string) => (COLLECTIONS[c] ? pick(COLLECTIONS[c]) : sources[c] ? pick(sources[c].name) : c);
   const sourceName = (s: string) => (s === MUSIC21 ? t("src.music21") : sources[s] ? pick(sources[s].name) : s);
-  const inSource = (r: Row) => !source || sourceOf(r) === source;
+  const inSource = (r: Row) => (!source || sourceOf(r) === source) && (!licence || licenceClass(r, sources) === licence);
 
   // search text per row: title, composer in both languages, music21's own spelling, tradition, collection, file
   const index = useMemo(
@@ -279,16 +281,16 @@ export default function LibraryPage() {
         rest.every((w) => index[i].includes(w)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, index, numbers, source, collection, activeComposer, era, ensemble, instruments, query]);
+  }, [rows, index, numbers, source, licence, collection, activeComposer, era, ensemble, instruments, query]);
 
   // filter menus count what the other filters leave
   const composerCounts = useMemo(
     () => count(rows?.filter((r) => inSource(r) && (!collection || r[0] === collection) && (!era || r[8] === era)) ?? [], (r) => r[4]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, source, collection, era],
+    [rows, source, licence, collection, era],
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const eraCounts = useMemo(() => count(rows?.filter((r) => inSource(r) && (!collection || r[0] === collection)) ?? [], (r) => r[8]), [rows, source, collection]);
+  const eraCounts = useMemo(() => count(rows?.filter((r) => inSource(r) && (!collection || r[0] === collection)) ?? [], (r) => r[8]), [rows, source, licence, collection]);
   const ensembleCounts = useMemo(() => count(filtered, (r) => ensembleOf(r[5])), [filtered]);
   // works that have each instrument, among those the other filters leave
   const instrumentCounts = useMemo(() => {
@@ -297,8 +299,11 @@ export default function LibraryPage() {
     return c;
   }, [filtered]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const collectionCounts = useMemo(() => [...count(rows?.filter(inSource) ?? [], (r) => r[0]).entries()].sort((a, b) => b[1] - a[1]), [rows, source]);
+  const collectionCounts = useMemo(() => [...count(rows?.filter(inSource) ?? [], (r) => r[0]).entries()].sort((a, b) => b[1] - a[1]), [rows, source, licence]);
   const sourceCounts = useMemo(() => count(rows ?? [], sourceOf), [rows]);
+  const licenceCounts = useMemo(() => count(rows ?? [], (r) => licenceClass(r, sources)), [rows, sources]);
+  // the same search in libraries the Library can't open from (the words typed, else the composer)
+  const elsewhere = elsewhereLinks(searchTerms(query.trim() ? { query } : { composer: activeComposer }));
 
   // a library piece opens as a sample (a scratch copy), not over the user's own score
   const open = (r: Row) => {
@@ -316,7 +321,7 @@ export default function LibraryPage() {
       <h1 className="text-3xl font-semibold tracking-tight text-gray-900">{t("lib.title")}</h1>
       <p className="mt-3 text-gray-600">{t("lib.intro")}</p>
       <div className="sticky top-0 z-10 -mx-5 mt-5 border-b border-gray-200 bg-white/95 px-5 py-3 backdrop-blur">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           <select value={source} onChange={(e) => (setSource(e.target.value), setCollection(""))} aria-label={t("lib.sourceFilter")} className={select} data-testid="lib-source">
             <option value="">
               {t("lib.allSources")} ({rows?.length ?? "…"})
@@ -328,6 +333,14 @@ export default function LibraryPage() {
                   {sourceName(s)} ({sourceCounts.get(s)})
                 </option>
               ))}
+          </select>
+          <select value={licence} onChange={(e) => setLicence(e.target.value as LicenceClass | "")} aria-label={t("lib.licenceFilter")} className={select} data-testid="lib-licence-filter">
+            <option value="">{t("lib.anyLicence")}</option>
+            {LICENCE_CLASSES.filter(([k]) => licenceCounts.get(k)).map(([k, name]) => (
+              <option key={k} value={k}>
+                {pick(name)} ({licenceCounts.get(k)})
+              </option>
+            ))}
           </select>
           <select value={collection} onChange={(e) => setCollection(e.target.value)} aria-label={t("lib.collection")} className={select} data-testid="lib-collection">
             <option value="">
@@ -505,6 +518,31 @@ export default function LibraryPage() {
           {fill(t("lib.more"), { n: Math.min(PAGE, filtered.length - shown) })}
         </button>
       )}
+      <section className="mt-6 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm" data-testid="lib-elsewhere">
+        <p className="font-medium text-gray-900">{t("lib.elsewhere")}</p>
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {elsewhere.map((l) => (
+            <li key={l.id}>
+              <a
+                href={l.url}
+                target="_blank"
+                rel="noreferrer"
+                title={pick(l.gives)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-800 hover:border-(--lk-accent) hover:text-(--lk-accent)"
+                data-testid={`lib-elsewhere-${l.id}`}
+              >
+                {l.name} <span className="text-xs font-normal text-gray-500">{pick(l.gives)}</span> ↗
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-xs text-gray-600">
+          {t("lib.elsewhereHow")}{" "}
+          <button onClick={() => go("editor")} className="font-medium text-(--lk-accent) hover:underline">
+            {t("lib.toEditor")} →
+          </button>
+        </p>
+      </section>
       <p className="mt-6 text-xs text-gray-500">
         {fill(t("lib.source"), { v: version })}{" "}
         <a href="https://www.music21.org/music21docs/about/referenceCorpus.html" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">

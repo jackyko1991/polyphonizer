@@ -198,6 +198,19 @@ export const STRINGS = {
   "crash.title": ["Something went wrong on this page", "這一頁出了問題"],
   "crash.body": ["The rest of the site still works. Reload, or go to another page.", "網站其他部分仍可使用。請重新載入，或前往其他頁面。"],
   "crash.reload": ["Reload", "重新載入"],
+  "import.drop": ["Drop a score here: MusicXML, MIDI, ABC, Humdrum or MEI", "把樂譜檔拖到這裡：MusicXML、MIDI、ABC、Humdrum 或 MEI"],
+  "import.pdf": [
+    "a PDF is a picture of the music, not the notes. It can become notes through optical music recognition on your own computer (the local runner, coming soon). Many IMSLP and CPDL pages also offer MusicXML or MIDI: open one of those instead.",
+    "PDF 是樂譜的圖片，不是音符。之後可在你自己的電腦上用光學樂譜辨識轉成音符（本機執行器，即將推出）。許多 IMSLP 與 CPDL 頁面也提供 MusicXML 或 MIDI，可以改開那些檔案。",
+  ],
+  "import.audio": [
+    "a recording, not notes. It can become notes through transcription on your own computer (the local runner, coming soon).",
+    "這是錄音，不是音符。之後可在你自己的電腦上用自動採譜轉成音符（本機執行器，即將推出）。",
+  ],
+  "import.other": [
+    "not a score file this editor reads. It opens MusicXML (.musicxml, .xml, .mxl), MIDI, ABC, Humdrum (.krn) and MEI.",
+    "不是這個編輯器能讀的樂譜檔。可開啟 MusicXML（.musicxml、.xml、.mxl）、MIDI、ABC、Humdrum（.krn）與 MEI。",
+  ],
   "lib.title": ["Library", "曲庫"],
   "lib.intro": [
     "Every work in music21's corpus (Bach chorales, quartets by Haydn, Mozart and Beethoven, Renaissance masses and madrigals, thousands of folk tunes), plus open collections: OpenScore's Lieder and string quartets, Craig Sapp's editions of Mozart's, Haydn's and Scarlatti's keyboard sonatas and Joplin's rags, the ASAP dataset's piano scores (Bach to Ravel), and the Josquin Research Project's Renaissance masses and songs. Open one in the editor to play it, lay out a part, or change notes; your changes are kept as lines of code after the original.",
@@ -232,6 +245,14 @@ export const STRINGS = {
   "lib.sourceLink": ["music21's corpus reference", "music21 曲庫說明"],
   "lib.sourceFilter": ["Source", "來源"],
   "lib.allSources": ["All sources", "全部來源"],
+  "lib.licenceFilter": ["Licence", "授權"],
+  "lib.anyLicence": ["Any licence", "任何授權"],
+  "lib.elsewhere": ["Not here, or another edition? Search the libraries this page can't open from:", "這裡沒有，或想找別的版本？到這個頁面無法直接開啟的曲庫搜尋："],
+  "lib.elsewhereHow": [
+    "Download a MusicXML, MIDI, ABC or Humdrum file there (on IMSLP, accept its copyright notice for your country first), then drop it on the editor or use Scores ▸ Import. A PDF or a recording needs the local runner (coming soon) to become notes.",
+    "在那裡下載 MusicXML、MIDI、ABC 或 Humdrum 檔（在 IMSLP 要先接受你所在國家的版權說明），再把檔案拖到編輯器上，或用「樂譜 ▸ 匯入」。PDF 或錄音需要本機執行器（即將推出）才能轉成音符。",
+  ],
+  "lib.toEditor": ["Open the editor", "打開編輯器"],
   "lib.licence": ["Licence: {l}", "授權：{l}"],
   "lib.nonCommercial": ["non-commercial use only", "僅限非商業用途"],
   "lib.downloads": ["Downloaded from {source} when you open it, then kept in this browser.", "開啟時從 {source} 下載，之後保存在這個瀏覽器裡。"],
