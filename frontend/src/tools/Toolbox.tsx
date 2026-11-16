@@ -75,7 +75,9 @@ export default function Toolbox() {
     const raf = requestAnimationFrame(() => setShown(dockShown));
     document.documentElement.style.setProperty("--pz-dock", dockShown ? `${box.height}px` : "0px");
     // the dock sits above the footer (bottom-7): a full-screen score stops above both
-    document.documentElement.style.setProperty("--pz-dock-gap", dockShown ? "1.75rem" : "0px");
+    // (on a phone the footer wraps to two lines, so the dock goes to the bottom edge, over it)
+    const phone = window.matchMedia("(max-width: 639px)").matches;
+    document.documentElement.style.setProperty("--pz-dock-gap", dockShown && !phone ? "1.75rem" : "0px");
     return () => cancelAnimationFrame(raf);
   }, [dockShown, box.height]);
 
@@ -99,7 +101,7 @@ export default function Toolbox() {
         // always in the same place, bottom right, above everything (the dock and the phone sheet too). The box is as tall
         // as the hidden menu, so it lets the pointer through (to the dock's Close and Full screen underneath); only the
         // button and the open menu take it
-        className="pointer-events-none fixed right-4 bottom-10 z-[70] flex flex-col items-end gap-2"
+        className="pointer-events-none fixed right-4 bottom-10 z-[70] max-sm:right-3 max-sm:bottom-3 flex flex-col items-end gap-2"
         onMouseEnter={hoverIn}
         onMouseLeave={hoverOut}
         onKeyDown={(e) => e.key === "Escape" && setMenu(false)}
@@ -167,7 +169,7 @@ export default function Toolbox() {
       {dockOpen && (
         <section
           aria-label={pick(["Music tools", "音樂工具"])}
-          className={`fixed inset-x-0 bottom-7 z-40 flex flex-col border-t border-gray-200 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.08)] transition-transform duration-200 ease-out motion-reduce:transition-none ${
+          className={`fixed inset-x-0 bottom-7 z-40 flex flex-col max-sm:bottom-0 border-t border-gray-200 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.08)] transition-transform duration-200 ease-out motion-reduce:transition-none ${
             shown ? "translate-y-0" : "translate-y-full"
           } ${
             // enlarged: the tool fills the window (big, easy to touch on a phone or a stand)
@@ -279,7 +281,7 @@ export default function Toolbox() {
             </button>
           </div>
           {/* room on the right (and at the bottom on a phone) for the Toolbox button, which sits over the dock */}
-          <div className="min-h-0 flex-1 overflow-auto p-3 pr-20 max-sm:p-4 max-sm:pr-4 max-sm:pb-24">
+          <div className="min-h-0 flex-1 overflow-auto p-3 pr-20 max-sm:p-3 max-sm:pr-3 max-sm:pb-16">
             <Suspense fallback={<p className="text-sm text-gray-500">…</p>}>
               {/* open tools stay mounted (a ticking metronome keeps its panel state); only the front one shows */}
               {box.open.map((id) => (

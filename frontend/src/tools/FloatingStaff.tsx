@@ -30,8 +30,9 @@ const BAR = 32; // the title bar's height
 
 /** keep the window on screen (at least its title bar), and no bigger than the screen */
 export function fitBox(b: Box, vw: number, vh: number): Box {
-  const w = Math.max(MIN_W, Math.min(b.w, vw - 16));
-  const h = Math.max(MIN_H, Math.min(b.h, vh - 16));
+  // never wider or taller than the screen (that wins over the minimum size, on a small phone)
+  const w = Math.min(Math.max(MIN_W, b.w), vw - 16);
+  const h = Math.min(Math.max(MIN_H, b.h), vh - 16);
   return { w: Math.round(w), h: Math.round(h), x: Math.round(Math.max(8, Math.min(b.x, vw - w - 8))), y: Math.round(Math.max(8, Math.min(b.y, vh - BAR - 8))) };
 }
 
@@ -185,20 +186,20 @@ export default function FloatingStaff({ onClose }: { onClose: () => void }) {
         title={pick(["Drag to move", "拖曳移動"])}
         data-testid="floating-staff-bar"
       >
-        <GripHorizontal className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+        {roomy && <GripHorizontal className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />}
         {/* how many bars */}
         <span className="flex shrink-0 items-center" data-testid="staff-bars">
           <button type="button" className={BTN} onClick={() => changeBars(bars - 1)} disabled={bars <= 1} aria-label={pick(["Fewer bars", "減少小節"])}>
             <Minus className="h-3.5 w-3.5" aria-hidden />
           </button>
-          <span className="min-w-[3.2rem] text-center tabular-nums" aria-live="polite">
+          <span className={`${roomy ? "min-w-[3.2rem]" : "min-w-[2.6rem]"} text-center tabular-nums`} aria-live="polite">
             {pick([`${bars} bar${bars > 1 ? "s" : ""}`, `${bars} 小節`])}
           </span>
           <button type="button" className={BTN} onClick={() => changeBars(bars + 1)} disabled={bars >= 8} aria-label={pick(["More bars", "增加小節"])}>
             <Plus className="h-3.5 w-3.5" aria-hidden />
           </button>
         </span>
-        <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-300" aria-hidden />
+        {roomy && <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-300" aria-hidden />}
         {/* take off the last note, the last bar, or everything */}
         {(
           [

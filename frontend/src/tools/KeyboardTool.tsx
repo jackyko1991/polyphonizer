@@ -237,7 +237,8 @@ export default function KeyboardTool() {
 
   return (
     <div className="flex h-full flex-col gap-2" data-testid="keyboard-tool">
-      <div className="flex flex-wrap items-center gap-2">
+      {/* on a phone: one row that scrolls sideways, so the keys keep the room */}
+      <div className="flex items-center gap-2 max-sm:shrink-0 max-sm:overflow-x-auto max-sm:pb-1 max-sm:[scrollbar-width:none] sm:flex-wrap [&>*]:shrink-0">
         <Button
           icon={KeysIcon}
           variant={armed ? "on" : "secondary"}
@@ -330,7 +331,7 @@ export default function KeyboardTool() {
           </Button>
         )}
         {midiState === "none" && <span className="text-xs text-red-700">{pick(["No MIDI access", "無法使用 MIDI"])}</span>}
-        <span className="ml-auto text-xs text-gray-500">
+        <span className="ml-auto text-xs text-gray-500 max-sm:hidden">
           {armed
             ? layoutHelp(p.layout ?? "typing", { high: p.baseC, low: p.lowC ?? p.baseC - 12 }, p.velocity, lang === 1)
             : pick(["Click the keys (lower on a key = louder), or turn on the computer keys", "點按琴鍵（按在琴鍵越下方越大聲），或開啟電腦鍵盤彈奏"])}
