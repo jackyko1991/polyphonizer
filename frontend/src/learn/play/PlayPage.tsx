@@ -5,16 +5,19 @@
  */
 import { RichText, useLang } from "@learnkit/web";
 import { CircleCheck, Ear, Hourglass, Play, RotateCcw, Square, Timer } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../Button.tsx";
 import type { Sound } from "../../engine/engrave.ts";
 import { CHECK, FIELD, SEGMENT, SEGMENTS } from "../../ui.ts";
-import { now, tick } from "../../tools/liveSound.ts";
+import { noteOn, now, tick } from "../../tools/liveSound.ts";
 import { noteName } from "../../tools/music.ts";
 import { subscribeNotes } from "../../tools/noteInput.ts";
 import { armKeyboard, openTool, requestKeyboardBase, setKeyHint } from "../../tools/toolboxState.ts";
 import { PLAY_LESSONS, type PlayLesson, type PlayMode } from "./lessons.ts";
 import { gradeInTime, gradeWait, pressWait, startWait, steps, type Grade, type Mark, type TargetNote, type WaitState } from "./matcher.ts";
+import { attemptReport, beatsPerBar, lessonContext, type PlayInput, type PracticeInput } from "./teacher.ts";
+
+const Teacher = lazy(() => import("./Teacher.tsx"));
 
 const PASSED = "polyphonizer.play.passed";
 const passedSet = (): Set<string> => {
@@ -163,8 +166,10 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
   };
   useEffect(() => reset, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const attempts = useRef(0);
   const finish = (g: Grade) => {
     clearTimers();
+    attempts.current += 1;
     setGrade(g);
     setPhase("done");
     setKeyHint([]);
@@ -252,6 +257,40 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
       )
       .catch(() => undefined);
     setListening(false);
+  };
+
+  // the AI teacher's tools: play notes of the lesson (keys lit, notes marked on the score), set tempo / mode
+  const demo = (p: PlayInput) =>
+    new Promise<string>((done) => {
+      const notes = target.slice(p.from - 1, p.to);
+      if (!notes.length || busy) return done(busy ? "not now: the learner is playing" : "no notes there");
+      const scale = bpm / p.bpm; // target times are at the lesson's current tempo
+      const t0 = notes[0].time;
+      const mark = (nid: string, on: boolean) => box.current?.querySelector(`[id="${CSS.escape(nid)}"]`)?.classList.toggle("pz-playing", on);
+      const startAt = performance.now() + 150;
+      notes.forEach((t, i) => {
+        const at = (t.time - t0) * scale;
+        const next = notes.slice(i + 1).find((n) => n.time > t.time);
+        const len = Math.max(150, ((next ? next.time : t.time + 60000 / bpm) - t.time) * scale * 0.95);
+        const vel = p.loudness?.[i] ?? 0.7;
+        timers.current.push(
+          window.setTimeout(() => {
+            const stop = noteOn(t.midi, 0, vel);
+            mark(t.id, true);
+            setKeyHint([t.midi]);
+            window.setTimeout(() => (stop(), mark(t.id, false)), len);
+          }, startAt + at - performance.now()),
+        );
+      });
+      const total = (notes[notes.length - 1].time - t0) * scale + 600;
+      timers.current.push(window.setTimeout(() => (setKeyHint([]), done(`played notes ${p.from}–${p.to} at ♩ = ${p.bpm}`)), startAt + total - performance.now()));
+    });
+  const practice = (p: PracticeInput) => {
+    if (busy) return "not now: the learner is playing";
+    if (p.bpm) setBpm(p.bpm);
+    if (p.mode) setMode(p.mode);
+    reset();
+    return [p.bpm && `♩ = ${p.bpm}`, p.mode && (p.mode === "wait" ? "Wait for me" : "In time")].filter(Boolean).join(", ");
   };
 
   const counts = grade
@@ -388,6 +427,15 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
             )}
           </section>
         )}
+        <Suspense fallback={null}>
+          <Teacher
+            lessonText={() => lessonContext(lesson, target, bpm, pick)}
+            attempt={() => (grade ? { report: attemptReport(target, grade, mode, bpm, beatsPerBar(lesson.abc), lesson.tolerance), n: attempts.current } : null)}
+            play={demo}
+            practice={practice}
+            notes={target.length}
+          />
+        </Suspense>
         <p className="text-xs text-gray-400">
           {pick(["The notes:", "音："])} {plan.map((g) => g.map((t) => noteName(t.midi)).join("+")).join(" ")}
         </p>
