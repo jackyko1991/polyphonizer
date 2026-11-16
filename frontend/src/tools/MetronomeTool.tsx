@@ -103,7 +103,7 @@ export default function MetronomeTool() {
       <div className={`flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row ${onPhone("beat")}`}>
         <div className="flex items-center gap-3">
           <IconButton icon={Minus} label="−1" variant="secondary" onClick={() => bpm(s.bpm - 1)} className="max-sm:h-12! max-sm:w-12! max-sm:rounded-full" />
-          <div className="relative w-28 text-center sm:w-24">
+          <div className="relative w-28 text-center max-sm:w-36 sm:w-24">
             <input
               type="number"
               min={20}
@@ -117,7 +117,7 @@ export default function MetronomeTool() {
             <button
               onClick={() => setTerms((o) => !o)}
               aria-expanded={terms}
-              className="inline-flex items-center gap-0.5 rounded px-1 text-[11px] text-gray-500 hover:bg-gray-100 hover:text-gray-800 max-sm:text-sm"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] whitespace-nowrap text-gray-500 hover:bg-gray-100 hover:text-gray-800 max-sm:text-xs"
               title={pick(["Choose a tempo by its name", "依速度術語選擇"])}
               data-testid="metro-term"
             >
