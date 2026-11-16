@@ -51,3 +51,20 @@ export const imslpUrl = (pageId: string) => `https://imslp.org/index.php?curid=$
 export function imslpRows(ix: ImslpIndex, eras: Map<string, string>): Row[] {
   return ix.works.map(([id, composer, title, cat]) => [IMSLP, imslpUrl(id), null, title, composer, 0, null, "", eras.get(composer) ?? "Other", cat, "", [], [], IMSLP]);
 }
+
+/** the index with each work's search text (title, composer, catalogue number; folded as the Library folds) */
+export interface SearchableImslp extends ImslpIndex {
+  text: string[];
+}
+export function searchableImslp(ix: ImslpIndex, fold: (t: string) => string): SearchableImslp {
+  return { ...ix, text: ix.works.map(([, composer, title, cat]) => fold(`${title} ${composer} ${cat}`)) };
+}
+
+/** the works (their positions) whose text has every word, by the composer when one is given; nothing when neither */
+export function searchImslp(ix: SearchableImslp, words: string[], composer = "", limit = Infinity): number[] {
+  if (!words.length && !composer) return [];
+  const out: number[] = [];
+  for (let i = 0; i < ix.works.length && out.length < limit; i++)
+    if ((!composer || ix.works[i][1] === composer) && words.every((w) => ix.text[i].includes(w))) out.push(i);
+  return out;
+}

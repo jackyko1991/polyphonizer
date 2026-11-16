@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { IMSLP, imslpRows, imslpUrl, parseImslp } from "../src/library/imslp.ts";
+import { IMSLP, imslpRows, imslpUrl, parseImslp, searchImslp, searchableImslp } from "../src/library/imslp.ts";
 import { licenceClass } from "../src/library/elsewhere.ts";
 
 const TSV = `#imslp 2026-11-16 3
@@ -39,4 +39,15 @@ test("IMSLP works as Library rows: the page as the link, the era of the composer
   assert.equal(green[8], "Other");
   // each file on IMSLP has its own licence: the filter says to check it there
   assert.equal(licenceClass(five, {}), "varies");
+});
+
+test("searching IMSLP's index: every word in the title, composer or catalogue number; a composer filter; a limit", () => {
+  const fold = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const ix = searchableImslp(parseImslp(TSV), fold);
+  assert.deepEqual(searchImslp(ix, ["beethoven"]).map((i) => ix.works[i][2]), ["Symphony No.5, Op.67", "Für Elise, WoO 59"]);
+  assert.deepEqual(searchImslp(ix, ["fur", "elise"]).map((i) => ix.works[i][0]), ["1003"]); // accents folded
+  assert.deepEqual(searchImslp(ix, ["ib", "123"]).map((i) => ix.works[i][0]), ["1001"]); // the catalogue number
+  assert.deepEqual(searchImslp(ix, [], "Anonymous").map((i) => ix.works[i][0]), ["1002"]);
+  assert.deepEqual(searchImslp(ix, [], ""), []); // nothing asked: nothing listed
+  assert.equal(searchImslp(ix, ["o"], "", 1).length, 1);
 });

@@ -17,7 +17,7 @@ import { catalogIds, idLabel, idMatches, parseQuery } from "./library/catalogNum
 import { elsewhereLinks, LICENCE_CLASSES, licenceClass, searchTerms, type LicenceClass } from "./library/elsewhere.ts";
 import { AFFILIATE_REL, urtextUrl } from "./library/urtext.ts";
 import { analysisKey, analysisUrl, codeWithHarmony, type Analyses } from "./library/analyses.ts";
-import { IMSLP, IMSLP_SOURCE, imslpRows, parseImslp } from "./library/imslp.ts";
+import { imslpUrl, parseImslp, searchableImslp, searchImslp, type SearchableImslp } from "./library/imslp.ts";
 import { MUTOPIA, MUTOPIA_LICENCES, MUTOPIA_SOURCE, mutopiaLinks, mutopiaRow, type MutopiaRow } from "./library/mutopia.ts";
 import { byComposer, codeFor, idText, MUSIC21, sourceOf, type Row, type Source } from "./library/collections.ts";
 import { addRecent } from "./project.ts";
@@ -223,16 +223,17 @@ export default function LibraryPage() {
   };
   // IMSLP's index: large, fetched only when asked for (its source chosen, or "also search IMSLP")
   const [imslp, setImslp] = useState<"off" | "loading" | "on" | "error">("off");
+  const [imslpIx, setImslpIx] = useState<SearchableImslp | null>(null);
+  const [imslpShown, setImslpShown] = useState(50);
   const loadImslp = () => {
     if (imslp !== "off" && imslp !== "error") return;
     setImslp("loading");
     fetch(`${import.meta.env.BASE_URL}library/imslp.tsv`)
       .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
       .then((tsv) => {
-        setRows((old) => {
-          const eras = new Map((old ?? []).map((x) => [x[4], x[8]] as const));
-          return [...(old ?? []), ...imslpRows(parseImslp(tsv), eras)].sort(byComposer);
-        });
+        // kept apart from the Library's own rows (a quarter of a million works would slow every filter): searched on
+        // its own, below the Library's results
+        setImslpIx(searchableImslp(parseImslp(tsv), fold));
         setImslp("on");
       })
       .catch(() => setImslp("error"));
@@ -254,11 +255,11 @@ export default function LibraryPage() {
       const mutopia = ((mu.default ?? mu) as unknown as { works: MutopiaRow[] }).works;
       setMutopia(new Map(mutopia.map((w) => [mutopiaLinks(w).page, w])));
       setRows([...data.works, ...open.works, ...mutopia.map(mutopiaRow)].sort(byComposer));
-      setSources({ ...open.sources, [MUTOPIA]: MUTOPIA_SOURCE, [IMSLP]: IMSLP_SOURCE });
+      setSources({ ...open.sources, [MUTOPIA]: MUTOPIA_SOURCE });
       setVersion(data.music21);
     });
   }, []);
-  useEffect(() => setShown(PAGE), [query, source, collection, composer, era, ensemble, instruments, licence, withHarmony]);
+  useEffect(() => (setShown(PAGE), setImslpShown(50)), [query, source, collection, composer, era, ensemble, instruments, licence, withHarmony]);
 
   const composerName = (c: string) => (zh && COMPOSER_ZH[c] ? `${COMPOSER_ZH[c]}（${c}）` : c);
   const collectionName = (c: string) => (COLLECTIONS[c] ? pick(COLLECTIONS[c]) : sources[c] ? pick(sources[c].name) : c);
@@ -358,7 +359,7 @@ export default function LibraryPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           <select
             value={source}
-            onChange={(e) => (setSource(e.target.value), setCollection(""), e.target.value === IMSLP && loadImslp())}
+            onChange={(e) => (setSource(e.target.value), setCollection(""))}
             aria-label={t("lib.sourceFilter")}
             className={select}
             data-testid="lib-source"
@@ -367,10 +368,10 @@ export default function LibraryPage() {
               {t("lib.allSources")} ({rows?.length ?? "…"})
             </option>
             {[MUSIC21, ...Object.keys(sources)]
-              .filter((s) => sourceCounts.get(s) || s === IMSLP)
+              .filter((s) => sourceCounts.get(s))
               .map((s) => (
                 <option key={s} value={s}>
-                  {sourceName(s)} ({sourceCounts.get(s) ?? (imslp === "loading" ? "…" : t("lib.loadsWhenChosen"))})
+                  {sourceName(s)} ({sourceCounts.get(s)})
                 </option>
               ))}
           </select>
@@ -531,7 +532,6 @@ export default function LibraryPage() {
           const ids = catalogIds(idText(r), r[4]);
           const src = r[13] ? sources[r[13]] : undefined;
           const mu = r[13] === MUTOPIA ? mutopia.get(r[1]) : undefined;
-          const isImslp = r[13] === IMSLP;
           const links = mu ? mutopiaLinks(mu) : null;
           const lic = mu ? MUTOPIA_LICENCES[mu[6]] : src ? { name: src.licence, url: src.licenceUrl } : null;
           const urtext = urtextUrl(r);
@@ -552,16 +552,12 @@ export default function LibraryPage() {
               </p>
               {mu ? (
                 <p className="truncate text-xs text-gray-600">{mu[4]}</p>
-              ) : isImslp ? null : (
+              ) : (
                 <PartsLine row={r} open={openParts.has(r[1] + (r[2] ?? ""))} onToggle={() => setOpenParts((o) => { const k = r[1] + (r[2] ?? ""); const n = new Set(o); if (!n.delete(k)) n.add(k); return n; })} />
               )}
               {mu ? (
                 <p className="truncate text-xs text-gray-500" data-testid="lib-credit">
                   {MUTOPIA_SOURCE.credit} · {t("lib.mutopiaHow")}
-                </p>
-              ) : isImslp ? (
-                <p className="truncate text-xs text-gray-500" data-testid="lib-credit">
-                  {IMSLP_SOURCE.credit} · {t("lib.imslpHow")}
                 </p>
               ) : src ? (
                 <p className="truncate text-xs text-gray-500" title={fill(t("lib.downloads"), { source: pick(src.name) })} data-testid="lib-credit">
@@ -607,11 +603,7 @@ export default function LibraryPage() {
                 </a>
               )}
             </span>
-            {isImslp ? (
-              <a href={r[1]} target="_blank" rel="noopener noreferrer" className="rounded-md bg-(--lk-accent) px-3 py-1 text-sm font-medium text-white hover:opacity-90" data-testid="lib-imslp">
-                IMSLP ↗
-              </a>
-            ) : links ? (
+            {links ? (
               // Mutopia's files: downloaded from its site, then opened here (Import, or drop the file on the editor)
               <span className="flex items-center gap-1.5" data-testid="lib-mutopia">
                 {links.midi && (
@@ -638,6 +630,7 @@ export default function LibraryPage() {
         })}
         {rows && filtered.length === 0 && <li className="px-4 py-6 text-center text-sm text-gray-500">{t("lib.none")}</li>}
       </ul>
+      {imslpIx && <ImslpResults ix={imslpIx} words={rest} composer={activeComposer} shown={imslpShown} onMore={() => setImslpShown((n) => n + 50)} />}
       {filtered.length > shown && (
         <button onClick={() => setShown((n) => n + PAGE)} className="mx-auto mt-4 block rounded-md border border-gray-300 bg-white px-4 py-1.5 text-sm hover:bg-gray-50">
           {fill(t("lib.more"), { n: Math.min(PAGE, filtered.length - shown) })}
@@ -744,5 +737,53 @@ function PartsLine({ row, open, onToggle }: { row: Row; open: boolean; onToggle:
         </span>
       )}
     </div>
+  );
+}
+
+/** IMSLP's works matching the search (or the composer chosen), below the Library's own: each links to its IMSLP page */
+function ImslpResults({ ix, words, composer, shown, onMore }: { ix: SearchableImslp; words: string[]; composer: string; shown: number; onMore: () => void }) {
+  const { t } = useLang();
+  const hits = useMemo(() => searchImslp(ix, words, composer, shown + 1), [ix, words.join(" "), composer, shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!words.length && !composer) return <p className="mt-4 text-sm text-gray-500" data-testid="lib-imslp-results">{t("lib.imslpType")}</p>;
+  return (
+    <section className="mt-6" data-testid="lib-imslp-results">
+      <h2 className="text-sm font-semibold text-gray-900">
+        {t("lib.onImslp")} <span className="font-normal text-gray-500">({hits.length > shown ? `${shown}+` : hits.length})</span>
+      </h2>
+      <p className="text-xs text-gray-500">{t("lib.imslpHow")}</p>
+      <ul className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+        {hits.slice(0, shown).map((i) => {
+          const [id, who, title, cat] = ix.works[i];
+          const urtext = urtextUrl(["imslp", "", null, title, who, 0, null, "", "", "", "", [], []]);
+          return (
+            <li key={id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-(--lk-accent)">
+                  {who}
+                  {cat && <span className="font-normal text-gray-500"> · {cat}</span>}
+                </p>
+                <p className="truncate text-sm text-gray-900" title={title}>
+                  {title}
+                </p>
+              </div>
+              {urtext && (
+                <a href={urtext} target="_blank" rel={AFFILIATE_REL} title={t("lib.urtextHint")} className="text-[11px] text-gray-500 hover:text-(--lk-accent) hover:underline">
+                  {t("lib.urtext")} ↗
+                </a>
+              )}
+              <a href={imslpUrl(id)} target="_blank" rel="noopener noreferrer" className="rounded-md border border-gray-300 px-3 py-1 text-sm font-medium text-gray-800 hover:border-(--lk-accent) hover:text-(--lk-accent)" data-testid="lib-imslp">
+                IMSLP ↗
+              </a>
+            </li>
+          );
+        })}
+        {!hits.length && <li className="px-4 py-4 text-center text-sm text-gray-500">{t("lib.none")}</li>}
+      </ul>
+      {hits.length > shown && (
+        <button onClick={onMore} className="mx-auto mt-3 block rounded-md border border-gray-300 bg-white px-4 py-1.5 text-sm hover:bg-gray-50">
+          {t("lib.imslpMore")}
+        </button>
+      )}
+    </section>
   );
 }
