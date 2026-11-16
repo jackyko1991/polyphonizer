@@ -84,13 +84,18 @@ export default function MetronomeTool() {
   }, [s.running]);
   const bpm = (v: number) => setMetronome({ bpm: Math.round(Math.min(300, Math.max(20, v))) });
   // the term whose typical speed is nearest
+  const tap = () => {
+    const r = tapTempo(taps.current, performance.now());
+    taps.current = r.times;
+    if (r.bpm) bpm(r.bpm);
+  };
   const tempoName = TEMPO_TERMS.reduce((a, b) => (Math.abs(b[3] - s.bpm) < Math.abs(a[3] - s.bpm) ? b : a))[0];
 
   // on a phone: two tabs, the beat (tempo, start, beats) and its settings; wider screens show both
   const onPhone = (p: typeof pane) => (pane === p ? "" : "max-sm:hidden");
 
   return (
-    <div className="flex h-full flex-wrap items-start gap-x-8 gap-y-3 max-sm:flex-col max-sm:flex-nowrap max-sm:items-stretch max-sm:gap-y-3" data-testid="metronome-tool">
+    <div className="flex h-full flex-wrap items-start gap-x-8 gap-y-3 max-sm:flex-col max-sm:flex-nowrap max-sm:items-stretch max-sm:gap-y-1.5" data-testid="metronome-tool">
       <PhoneTabs
         tabs={[
           ["beat", pick(["Beat", "拍子"])],
@@ -100,24 +105,24 @@ export default function MetronomeTool() {
         onChange={setPane}
         testid="metro-pane"
       />
-      <div className={`flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row ${onPhone("beat")}`}>
-        <div className="flex items-center gap-3">
-          <IconButton icon={Minus} label="−1" variant="secondary" onClick={() => bpm(s.bpm - 1)} className="max-sm:h-12! max-sm:w-12! max-sm:rounded-full" />
-          <div className="relative w-28 text-center max-sm:w-36 sm:w-24">
+      <div className={`flex w-full flex-col items-center gap-3 max-sm:gap-1 sm:w-auto sm:flex-row ${onPhone("beat")}`}>
+        <div className="flex items-center gap-3 max-sm:gap-2">
+          <IconButton icon={Minus} label="−1" variant="secondary" onClick={() => bpm(s.bpm - 1)} className="max-sm:h-11! max-sm:w-11! max-sm:rounded-full" />
+          <div className="relative w-28 text-center max-sm:w-32 sm:w-24">
             <input
               type="number"
               min={20}
               max={300}
               value={s.bpm}
               onChange={(e) => bpm(Number(e.target.value) || s.bpm)}
-              className="w-full bg-transparent text-center text-4xl font-semibold text-gray-900 tabular-nums outline-none max-sm:text-5xl"
+              className="w-full bg-transparent text-center text-4xl font-semibold text-gray-900 tabular-nums outline-none max-sm:h-10 max-sm:leading-none"
               aria-label="BPM"
               data-testid="metro-bpm"
             />
             <button
               onClick={() => setTerms((o) => !o)}
               aria-expanded={terms}
-              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] whitespace-nowrap text-gray-500 hover:bg-gray-100 hover:text-gray-800 max-sm:text-xs"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] whitespace-nowrap text-gray-500 hover:bg-gray-100 hover:text-gray-800 max-sm:py-0 max-sm:text-xs"
               title={pick(["Choose a tempo by its name", "依速度術語選擇"])}
               data-testid="metro-term"
             >
@@ -144,26 +149,24 @@ export default function MetronomeTool() {
               </ul>
             )}
           </div>
-          <IconButton icon={Plus} label="+1" variant="secondary" onClick={() => bpm(s.bpm + 1)} className="max-sm:h-12! max-sm:w-12! max-sm:rounded-full" />
+          <IconButton icon={Plus} label="+1" variant="secondary" onClick={() => bpm(s.bpm + 1)} className="max-sm:h-11! max-sm:w-11! max-sm:rounded-full" />
+          {/* on a phone, Tap sits in this row as an icon (the Start button below takes the width) */}
+          <IconButton icon={Hand} label={pick(["Tap tempo", "點拍定速"])} variant="secondary" onClick={tap} className="h-11! w-11! rounded-full sm:hidden" data-testid="metro-tap-phone" />
         </div>
         <div className="flex w-full items-center gap-2 sm:w-auto">
           <Button
             variant="primary"
             icon={s.running ? Square : Play}
             onClick={() => setMetronome({ running: !s.running })}
-            className="h-12! flex-1 px-4! text-base! sm:flex-none"
+            className="h-12! flex-1 px-4! text-base! max-sm:h-10! sm:flex-none"
             data-testid="metro-start"
           >
             {s.running ? pick(["Stop", "停止"]) : pick(["Start", "開始"])}
           </Button>
           <Button
             icon={Hand}
-            onClick={() => {
-              const r = tapTempo(taps.current, performance.now());
-              taps.current = r.times;
-              if (r.bpm) bpm(r.bpm);
-            }}
-            className="h-12! flex-1 sm:flex-none"
+            onClick={tap}
+            className="h-12! flex-1 max-sm:hidden sm:flex-none"
             title={pick([
               "Tap tempo: tap this button in time with the music (or the speed you want) a few times; the metronome takes its speed from your taps",
               "點拍定速：跟著音樂（或你想要的速度）點這個按鈕幾下，節拍器就會依你的點擊設定速度",
@@ -176,10 +179,11 @@ export default function MetronomeTool() {
       </div>
 
       <div className={`flex w-full min-w-[16rem] flex-1 flex-col gap-2 sm:w-auto ${onPhone("settings")}`}>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700 max-sm:flex-col max-sm:items-start max-sm:gap-3">
-          <label className="flex items-center gap-1.5">
-            {pick(["Beats per bar", "每小節拍數"])}
-            <select value={s.beats} onChange={(e) => setMetronome(withBeats(s, Number(e.target.value)))} className={FIELD}>
+        {/* on a phone a two-column grid across the width: beats | sound, the subdivision, heavy | volume */}
+        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700 max-sm:grid max-sm:grid-cols-2 max-sm:gap-x-3 max-sm:gap-y-2">
+          <label className="flex items-center gap-1.5 max-sm:min-w-0">
+            <span className="max-sm:truncate">{pick(["Beats per bar", "每小節拍數"])}</span>
+            <select value={s.beats} onChange={(e) => setMetronome(withBeats(s, Number(e.target.value)))} className={`${FIELD} max-sm:ml-auto`}>
               {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>
                   {n}
@@ -187,7 +191,7 @@ export default function MetronomeTool() {
               ))}
             </select>
           </label>
-          <div className="inline-flex rounded-md border border-gray-300 p-0.5" role="radiogroup" aria-label={pick(["Subdivision", "細分"])}>
+          <div className="inline-flex rounded-md border border-gray-300 p-0.5 max-sm:order-3 max-sm:col-span-2 max-sm:flex" role="radiogroup" aria-label={pick(["Subdivision", "細分"])}>
             {SUBS.map(([v, name]) => (
               <button
                 key={v}
@@ -195,7 +199,7 @@ export default function MetronomeTool() {
                 aria-checked={s.sub === v}
                 onClick={() => setMetronome({ sub: v })}
                 title={pick(name)}
-                className={`inline-flex h-8 items-center gap-1 rounded px-2 text-xs ${s.sub === v ? "bg-(--lk-accent) text-white" : "text-gray-700 hover:bg-gray-100"}`}
+                className={`inline-flex h-8 items-center justify-center gap-1 rounded px-2 text-xs max-sm:flex-1 ${s.sub === v ? "bg-(--lk-accent) text-white" : "text-gray-700 hover:bg-gray-100"}`}
                 data-testid={`sub-${v}`}
               >
                 <BeatNotes n={v} />
@@ -203,12 +207,12 @@ export default function MetronomeTool() {
               </button>
             ))}
           </div>
-          <label className="inline-flex items-center gap-1.5 text-sm text-gray-700">
+          <label className="inline-flex items-center gap-1.5 text-sm text-gray-700 max-sm:order-4 max-sm:min-w-0">
             {pick(["Heavy", "重音"])}
             <select
               value={s.heavy ?? "bar"}
               onChange={(e) => setMetronome({ heavy: e.target.value as "bar" | "beat" | "none" })}
-              className={FIELD}
+              className={`${FIELD} max-sm:min-w-0 max-sm:flex-1`}
               aria-label={pick(["Which note is played heavier", "哪個音較重"])}
               data-testid="heavy"
             >
@@ -222,14 +226,14 @@ export default function MetronomeTool() {
           <select
             value={s.sound}
             onChange={(e) => setMetronome({ sound: e.target.value as MetronomeState["sound"] })}
-            className={FIELD}
+            className={`${FIELD} max-sm:order-2`}
             aria-label={pick(["Sound", "聲音"])}
           >
             <option value="wood">{pick(["Woodblock", "木魚"])}</option>
             <option value="click">{pick(["Click", "滴答"])}</option>
             <option value="beep">{pick(["Beep", "嗶聲"])}</option>
           </select>
-          <label className="flex items-center gap-1.5">
+          <label className="flex items-center gap-1.5 max-sm:order-5">
             {pick(["Volume", "音量"])}
             <input
               type="range"
@@ -238,15 +242,15 @@ export default function MetronomeTool() {
               step={0.05}
               value={s.volume}
               onChange={(e) => setMetronome({ volume: Number(e.target.value) })}
-              className="w-24 accent-(--lk-accent)"
+              className="w-24 accent-(--lk-accent) max-sm:min-w-0 max-sm:flex-1"
             />
           </label>
         </div>
       </div>
 
       {/* the beats, centred (under the tempo on a phone) */}
-      <div className={`flex flex-col items-center gap-1 ${onPhone("beat")}`}>
-        <p className="text-[11px] text-gray-500">{pick(["Click a beat: accent · normal · silent", "點拍子：重音 · 一般 · 靜音"])}</p>
+      <div className={`flex flex-col items-center gap-1 ${onPhone("beat")}`} title={pick(["Click a beat: accent · normal · silent", "點拍子：重音 · 一般 · 靜音"])}>
+        <p className="text-[11px] text-gray-500 max-sm:hidden">{pick(["Click a beat: accent · normal · silent", "點拍子：重音 · 一般 · 靜音"])}</p>
         <div className="flex flex-wrap justify-center gap-1.5" data-testid="metro-beats">
           {Array.from({ length: s.beats }, (_, i) => {
             const a = s.accents[i] ?? "normal";
@@ -257,7 +261,7 @@ export default function MetronomeTool() {
                 type="button"
                 onClick={() => setMetronome({ accents: s.accents.map((x, j) => (j === i ? nextAccent(x) : x)) })}
                 aria-label={`${pick(["Beat", "第"])} ${i + 1}${pick(["", " 拍"])}: ${a}`}
-                className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-semibold transition-transform duration-100 max-sm:h-11 max-sm:w-11 max-sm:text-base ${
+                className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-semibold transition-transform duration-100 max-sm:h-9 max-sm:w-9 ${
                   a === "accent" ? "border-(--lk-accent)" : a === "normal" ? "border-gray-400" : "border-dashed border-gray-300"
                 } ${now ? (a === "mute" ? "scale-110 bg-gray-200" : "scale-110 bg-(--lk-accent) text-white") : "bg-white text-gray-600"}`}
               >
@@ -269,7 +273,7 @@ export default function MetronomeTool() {
         {/* a big pulse for watching from the stand */}
         <span
           key={flash}
-          className={`mt-1 h-1.5 w-full rounded-full ${s.running ? "animate-[pz-pulse_0.25s_ease-out] bg-(--lk-accent)" : "bg-gray-200"}`}
+          className={`mt-1 h-1.5 w-full rounded-full max-sm:hidden ${s.running ? "animate-[pz-pulse_0.25s_ease-out] bg-(--lk-accent)" : "bg-gray-200"}`}
         />
       </div>
     </div>

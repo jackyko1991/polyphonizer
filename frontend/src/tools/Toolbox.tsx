@@ -101,7 +101,10 @@ export default function Toolbox() {
         // always in the same place, bottom right, above everything (the dock and the phone sheet too). The box is as tall
         // as the hidden menu, so it lets the pointer through (to the dock's Close and Full screen underneath); only the
         // button and the open menu take it
-        className="pointer-events-none fixed right-4 bottom-10 z-[70] max-sm:right-3 max-sm:bottom-3 flex flex-col items-end gap-2"
+        // on a phone it rides just above the open dock (not over the tool, which then needs no room kept for it)
+        className={`pointer-events-none fixed right-4 bottom-10 z-[70] max-sm:right-3 flex flex-col items-end gap-2 ${
+          dockShown && !sheet ? "max-sm:bottom-[calc(var(--pz-dock)+0.75rem)]" : "max-sm:bottom-3"
+        }`}
         onMouseEnter={hoverIn}
         onMouseLeave={hoverOut}
         onKeyDown={(e) => e.key === "Escape" && setMenu(false)}
@@ -280,8 +283,9 @@ export default function Toolbox() {
               <span className="max-sm:hidden">{pick(["Close", "關閉"])}</span>
             </button>
           </div>
-          {/* room on the right (and at the bottom on a phone) for the Toolbox button, which sits over the dock */}
-          <div className="min-h-0 flex-1 overflow-auto p-3 pr-20 max-sm:p-3 max-sm:pr-3 max-sm:pb-16">
+          {/* room on the right for the Toolbox button, which sits over the dock (on a phone it sits above the dock, or over
+              the bottom of the full-screen tool) */}
+          <div className={`min-h-0 flex-1 overflow-auto p-3 pr-20 max-sm:p-2 ${sheet ? "max-sm:pb-16" : ""}`}>
             <Suspense fallback={<p className="text-sm text-gray-500">…</p>}>
               {/* open tools stay mounted (a ticking metronome keeps its panel state); only the front one shows */}
               {box.open.map((id) => (

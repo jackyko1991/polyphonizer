@@ -117,7 +117,7 @@ export default function TunerTool() {
   const ZONE_BG = { green: "bg-emerald-600", yellow: "bg-amber-500", red: "bg-red-600" } as const;
 
   return (
-    <div className="grid h-full gap-4 max-sm:flex max-sm:flex-col max-sm:gap-3 lg:grid-cols-2" data-testid="tuner-tool">
+    <div className="grid h-full gap-4 max-sm:flex max-sm:flex-col max-sm:gap-2 lg:grid-cols-2" data-testid="tuner-tool">
       {/* on a phone: two tabs, listening and the reference tone; wider screens show both */}
       <PhoneTabs
         tabs={[
@@ -130,7 +130,7 @@ export default function TunerTool() {
       />
       <section className={`flex flex-col gap-2 ${pane === "listen" ? "" : "max-sm:hidden"}`}>
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-gray-900">{pick(["Listen", "聆聽"])}</h3>
+          <h3 className="text-sm font-semibold text-gray-900 max-sm:hidden">{pick(["Listen", "聆聽"])}</h3>
           <Button
             icon={mic ? MicOff : Mic}
             variant={mic ? "on" : "secondary"}
@@ -147,9 +147,9 @@ export default function TunerTool() {
             {micError}
           </p>
         )}
-        <div className="flex items-center gap-4 max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
-          <div className="w-28 text-center max-sm:w-full">
-            <p className={`text-4xl leading-tight font-semibold tabular-nums max-sm:text-5xl ${zone ? ZONE_TEXT[zone] : "text-gray-900"}`} data-testid="tuner-note" data-zone={zone ?? ""}>
+        <div className="flex items-center gap-4 max-sm:gap-3 max-sm:pr-1">
+          <div className="w-28 shrink-0 text-center max-sm:w-20">
+            <p className={`text-4xl leading-tight font-semibold tabular-nums ${zone ? ZONE_TEXT[zone] : "text-gray-900"}`} data-testid="tuner-note" data-zone={zone ?? ""}>
               {reading ? noteName(reading.midi) : "–"}
             </p>
             <p className="text-xs text-gray-500 tabular-nums">
@@ -157,7 +157,7 @@ export default function TunerTool() {
             </p>
           </div>
           {/* the needle: −50 … +50 cents */}
-          <div className="relative h-16 flex-1 max-sm:h-16 max-sm:flex-none">
+          <div className="relative h-16 min-w-0 flex-1">
             <div className="absolute inset-x-0 top-1/2 h-px bg-gray-300" />
             {/* zones: red beyond ±15 cents, yellow within ±15, green within ±5 */}
             <div className="absolute inset-x-0 top-2 bottom-4 rounded bg-red-50" />
@@ -182,7 +182,7 @@ export default function TunerTool() {
         <div className="h-1.5 rounded-full bg-gray-100" aria-label={pick(["Input level", "輸入音量"])}>
           <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-75" style={{ width: `${level * 100}%` }} />
         </div>
-        <p className="text-[11px] text-gray-500">
+        <p className="text-[11px] text-gray-500 max-sm:hidden">
           {pick([
             "One note at a time. Headphones keep the reference tone out of the microphone. An electric violin through an audio interface works too.",
             "一次一個音。戴耳機可避免參考音被麥克風收進去。電子小提琴接上音訊介面也可以。",
@@ -190,9 +190,9 @@ export default function TunerTool() {
         </p>
       </section>
       <section className={`flex flex-col gap-2 ${pane === "tone" ? "" : "max-sm:hidden"}`}>
-        <h3 className="text-sm font-semibold text-gray-900">{pick(["Reference tone", "參考音"])}</h3>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
-          <label className="flex items-center gap-1.5">
+        <h3 className="text-sm font-semibold text-gray-900 max-sm:hidden">{pick(["Reference tone", "參考音"])}</h3>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700 max-sm:flex-nowrap">
+          <label className="flex shrink-0 items-center gap-1.5">
             A4 =
             <input
               type="number"
@@ -204,19 +204,19 @@ export default function TunerTool() {
                 const v = Number(e.target.value);
                 if (v >= 400 && v <= 480) setSoundSettings({ a4: v });
               }}
-              className={`${FIELD} w-20`}
+              className={`${FIELD} w-20 max-sm:w-16`}
               aria-label="A4 (Hz)"
               data-testid="tuner-a4"
             />
             Hz
           </label>
           {A4_PRESETS.map((f) => (
-            <Button key={f} variant={a4 === f ? "on" : "secondary"} onClick={() => setSoundSettings({ a4: f })} className="px-2!">
+            <Button key={f} variant={a4 === f ? "on" : "secondary"} onClick={() => setSoundSettings({ a4: f })} className="px-2! max-sm:min-w-0 max-sm:flex-1 max-sm:shrink max-sm:px-0!">
               {f}
             </Button>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 max-sm:flex-nowrap">
           <select
             value={preset}
             onChange={(e) => {
@@ -229,7 +229,7 @@ export default function TunerTool() {
                 /* storage unavailable */
               }
             }}
-            className={FIELD}
+            className={`${FIELD} max-sm:min-w-0 max-sm:flex-1`}
             aria-label={pick(["Instrument", "樂器"])}
           >
             {TUNINGS.map((t) => (
@@ -238,15 +238,16 @@ export default function TunerTool() {
               </option>
             ))}
           </select>
-          <select value={kind} onChange={(e) => setKind(e.target.value as ToneKind)} className={FIELD} aria-label={pick(["Tone", "音色"])}>
+          <select value={kind} onChange={(e) => setKind(e.target.value as ToneKind)} className={`${FIELD} max-sm:min-w-0 max-sm:flex-1`} aria-label={pick(["Tone", "音色"])}>
             <option value="sine">{pick(["Pure tone", "純音"])}</option>
             <option value="organ">{pick(["Soft organ", "柔和風琴"])}</option>
             <option value="instrument">{pick(["The instrument", "樂器本身"])}</option>
           </select>
           {tuning.notes.length > 1 && (
-            <label className={CHECK}>
+            <label className={`${CHECK} shrink-0`} title={pick(["Two strings together", "兩弦同響"])}>
               <input type="checkbox" checked={fifths} onChange={(e) => (setFifths(e.target.checked), stopTone())} />
-              {pick(["Two strings together", "兩弦同響"])}
+              <span className="max-sm:hidden">{pick(["Two strings together", "兩弦同響"])}</span>
+              <span className="sm:hidden">{pick(["Pairs", "雙弦"])}</span>
             </label>
           )}
         </div>
@@ -260,7 +261,7 @@ export default function TunerTool() {
                   type="button"
                   onClick={() => playTone(notes)}
                   aria-pressed={on}
-                  className={`flex h-14 min-w-14 flex-col items-center justify-center rounded-lg border-2 px-3 transition-colors max-sm:h-16 max-sm:flex-1 max-sm:px-1 ${
+                  className={`flex h-14 min-w-14 flex-col items-center justify-center rounded-lg border-2 px-3 transition-colors max-sm:h-12 max-sm:min-w-0 max-sm:flex-1 max-sm:px-1 ${
                     on
                       ? "border-(--lk-accent) bg-rose-50 text-(--lk-accent)"
                       : "border-gray-300 bg-white text-gray-800 hover:border-gray-400"
@@ -294,7 +295,7 @@ export default function TunerTool() {
             </div>
           )}
         </div>
-        <p className="text-[11px] text-gray-500">
+        <p className="text-[11px] text-gray-500 max-sm:hidden">
           {pick([
             "Equal temperament. Strings tuned in pure fifths by ear end slightly wider than these frequencies; that is normal.",
             "以十二平均律計算。用耳朵把弦調成純五度時，會比這些頻率略寬一點，這是正常的。",

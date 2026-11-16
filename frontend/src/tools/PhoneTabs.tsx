@@ -22,7 +22,7 @@ export default function PhoneTabs<T extends string>({
           role="tab"
           aria-selected={value === v}
           onClick={() => onChange(v)}
-          className={`flex-1 rounded-md py-1.5 text-sm font-medium ${value === v ? "bg-white text-(--lk-accent) shadow-sm" : "text-gray-600"}`}
+          className={`flex-1 rounded-md py-0.5 text-sm font-medium ${value === v ? "bg-white text-(--lk-accent) shadow-sm" : "text-gray-600"}`}
         >
           {label}
         </button>
