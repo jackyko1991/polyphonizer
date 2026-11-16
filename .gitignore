@@ -12,3 +12,4 @@ frontend/public/generated/
 .venv/
 runner/engines/copisteria/
 frontend/public/library/library.sqlite
+frontend/public/library/siblings.json
