@@ -88,11 +88,12 @@ export function importCode(name: string, from?: string): string {
   return `${head}score = load(${JSON.stringify(name)})\n`;
 }
 
-export type LicenceClass = "free" | "attribution" | "nc";
+export type LicenceClass = "free" | "attribution" | "nc" | "varies";
 export const LICENCE_CLASSES: [LicenceClass, L][] = [
   ["free", ["Free for any use (public domain, CC0)", "任何用途皆可（公有領域、CC0）"]],
   ["attribution", ["Credit the source (CC BY …)", "需標示來源（CC BY …）"]],
   ["nc", ["Non-commercial only", "僅限非商業用途"]],
+  ["varies", ["Check on the source's page (IMSLP: per file)", "請看來源頁面（IMSLP：每個檔案不同）"]],
 ];
 
 /** how freely a work may be used: music21's corpus and CC0 are free; CC BY and BY-SA need credit; NC is
@@ -100,6 +101,7 @@ export const LICENCE_CLASSES: [LicenceClass, L][] = [
 export function licenceClass(r: Row, sources: Record<string, Source>): LicenceClass {
   if (!r[13]) return "free";
   if (r[14]) return r[14] === "pd" ? "free" : "attribution";
+  if (r[13] === "imslp") return "varies";
   const s = sources[r[13]];
   if (!s || s.nonCommercial || /\bNC\b/.test(s.licence)) return "nc";
   return /^CC0|public domain/i.test(s.licence) ? "free" : "attribution";
