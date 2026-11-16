@@ -49,10 +49,46 @@ export function resultName(from: string, type: string): string {
   return `${stem}.${ext}`;
 }
 
-/** what a runner can do, or null when nothing answers at that address */
-export async function runnerStatus(base: string, f: typeof fetch = fetch): Promise<RunnerStatus | null> {
+/** a backend's address: https anywhere, or http on this computer only (anything else would send files in the clear) */
+export function backendOk(url: string): boolean {
   try {
-    const r = await f(`${base.replace(/\/+$/, "")}/status`, { signal: AbortSignal.timeout?.(1500) });
+    const u = new URL(url);
+    return u.protocol === "https:" || (u.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(u.hostname));
+  } catch {
+    return false;
+  }
+}
+
+/** the backend this learner uses (their runner by default; their own server, Space or the service otherwise), kept in
+ * this browser */
+export interface Backend {
+  url: string;
+  token: string;
+}
+const BACKEND_KEY = "polyphonizer.transcribe.backend";
+export function loadBackend(): Backend {
+  try {
+    const b = JSON.parse(localStorage.getItem(BACKEND_KEY) ?? "null") as Partial<Backend> | null;
+    if (b?.url && backendOk(b.url)) return { url: b.url, token: b.token ?? "" };
+  } catch {
+    /* storage unavailable */
+  }
+  return { url: RUNNER_URL, token: "" };
+}
+export function saveBackend(b: Backend) {
+  try {
+    if (b.url === RUNNER_URL && !b.token) localStorage.removeItem(BACKEND_KEY);
+    else localStorage.setItem(BACKEND_KEY, JSON.stringify(b));
+  } catch {
+    /* storage unavailable */
+  }
+}
+const auth = (token?: string): Record<string, string> => (token ? { authorization: `Bearer ${token}` } : {});
+
+/** what a runner can do, or null when nothing answers at that address */
+export async function runnerStatus(base: string, f: typeof fetch = fetch, token?: string): Promise<RunnerStatus | null> {
+  try {
+    const r = await f(`${base.replace(/\/+$/, "")}/status`, { headers: auth(token), signal: AbortSignal.timeout?.(3000) });
     if (!r.ok) return null;
     const s = (await r.json()) as Partial<RunnerStatus>;
     return { omr: !!s.omr, transcribe: !!s.transcribe, version: String(s.version ?? "") };
@@ -62,10 +98,10 @@ export async function runnerStatus(base: string, f: typeof fetch = fetch): Promi
 }
 
 /** send a file to a runner (or the service) and get the notes back as a file */
-export async function runJob(base: string, kind: JobKind, file: File, f: typeof fetch = fetch): Promise<{ name: string; bytes: Uint8Array }> {
+export async function runJob(base: string, kind: JobKind, file: File, f: typeof fetch = fetch, token?: string): Promise<{ name: string; bytes: Uint8Array }> {
   const r = await f(jobUrl(base, kind), {
     method: "POST",
-    headers: { "content-type": file.type || "application/octet-stream", "x-filename": encodeURIComponent(file.name) },
+    headers: { "content-type": file.type || "application/octet-stream", "x-filename": encodeURIComponent(file.name), ...auth(token) },
     body: file,
   });
   if (!r.ok) {

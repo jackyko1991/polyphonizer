@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileKind } from "../src/library/elsewhere.ts";
-import { jobKind, jobUrl, resultName, routesFor, RUNNER_URL, runJob, runnerStatus } from "../src/transcribe/routes.ts";
+import { backendOk, jobKind, jobUrl, resultName, routesFor, RUNNER_URL, runJob, runnerStatus } from "../src/transcribe/routes.ts";
 
 test("what a file needs: a picture of music is read (OMR), a recording or a video is transcribed, a score needs nothing", () => {
   assert.equal(jobKind("Erlkonig.pdf"), "omr");
@@ -77,4 +77,32 @@ test("the client: status (none when nothing answers), and a job sent with its na
     runJob(RUNNER_URL, "omr", file, fake(() => Response.json({ error: "No OMR engine: pixi run runner-omr" }, { status: 501 }))),
     /No OMR engine/,
   );
+});
+
+test("a backend of your own: its address (http only for this computer) and a token sent as a bearer", async () => {
+  assert.equal(backendOk("http://127.0.0.1:8765"), true);
+  assert.equal(backendOk("http://localhost:9000/"), true);
+  assert.equal(backendOk("https://my-runner.example.org/api"), true);
+  assert.equal(backendOk("https://someone-polyphonizer.hf.space"), true);
+  // plain http to another computer would send your files unencrypted; other schemes are not backends
+  assert.equal(backendOk("http://192.168.1.20:8765"), false);
+  assert.equal(backendOk("javascript:alert(1)"), false);
+  assert.equal(backendOk("ftp://x"), false);
+  assert.equal(backendOk(""), false);
+
+  const seen: Headers[] = [];
+  const fake = (async (_u: string, init?: RequestInit) => {
+    seen.push(new Headers(init?.headers));
+    return Response.json({ omr: true, transcribe: true, version: "1" });
+  }) as typeof fetch;
+  await runnerStatus("https://my-runner.example.org", fake, "s3cret");
+  assert.equal(seen[0].get("authorization"), "Bearer s3cret");
+  await runnerStatus(RUNNER_URL, fake);
+  assert.equal(seen[1].get("authorization"), null);
+  const file = new File([new Uint8Array([1])], "take.mp3");
+  await runJob("https://my-runner.example.org", "transcribe", file, (async (_u: string, init?: RequestInit) => {
+    seen.push(new Headers(init?.headers));
+    return new Response(new Uint8Array([77]), { headers: { "content-type": "audio/midi" } });
+  }) as typeof fetch, "s3cret");
+  assert.equal(seen[2].get("authorization"), "Bearer s3cret");
 });

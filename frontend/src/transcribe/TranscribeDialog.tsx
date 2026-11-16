@@ -7,7 +7,7 @@ import { AudioLines, FileMusic, Laptop, Server, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../Button.tsx";
 import { BUTTON, PRIMARY } from "../ui.ts";
-import { jobKind, routesFor, RUNNER_URL, runJob, runnerStatus, type RouteId, type RunnerStatus } from "./routes.ts";
+import { backendOk, jobKind, loadBackend, routesFor, RUNNER_URL, runJob, runnerStatus, saveBackend, type Backend, type RouteId, type RunnerStatus } from "./routes.ts";
 
 const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, string]; about: readonly [string, string] }> = {
   browser: {
@@ -17,8 +17,11 @@ const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, str
   },
   runner: {
     icon: Laptop,
-    name: ["My computer (local runner)", "我的電腦（本機執行器）"],
-    about: ["Free and private: start it with pixi run runner in the Polyphonizer folder, like Ollama. Reads printed pages and transcribes piano.", "免費且私密：在 Polyphonizer 資料夾執行 pixi run runner 啟動，像 Ollama 一樣。可讀印刷樂譜、為鋼琴採譜。"],
+    name: ["My computer or my server", "我的電腦或我的伺服器"],
+    about: [
+      "Free and private: start the runner with pixi run runner in the Polyphonizer folder, like Ollama. Or give the address of your own server or Space that speaks the same protocol.",
+      "免費且私密：在 Polyphonizer 資料夾執行 pixi run runner 啟動執行器，像 Ollama 一樣；或填入你自己的伺服器或 Space 位址（同樣的協定）。",
+    ],
   },
   service: {
     icon: Server,
@@ -29,7 +32,7 @@ const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, str
 const WHY: Record<string, readonly [string, string]> = {
   "not-here": ["Reading pages needs the runner or the service.", "讀取樂譜頁面需要執行器或服務。"],
   loading: ["The in-browser model is not installed yet (coming next).", "瀏覽器內的模型尚未安裝（即將推出）。"],
-  "not-running": ["Not running at 127.0.0.1:8765.", "127.0.0.1:8765 上沒有在執行。"],
+  "not-running": ["Nothing answers at that address.", "那個位址沒有回應。"],
   "no-engine": ["Running, but without an engine for this.", "正在執行，但沒有處理這類檔案的引擎。"],
   coming: ["Coming later.", "之後推出。"],
 };
@@ -38,13 +41,22 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
   const { pick } = useLang();
   const [file, setFile] = useState<File | null>(initial ?? null);
   const [runner, setRunner] = useState<RunnerStatus | null>(null);
+  // where "my computer or my server" is: the runner on this computer unless changed (kept in this browser)
+  const [backend, setBackend] = useState<Backend>(loadBackend);
+  const [draft, setDraft] = useState<Backend>(backend);
+  const [checking, setChecking] = useState(false);
+  const check = async (b: Backend) => {
+    setChecking(true);
+    setRunner(await runnerStatus(b.url, fetch, b.token));
+    setChecking(false);
+  };
   const [route, setRoute] = useState<RouteId | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    void runnerStatus(RUNNER_URL).then(setRunner);
+    void check(loadBackend());
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
@@ -63,7 +75,7 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
     setBusy(true);
     setError("");
     try {
-      const out = await runJob(RUNNER_URL, kind, file);
+      const out = await runJob(backend.url, kind, file, fetch, backend.token);
       onDone(new File([out.bytes as BlobPart], out.name));
       onClose();
     } catch (e) {
@@ -119,6 +131,42 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
                     <b className="font-medium text-gray-900">{pick(R.name)}</b>
                     <span className="block text-xs text-gray-600">{pick(R.about)}</span>
                     {!r.ready && r.why && <span className="block text-xs text-amber-800">{pick(WHY[r.why])}</span>}
+                    {r.id === "runner" && (
+                      // the address (and a token, for a server that asks for one)
+                      <span className="mt-1.5 flex flex-wrap items-center gap-1.5" onClick={(e) => e.preventDefault()}>
+                        <input
+                          value={draft.url}
+                          onChange={(e) => setDraft({ ...draft, url: e.target.value.trim() })}
+                          aria-label={pick(["Address", "位址"])}
+                          className={`h-8 min-w-0 flex-1 rounded border px-2 font-mono text-xs ${backendOk(draft.url) ? "border-gray-300" : "border-red-400"}`}
+                          data-testid="backend-url"
+                        />
+                        <input
+                          value={draft.token}
+                          onChange={(e) => setDraft({ ...draft, token: e.target.value.trim() })}
+                          type="password"
+                          placeholder={pick(["token (if asked)", "權杖（若需要）"])}
+                          aria-label={pick(["Token", "權杖"])}
+                          className="h-8 w-32 rounded border border-gray-300 px-2 text-xs"
+                          data-testid="backend-token"
+                        />
+                        <button
+                          type="button"
+                          disabled={!backendOk(draft.url) || checking}
+                          onClick={() => (setBackend(draft), saveBackend(draft), void check(draft))}
+                          className="h-8 rounded border border-gray-300 px-2 text-xs font-medium hover:bg-gray-50 disabled:opacity-50"
+                          data-testid="backend-check"
+                        >
+                          {checking ? "…" : pick(["Connect", "連線"])}
+                        </button>
+                        {draft.url !== RUNNER_URL && (
+                          <button type="button" onClick={() => setDraft({ url: RUNNER_URL, token: "" })} className="text-xs text-(--lk-accent) hover:underline">
+                            {pick(["this computer", "這台電腦"])}
+                          </button>
+                        )}
+                        {runner && <span className="basis-full text-xs text-emerald-700">✓ {pick(["Connected", "已連線"])} · {[runner.omr && pick(["reads pages", "讀譜"]), runner.transcribe && pick(["transcribes", "採譜"])].filter(Boolean).join(" · ") || pick(["no engine yet", "還沒有引擎"])}</span>}
+                      </span>
+                    )}
                   </span>
                 </label>
               );
