@@ -15,6 +15,7 @@ import { go, useLang } from "@learnkit/web";
 import { useEffect, useMemo, useState } from "react";
 import { catalogIds, idLabel, idMatches, parseQuery } from "./library/catalogNumbers.ts";
 import { elsewhereLinks, LICENCE_CLASSES, licenceClass, searchTerms, type LicenceClass } from "./library/elsewhere.ts";
+import { AFFILIATE_REL, urtextUrl } from "./library/urtext.ts";
 import { MUTOPIA, MUTOPIA_LICENCES, MUTOPIA_SOURCE, mutopiaLinks, mutopiaRow, type MutopiaRow } from "./library/mutopia.ts";
 import { byComposer, codeFor, idText, MUSIC21, sourceOf, type Row, type Source } from "./library/collections.ts";
 import { addRecent } from "./project.ts";
@@ -490,6 +491,7 @@ export default function LibraryPage() {
           const mu = r[13] === MUTOPIA ? mutopia.get(r[1]) : undefined;
           const links = mu ? mutopiaLinks(mu) : null;
           const lic = mu ? MUTOPIA_LICENCES[mu[6]] : src ? { name: src.licence, url: src.licenceUrl } : null;
+          const urtext = urtextUrl(r);
           return (
           <li key={`${r[1]}#${r[2] ?? ""}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
             <div className="min-w-0 flex-1">
@@ -544,6 +546,12 @@ export default function LibraryPage() {
                   data-testid="lib-licence"
                 >
                   {lic.name}
+                </a>
+              )}
+              {urtext && (
+                // a printed urtext edition to buy (an affiliate link; see the disclosure at the bottom)
+                <a href={urtext} target="_blank" rel={AFFILIATE_REL} title={t("lib.urtextHint")} className="ml-2 text-[11px] text-gray-500 hover:text-(--lk-accent) hover:underline" data-testid="lib-urtext">
+                  {t("lib.urtext")} ↗
                 </a>
               )}
             </span>
@@ -623,6 +631,9 @@ export default function LibraryPage() {
         <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
           CC BY-NC 4.0 ↗
         </a>
+      </p>
+      <p className="mt-4 border-t border-gray-200 pt-3 text-center text-xs text-gray-400" data-testid="lib-disclosure">
+        {t("lib.urtextNote")} {t("lib.disclosure")}
       </p>
     </div>
   );
