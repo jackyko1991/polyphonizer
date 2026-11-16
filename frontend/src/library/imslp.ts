@@ -26,6 +26,16 @@ export interface ImslpIndex {
   works: [string, string, string, string][];
 }
 
+/** an IMSLP composer's name, tidied: no wiki markup left over ("Daniel @composer^ Johnson"), and a particle kept with
+ * its surname when the name was turned round ("Vincent d' Indy" → "Vincent d'Indy") */
+export function tidyName(name: string): string {
+  return name
+    .replace(/@\w+\^\s*/g, "")
+    .replace(/\b([dDlL]['’])\s+/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** read the index: a header line, composers once (@n name), then works (page id, composer n, title, catalogue no.) */
 export function parseImslp(tsv: string): ImslpIndex {
   const lines = tsv.split("\n");
@@ -35,7 +45,7 @@ export function parseImslp(tsv: string): ImslpIndex {
   for (const line of lines.slice(1)) {
     if (line.startsWith("@")) {
       const [n, name] = line.slice(1).split("\t");
-      composers[Number(n)] = name ?? "";
+      composers[Number(n)] = tidyName(name ?? "");
       continue;
     }
     const [id, c, title, cat] = line.split("\t");

@@ -40,10 +40,12 @@ def get(start):
 
 def composer_name(c):
     """IMSLP's 'Beethoven, Ludwig van' → 'Ludwig van Beethoven'; 'Anonymous' stays"""
-    c = re.sub(r"\s+", " ", c or "").strip()
+    c = re.sub(r"@\w+\^\s*", "", re.sub(r"\s+", " ", c or "")).strip()
     if "," in c:
         surname, given = c.split(",", 1)
-        return f"{given.strip()} {surname.strip()}".strip()
+        given = given.strip()
+        # a particle stays with its surname: "Indy, Vincent d'" → "Vincent d'Indy"
+        return (f"{given}{surname.strip()}" if re.search(r"[dDlL]['’]$", given) else f"{given} {surname.strip()}").strip()
     return c
 
 

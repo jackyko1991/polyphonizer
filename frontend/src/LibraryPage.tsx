@@ -25,6 +25,7 @@ import { byComposer, codeFor, idText, MUSIC21, sourceOf, type Row, type Source }
 import { addRecent } from "./project.ts";
 import { fill } from "./strings.ts";
 import { openInEditor } from "./workspace.ts";
+import { withCanonicalComposer } from "./library/composers.ts";
 import { COLLECTIONS, COMPOSER_ZH, ENSEMBLES, ERAS, ERA_ORDER, FAMOUS, INSTRUMENTS, PAGE, VOICES, ensembleOf, fold, has, instrumentSummary, keyText } from "./library/lexicon.ts";
 
 export type { Row };
@@ -81,7 +82,8 @@ export default function LibraryPage() {
       const open = (o.default ?? o) as unknown as { sources: Record<string, Source>; works: Row[] };
       const mutopia = ((mu.default ?? mu) as unknown as { works: MutopiaRow[] }).works;
       setMutopia(new Map(mutopia.map((w) => [mutopiaLinks(w).page, w])));
-      setRows([...data.works, ...open.works, ...mutopia.map(mutopiaRow)].sort(byComposer));
+      // (each composer under one spelling across the sources: "F. Liszt" is Franz Liszt)
+      setRows([...data.works, ...open.works, ...mutopia.map(mutopiaRow)].map(withCanonicalComposer).sort(byComposer));
       setSources({ ...open.sources, [MUTOPIA]: MUTOPIA_SOURCE });
       setVersion(data.music21);
     });

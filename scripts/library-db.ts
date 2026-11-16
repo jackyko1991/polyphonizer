@@ -27,6 +27,7 @@ import { catalogIds } from "../frontend/src/library/catalogNumbers.ts";
 import { byComposer, idText, MUSIC21, type Row, type Source } from "../frontend/src/library/collections.ts";
 import { licenceClass } from "../frontend/src/library/elsewhere.ts";
 import { IMSLP, IMSLP_SOURCE, imslpRows, parseImslp } from "../frontend/src/library/imslp.ts";
+import { withCanonicalComposer } from "../frontend/src/library/composers.ts";
 import { COLLECTIONS, COMPOSER_ZH, ensembleOf, INSTRUMENTS, VOICES } from "../frontend/src/library/lexicon.ts";
 import { MUTOPIA, MUTOPIA_SOURCE, mutopiaLinks, mutopiaRow, type MutopiaRow } from "../frontend/src/library/mutopia.ts";
 
@@ -48,6 +49,8 @@ export function allRows(): { rows: Row[]; sources: Record<string, Source>; mutop
   const eras = new Map(rows.map((r) => [r[4], r[8]] as const));
   // (a loop, not push(...): a quarter of a million rows are too many arguments for one call)
   if (existsSync(IMSLP_TSV)) for (const r of imslpRows(parseImslp(readFileSync(IMSLP_TSV, "utf8")), eras)) rows.push(r);
+  // each composer under one spelling across the sources (scripts/composer-aliases.ts)
+  for (let i = 0; i < rows.length; i++) rows[i] = withCanonicalComposer(rows[i]);
   rows.sort(byComposer);
   return { rows, sources: { ...open.sources, [MUTOPIA]: MUTOPIA_SOURCE, [IMSLP]: IMSLP_SOURCE }, mutopia: new Map(mu.map((m) => [mutopiaLinks(m).page, m])), analyses };
 }

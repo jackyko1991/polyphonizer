@@ -41,3 +41,17 @@ test("search: accents folded, a word's beginning, by source or composer, in the 
   assert.ok(byComposer.length > 40 && byComposer.every((w) => w.composer === "Scott Joplin"));
   assert.deepEqual(await searchWorks(db, { words: [] }), []);
 });
+
+import ALIASES from "../src/library/composerAliases.json" with { type: "json" };
+
+test("one spelling per composer: aliases end where they point, and the sources' works meet under it", async () => {
+  const a = ALIASES as Record<string, string>;
+  for (const [from, to] of Object.entries(a)) {
+    assert.ok(!(to in a), `${from} → ${to} goes on`);
+    assert.ok(!/[@^]/.test(to), to);
+  }
+  const names = (await db.query<{ name: string }>("SELECT name FROM composers")).map((r) => r.name);
+  assert.ok(!names.includes("F. Liszt"));
+  const liszt = await db.query<{ source: string }>("SELECT DISTINCT w.source FROM works w JOIN composers c ON c.id = w.composer WHERE c.name = 'Franz Liszt'");
+  for (const s of ["asap", "mutopia", "imslp"]) assert.ok(liszt.some((r) => r.source === s), s);
+});

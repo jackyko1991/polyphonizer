@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { IMSLP, imslpRows, imslpUrl, parseImslp, searchImslp, searchableImslp } from "../src/library/imslp.ts";
+import { IMSLP, imslpRows, imslpUrl, parseImslp, searchImslp, searchableImslp, tidyName } from "../src/library/imslp.ts";
 import { licenceClass } from "../src/library/elsewhere.ts";
 
 const TSV = `#imslp 2026-11-16 3
@@ -50,4 +50,11 @@ test("searching IMSLP's index: every word in the title, composer or catalogue nu
   assert.deepEqual(searchImslp(ix, [], "Anonymous").map((i) => ix.works[i][0]), ["1002"]);
   assert.deepEqual(searchImslp(ix, [], ""), []); // nothing asked: nothing listed
   assert.equal(searchImslp(ix, ["o"], "", 1).length, 1);
+});
+
+test("IMSLP composers' names tidied: markup left over, a particle with its surname", () => {
+  assert.equal(tidyName("Daniel @composer^ Johnson"), "Daniel Johnson");
+  assert.equal(tidyName("Vincent d' Indy"), "Vincent d'Indy");
+  assert.equal(tidyName("Guy d’ Hardelot"), "Guy d’Hardelot");
+  assert.equal(tidyName("Ludwig van Beethoven"), "Ludwig van Beethoven");
 });

@@ -13,7 +13,7 @@ export const AMAZON_TAG = "tensorizer-21";
 export const AFFILIATE_REL = "sponsored noopener noreferrer";
 
 /** composers whose works the urtext publishers print (the Library's spellings) */
-const URTEXT = new Set([
+export const URTEXT = new Set([
   "Johann Sebastian Bach", "George Frideric Handel", "Domenico Scarlatti", "Antonio Vivaldi", "Arcangelo Corelli", "Georg Philipp Telemann",
   "Henry Purcell", "François Couperin", "Jean-Philippe Rameau", "C. P. E. Bach", "Joseph Haydn", "Wolfgang Amadeus Mozart",
   "Ludwig van Beethoven", "Franz Schubert", "Carl Maria von Weber", "Felix Mendelssohn", "Fanny Hensel", "Robert Schumann",
