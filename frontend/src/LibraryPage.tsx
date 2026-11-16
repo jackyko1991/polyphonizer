@@ -443,6 +443,32 @@ export default function LibraryPage() {
         {!rows && <p className="mt-2 text-xs text-gray-500">{t("lib.loading")}</p>}
       </div>
 
+      {/* the same search in libraries this page can't open from: one line under the filters */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm" data-testid="lib-elsewhere">
+        <span className="text-gray-600">{t("lib.elsewhere")}</span>
+        {elsewhere.map((l) => (
+          <a
+            key={l.id}
+            href={l.url}
+            target="_blank"
+            rel="noreferrer"
+            title={pick(l.gives)}
+            className="rounded-md border border-gray-300 bg-white px-2.5 py-0.5 font-medium text-gray-800 hover:border-(--lk-accent) hover:text-(--lk-accent)"
+            data-testid={`lib-elsewhere-${l.id}`}
+          >
+            {l.name} ↗
+          </a>
+        ))}
+        <details className="group basis-full text-xs text-gray-600 sm:basis-auto">
+          <summary className="cursor-pointer list-none text-(--lk-accent) hover:underline [&::-webkit-details-marker]:hidden">{t("lib.elsewhereHowOpen")}</summary>
+          <p className="mt-1 max-w-2xl sm:absolute sm:z-20 sm:rounded-lg sm:border sm:border-gray-200 sm:bg-white sm:p-3 sm:shadow-lg">
+            {elsewhere.map((l) => `${l.name}: ${pick(l.gives)}`).join(" · ")}. {t("lib.elsewhereHow")}{" "}
+            <button onClick={() => go("editor")} className="font-medium text-(--lk-accent) hover:underline">
+              {t("lib.toEditor")} →
+            </button>
+          </p>
+        </details>
+      </div>
       {few > 0 && few < 50 && (
         <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="lib-few">
           {fill(t("lib.few"), { n: few, name: composerName(activeComposer) })}{" "}
@@ -518,31 +544,6 @@ export default function LibraryPage() {
           {fill(t("lib.more"), { n: Math.min(PAGE, filtered.length - shown) })}
         </button>
       )}
-      <section className="mt-6 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm" data-testid="lib-elsewhere">
-        <p className="font-medium text-gray-900">{t("lib.elsewhere")}</p>
-        <ul className="mt-2 flex flex-wrap gap-2">
-          {elsewhere.map((l) => (
-            <li key={l.id}>
-              <a
-                href={l.url}
-                target="_blank"
-                rel="noreferrer"
-                title={pick(l.gives)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-800 hover:border-(--lk-accent) hover:text-(--lk-accent)"
-                data-testid={`lib-elsewhere-${l.id}`}
-              >
-                {l.name} <span className="text-xs font-normal text-gray-500">{pick(l.gives)}</span> ↗
-              </a>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2 text-xs text-gray-600">
-          {t("lib.elsewhereHow")}{" "}
-          <button onClick={() => go("editor")} className="font-medium text-(--lk-accent) hover:underline">
-            {t("lib.toEditor")} →
-          </button>
-        </p>
-      </section>
       <p className="mt-6 text-xs text-gray-500">
         {fill(t("lib.source"), { v: version })}{" "}
         <a href="https://www.music21.org/music21docs/about/referenceCorpus.html" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">

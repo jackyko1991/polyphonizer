@@ -247,7 +247,8 @@ export const STRINGS = {
   "lib.allSources": ["All sources", "全部來源"],
   "lib.licenceFilter": ["Licence", "授權"],
   "lib.anyLicence": ["Any licence", "任何授權"],
-  "lib.elsewhere": ["Not here, or another edition? Search the libraries this page can't open from:", "這裡沒有，或想找別的版本？到這個頁面無法直接開啟的曲庫搜尋："],
+  "lib.elsewhere": ["Not here, or another edition? Search elsewhere:", "這裡沒有，或想找別的版本？到其他曲庫搜尋："],
+  "lib.elsewhereHowOpen": ["How to bring a score back?", "怎麼把樂譜帶回來？"],
   "lib.elsewhereHow": [
     "Download a MusicXML, MIDI, ABC or Humdrum file there (on IMSLP, accept its copyright notice for your country first), then drop it on the editor or use Scores ▸ Import. A PDF or a recording needs the local runner (coming soon) to become notes.",
     "在那裡下載 MusicXML、MIDI、ABC 或 Humdrum 檔（在 IMSLP 要先接受你所在國家的版權說明），再把檔案拖到編輯器上，或用「樂譜 ▸ 匯入」。PDF 或錄音需要本機執行器（即將推出）才能轉成音符。",
