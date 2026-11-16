@@ -168,6 +168,9 @@ export default function ScoreView({
     const el = box.current;
     if (!el) return;
     const ro = new ResizeObserver(([e]) => {
+      // hidden (a phone's Code tab): keep the last size, so coming back shows the drawing at once instead of
+      // engraving it again (once for the hidden size, once more for the real one)
+      if (e.contentRect.width === 0) return;
       setWidth(Math.round(e.contentRect.width / 50) * 50);
       setBoxH(Math.round(e.contentRect.height));
       setBoxW(Math.round(e.contentRect.width));
@@ -185,7 +188,8 @@ export default function ScoreView({
     setPlaying(false);
     (view === "pages"
       ? engravePages(score, cur)
-      : engraveScroll(score.musicxml, Math.max(320, layoutWidth(width, frozenWidth) - 24))
+      : // a phone-width panel draws the music a little smaller, so a line holds more than a bar or two
+        engraveScroll(score.musicxml, Math.max(320, layoutWidth(width, frozenWidth) - 24), layoutWidth(width, frozenWidth) < 640 ? 30 : 40)
     )
       .then((e) => {
         if (!live) return;

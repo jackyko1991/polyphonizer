@@ -393,6 +393,18 @@ export default function EditorPage() {
     <div className="flex h-[calc(100dvh-var(--pz-dock,0px)-8.75rem)] min-h-[24rem] flex-col lg:grid lg:h-full lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]" data-testid="editor-page">
       {/* phones and tablets: one panel at a time */}
       <div className="flex shrink-0 border-b border-gray-200 bg-white lg:hidden" role="tablist" data-testid="editor-mobile-tabs">
+        {/* the scores list, from either tab */}
+        <button
+          type="button"
+          onClick={() => setTree(!treeOpen)}
+          className="flex w-11 shrink-0 items-center justify-center border-r border-b-2 border-r-gray-200 border-b-transparent text-gray-500 hover:text-gray-800"
+          title={t(treeOpen ? "tree.close" : "tree.open")}
+          aria-label={t(treeOpen ? "tree.close" : "tree.open")}
+          aria-expanded={treeOpen}
+          data-testid="tree-toggle-mobile"
+        >
+          <Icon icon={PanelLeft} />
+        </button>
         {(["score", "code"] as const).map((v) => (
           <button
             key={v}
@@ -405,11 +417,14 @@ export default function EditorPage() {
           </button>
         ))}
       </div>
-      <section className={`min-h-0 flex-1 border-r border-gray-200 bg-white lg:flex lg:min-h-[22rem] lg:flex-none ${mobileView === "code" ? "flex" : "hidden"}`}>
+      <section className={`min-h-0 flex-1 border-r border-gray-200 bg-white lg:flex lg:min-h-[22rem] lg:flex-none ${
+          // on the Score tab this panel folds to nothing (the scores drawer, fixed, can still open from it)
+          mobileView === "code" ? "flex" : "flex max-lg:h-0 max-lg:min-h-0 max-lg:flex-none max-lg:overflow-hidden max-lg:border-0"
+        }`}>
         {/* the score explorer (a drawer on phones); closed, nothing: the toolbar's panel button or ⌘B opens it */}
-        {treeOpen && <div className="fixed inset-0 z-30 bg-black/20 lg:hidden" onClick={() => setTree(false)} aria-hidden />}
+        {treeOpen && <div className="fixed inset-0 z-[66] bg-black/20 lg:hidden" onClick={() => setTree(false)} aria-hidden />}
         <div
-          className={`${treeOpen ? "fixed inset-y-0 left-0 z-40 w-64 shadow-xl lg:static lg:z-auto lg:w-60 lg:shadow-none" : "hidden"} flex shrink-0 flex-col border-r border-gray-200 bg-gray-50`}
+          className={`${treeOpen ? "fixed inset-y-0 left-0 z-[67] w-64 shadow-xl lg:static lg:z-auto lg:w-60 lg:shadow-none" : "hidden"} flex shrink-0 flex-col border-r border-gray-200 bg-gray-50`}
         >
           {treeOpen ? (
             <ScoreTree
@@ -439,7 +454,7 @@ export default function EditorPage() {
         <div className="flex min-w-0 flex-1 flex-col">
         {/* actions on the open score */}
         <div className="relative flex items-center gap-1.5 border-b border-gray-200 px-2 py-1.5">
-          <button onClick={() => setTree(!treeOpen)} className={`${BUTTON} w-9 justify-center px-0`} title={`${t(treeOpen ? "tree.close" : "tree.open")} (${isMac ? "⌘" : "Ctrl+"}B)`} aria-label={t(treeOpen ? "tree.close" : "tree.open")} aria-expanded={treeOpen} data-testid="tree-toggle">
+          <button onClick={() => setTree(!treeOpen)} className={`${BUTTON} w-9 justify-center px-0 max-lg:hidden`} title={`${t(treeOpen ? "tree.close" : "tree.open")} (${isMac ? "⌘" : "Ctrl+"}B)`} aria-label={t(treeOpen ? "tree.close" : "tree.open")} aria-expanded={treeOpen} data-testid="tree-toggle">
             <Icon icon={PanelLeft} />
           </button>
           {isSample ? (

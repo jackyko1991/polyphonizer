@@ -13,6 +13,7 @@ import { listen, type Listening } from "./audioInput.ts";
 import { tone } from "./liveSound.ts";
 import { midiToHz, nearestNote, noteName, TUNINGS, tuneZone } from "./music.ts";
 import { setRunning } from "./toolboxState.ts";
+import PhoneTabs from "./PhoneTabs.tsx";
 
 const A4_PRESETS = [440, 442, 443, 415, 432];
 type ToneKind = "sine" | "organ" | "instrument";
@@ -29,6 +30,7 @@ const INSTRUMENT_PROGRAM: Record<string, number> = {
 
 export default function TunerTool() {
   const { pick } = useLang();
+  const [pane, setPane] = useState<"listen" | "tone">("listen");
   const { a4 } = useSoundSettings();
   const [preset, setPreset] = useState(() => localStorage.getItem("polyphonizer.tuner.preset") ?? "violin");
   const [kind, setKind] = useState<ToneKind>("sine");
@@ -115,8 +117,18 @@ export default function TunerTool() {
   const ZONE_BG = { green: "bg-emerald-600", yellow: "bg-amber-500", red: "bg-red-600" } as const;
 
   return (
-    <div className="grid h-full gap-4 max-sm:flex max-sm:flex-col max-sm:gap-6 lg:grid-cols-2" data-testid="tuner-tool">
-      <section className="flex flex-col gap-2">
+    <div className="grid h-full gap-4 max-sm:flex max-sm:flex-col max-sm:gap-3 lg:grid-cols-2" data-testid="tuner-tool">
+      {/* on a phone: two tabs, listening and the reference tone; wider screens show both */}
+      <PhoneTabs
+        tabs={[
+          ["listen", pick(["Listen", "聆聽"])],
+          ["tone", pick(["Reference tone", "參考音"])],
+        ]}
+        value={pane}
+        onChange={setPane}
+        testid="tuner-pane"
+      />
+      <section className={`flex flex-col gap-2 ${pane === "listen" ? "" : "max-sm:hidden"}`}>
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-gray-900">{pick(["Listen", "聆聽"])}</h3>
           <Button
@@ -135,9 +147,9 @@ export default function TunerTool() {
             {micError}
           </p>
         )}
-        <div className="flex items-center gap-4 max-sm:flex-col max-sm:items-stretch">
+        <div className="flex items-center gap-4 max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
           <div className="w-28 text-center max-sm:w-full">
-            <p className={`text-4xl font-semibold tabular-nums max-sm:text-7xl ${zone ? ZONE_TEXT[zone] : "text-gray-900"}`} data-testid="tuner-note" data-zone={zone ?? ""}>
+            <p className={`text-4xl leading-tight font-semibold tabular-nums max-sm:text-5xl ${zone ? ZONE_TEXT[zone] : "text-gray-900"}`} data-testid="tuner-note" data-zone={zone ?? ""}>
               {reading ? noteName(reading.midi) : "–"}
             </p>
             <p className="text-xs text-gray-500 tabular-nums">
@@ -145,7 +157,7 @@ export default function TunerTool() {
             </p>
           </div>
           {/* the needle: −50 … +50 cents */}
-          <div className="relative h-16 flex-1 max-sm:h-24 max-sm:flex-none">
+          <div className="relative h-16 flex-1 max-sm:h-16 max-sm:flex-none">
             <div className="absolute inset-x-0 top-1/2 h-px bg-gray-300" />
             {/* zones: red beyond ±15 cents, yellow within ±15, green within ±5 */}
             <div className="absolute inset-x-0 top-2 bottom-4 rounded bg-red-50" />
@@ -177,7 +189,7 @@ export default function TunerTool() {
           ])}
         </p>
       </section>
-      <section className="flex flex-col gap-2">
+      <section className={`flex flex-col gap-2 ${pane === "tone" ? "" : "max-sm:hidden"}`}>
         <h3 className="text-sm font-semibold text-gray-900">{pick(["Reference tone", "參考音"])}</h3>
         <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
           <label className="flex items-center gap-1.5">
