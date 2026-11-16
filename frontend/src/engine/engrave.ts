@@ -32,7 +32,8 @@ let snippetTk: Promise<VerovioToolkit> | null = null;
  * A short example for a page (ABC, Humdrum or MusicXML, which Verovio reads itself, so no Python is needed): one SVG
  * at the given width, and its sounds. Uses its own toolkit, so it never disturbs the editor's score.
  */
-export async function engraveSnippet(data: string, widthPx: number, zoom = 38, abc?: string): Promise<{ svg: string; sounds: Sound[] }> {
+/** `fit`: crop the page to the music's width (a small staff that should fill its box, not sit on the left of a page) */
+export async function engraveSnippet(data: string, widthPx: number, zoom = 38, abc?: string, fit = false): Promise<{ svg: string; sounds: Sound[] }> {
   snippetTk ??= verovio().then(([m, esm]) => new esm.VerovioToolkit(m));
   const t = await snippetTk;
   t.setOptions({
@@ -41,6 +42,7 @@ export async function engraveSnippet(data: string, widthPx: number, zoom = 38, a
     pageWidth: Math.max(600, Math.round((widthPx * 100) / zoom)),
     pageHeight: 60000,
     adjustPageHeight: true,
+    adjustPageWidth: fit,
     breaks: "auto",
     header: "none",
     pageMarginTop: 20,

@@ -30,11 +30,10 @@ export function groupChords(ons: { midi: number; time: number }[], gap = 40): nu
 const part = (notes: number[]) => (notes.length === 0 ? "z" : notes.length === 1 ? abcPitch(notes[0]) : `[${notes.map(abcPitch).join("")}]`);
 
 /** the chords as a grand-staff ABC example: bars of four quarter notes counted from the first chord (so a bar is
- * always the same four chords), showing the last two bars, rests to fill */
-export function liveAbc(chords: number[][]): string {
-  const bars = Math.ceil(chords.length / 4);
-  const recent = chords.slice(Math.max(0, (bars - 2) * 4));
-  while (recent.length % 4 || recent.length === 0) recent.push([]);
+ * always the same four chords), showing the last `show` bars (bars of rests when empty) */
+export function liveAbc(chords: number[][], show = 2): string {
+  const recent = chords.slice(firstShown(chords.length, show));
+  while (recent.length % 4 || recent.length < show * 4) recent.push([]); // always `show` bars, rests to fill
   const line = (pick: (n: number) => boolean) =>
     recent
       .map((c) => part(c.filter(pick)))
@@ -42,6 +41,9 @@ export function liveAbc(chords: number[][]): string {
       .trim() + " |]";
   return ["X:1", "M:4/4", "L:1/4", "K:C", "V:1", line((n) => n >= 60), "V:2 clef=bass", line((n) => n < 60)].join("\n");
 }
+
+/** the first chord shown when the staff shows the last `show` bars of `count` chords */
+export const firstShown = (count: number, show = 2) => Math.max(0, (Math.ceil(count / 4) - show) * 4);
 
 /** where each chord starts in a note-on stream (notes within `gap` ms of the one before join its chord) */
 export function chordStarts(ons: { time: number }[], gap = 40): number[] {

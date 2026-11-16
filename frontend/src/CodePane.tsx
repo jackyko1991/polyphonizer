@@ -8,7 +8,8 @@ import { linter, lintGutter, type Diagnostic } from "@codemirror/lint";
 import { Decoration, EditorView, keymap, MatchDecorator, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { StateEffect, StateField, Prec } from "@codemirror/state";
 import CodeMirror from "@uiw/react-codemirror";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { registerEditor } from "./tools/codeInsert.ts";
 import { lint } from "./engine/lint.ts";
 import { blankIssues } from "./learn/blanks.ts";
 
@@ -94,6 +95,9 @@ export default function CodePane({
   onCursor?: (pos: number) => void;
 }) {
   const view = useRef<EditorView | null>(null);
+  // the Keyboard's staff window can insert what was played here (tools/codeInsert.ts)
+  const unregister = useRef<(() => void) | null>(null);
+  useEffect(() => () => unregister.current?.(), []);
   const run = useRef(onRun);
   run.current = onRun;
   const save = useRef(onSave);
@@ -157,6 +161,8 @@ export default function CodePane({
       extensions={extensions}
       onCreateEditor={(v) => {
         view.current = v;
+        unregister.current?.();
+        unregister.current = registerEditor(v);
         v.dispatch({ effects: [setError.of(errorAt), setMark.of(mark)] });
         onView?.(v);
       }}

@@ -16,7 +16,7 @@ import { isBlack, keysBetween, letter, noteName, RANGES } from "./music.ts";
 import { publishNote, type NoteSource } from "./noteInput.ts";
 import { armKeyboard, setRunning, useToolbox } from "./toolboxState.ts";
 
-const LiveStaff = lazy(() => import("./LiveStaff.tsx"));
+const FloatingStaff = lazy(() => import("./FloatingStaff.tsx"));
 
 /** sounds to play with: General MIDI programs */
 export const KEYBOARD_SOUNDS: [number, readonly [string, string]][] = [
@@ -84,16 +84,6 @@ const typing = (t: EventTarget | null) =>
 export default function KeyboardTool() {
   const { pick, index: lang } = useLang();
   const [p, setP] = useState(load);
-  // the keys' width, for their largest height (a piano's proportions)
-  const keysBox = useRef<HTMLDivElement>(null);
-  const [keysW, setKeysW] = useState(0);
-  useEffect(() => {
-    const el = keysBox.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([e]) => setKeysW(Math.round(e.contentRect.width)));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
   const { keyboardArmed: armed, hint, baseRequest } = useToolbox();
   const setArmed = (v: boolean | ((a: boolean) => boolean)) => armKeyboard(typeof v === "function" ? v(armed) : v);
   // a lesson asked for the home-row layout with its C here
@@ -320,14 +310,20 @@ export default function KeyboardTool() {
           <input type="checkbox" checked={p.names} onChange={(e) => update({ names: e.target.checked })} />
           <Music2 className="h-4 w-4" aria-hidden /> {pick(["Note names", "音名"])}
         </label>
-        <label className={CHECK} title={pick(["Show what you play on a staff", "在五線譜上顯示你彈的音"])}>
-          <input type="checkbox" checked={!!p.staff} onChange={(e) => update({ staff: e.target.checked })} data-testid="kb-staff" />
-          <Music className="h-4 w-4" aria-hidden /> {pick(["Staff", "五線譜"])}
-        </label>
         <label className={CHECK}>
           <input type="checkbox" checked={p.keys} onChange={(e) => update({ keys: e.target.checked })} />
           <Type className="h-4 w-4" aria-hidden /> {pick(["Key letters", "按鍵字母"])}
         </label>
+        <Button
+          icon={Music}
+          variant={p.staff ? "on" : "secondary"}
+          onClick={() => update({ staff: !p.staff })}
+          aria-pressed={!!p.staff}
+          title={pick(["Show what you play on a staff, in a window you can move and resize", "在可移動、可調整大小的視窗中，以五線譜顯示你彈的音"])}
+          data-testid="kb-staff"
+        >
+          {pick(["Staff", "五線譜"])}
+        </Button>
         {"requestMIDIAccess" in navigator && (
           <Button variant={midiState === "on" ? "on" : "secondary"} onClick={() => setMidiState((s) => (s === "on" ? "off" : "on"))}>
             MIDI
@@ -342,19 +338,14 @@ export default function KeyboardTool() {
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2">
       {p.staff && (
-        // the staff and the keys share the height 2 : 3; keys never taller than a piano's (see below), the staff gets the rest
-        <div className="min-h-0" style={{ flex: "2 1 0" }}>
-          <Suspense fallback={null}>
-            <LiveStaff />
-          </Suspense>
-        </div>
+        // the staff floats in its own window (move it anywhere, resize it), so the keys keep the whole panel
+        <Suspense fallback={null}>
+          <FloatingStaff onClose={() => update({ staff: false })} />
+        </Suspense>
       )}
       <div
-        ref={keysBox}
-        // with the staff on: 3 parts of the height, but white keys at most 4.2 times as tall as they are wide (a
-        // piano's shape); without it the keys fill the panel
         className="relative min-h-[90px] w-full touch-none select-none"
-        style={p.staff ? { flex: "3 1 0", maxHeight: keysW ? Math.round((keysW / whites.length) * 4.2) : undefined } : { flex: "1 1 0" }}
+        style={{ flex: "1 1 0" }}
         role="group"
         aria-label={pick(["Piano keyboard", "鋼琴鍵盤"])}
         onContextMenu={(e) => e.preventDefault()}

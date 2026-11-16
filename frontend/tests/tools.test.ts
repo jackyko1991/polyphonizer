@@ -135,8 +135,8 @@ test("live staff: pitches in ABC, chords from keys pressed together, a grand sta
   assert.deepEqual([60, 61, 72, 84, 48, 47, 59].map(abcPitch), ["C", "^C", "c", "c'", "C,", "B,,", "B,"]);
   assert.deepEqual(groupChords([{ midi: 64, time: 0 }, { midi: 60, time: 10 }, { midi: 67, time: 30 }, { midi: 62, time: 500 }]), [[60, 64, 67], [62]]);
   const abc = liveAbc([[60, 64, 67], [48], [62]]);
-  assert.match(abc, /V:1\n\[CEG\] z D z \|\]/);
-  assert.match(abc, /V:2 clef=bass\nz C, z z \|\]/);
+  assert.match(abc, /V:1\n\[CEG\] z D z \| z z z z \|\]/);
+  assert.match(abc, /V:2 clef=bass\nz C, z z \| z z z z \|\]/);
   // it draws: two staves, the notes in the right places
   const { exampleData } = await import("../src/engine/abc.ts");
   assert.match(exampleData(abc), /<staffDef n="2"/);
@@ -196,4 +196,29 @@ test("FM piano: brighter when played harder, tamed higher up, the tine rings sho
   assert.ok(high.bodyIndex[0] / 1047 < low.bodyIndex[0] / 131); // relative brightness falls with pitch
   assert.ok(high.bodyRing < low.bodyRing);
   assert.ok(hard.tineRing < hard.bodyRing);
+});
+
+test("the live staff as code: tinyNotation pitches, chords, rests, one or two hands", async () => {
+  const { tinyPitch, staffCode } = await import("../src/tools/staffCode.ts");
+  // c = middle C (C4), capitals the octave below, each extra capital one more down
+  assert.deepEqual([60, 61, 72, 84, 48, 47, 36, 59].map(tinyPitch), ["c", "c#", "c'", "c''", "C", "BB", "CC", "B"]);
+  assert.equal(staffCode([]), "");
+  assert.equal(staffCode([[60], [64], [60, 64, 67]]), 'score = tiny("c4 e <c e g>")');
+  assert.equal(staffCode([[48], [43]]), 'score = tiny("C4 GG", clef_="bass")');
+  assert.equal(
+    staffCode([[48, 60, 64], [62], [43]]),
+    'right = tiny("<c e>4 d r")\nleft = tiny("C4 r GG", clef_="bass")\nscore = together(right, left)',
+  );
+});
+
+test("the live staff shows the latest bars, as many as asked (rests to fill)", async () => {
+  const { liveAbc, firstShown } = await import("../src/tools/liveStaff.ts");
+  const ten = Array.from({ length: 10 }, (_, i) => [60 + i]);
+  assert.equal(firstShown(10, 2), 4);
+  assert.equal(firstShown(10, 3), 0);
+  assert.equal(firstShown(10, 1), 8);
+  const bars = (abc: string) => (abc.split("\n")[5].match(/\|/g) ?? []).length; // "|" between bars and in "|]"
+  assert.equal(bars(liveAbc([], 1)), 1);
+  assert.equal(bars(liveAbc([], 4)), 4);
+  assert.equal(bars(liveAbc(ten, 2)), 2);
 });
