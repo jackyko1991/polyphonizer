@@ -357,7 +357,7 @@ export default function KeyboardTool() {
             MIDI
           </Button>
         )}
-        <span className="relative">
+        <span>
           <Button
             variant={testing ? "on" : "secondary"}
             onClick={() => setRollover((r) => (r ? null : { now: 0, most: 0 }))}
@@ -366,25 +366,6 @@ export default function KeyboardTool() {
           >
             {pick(["Key test", "按鍵測試"])}
           </Button>
-          {rollover && (
-            <span className="absolute bottom-full left-0 z-30 mb-2 block w-72 rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-700 shadow-lg" role="status" data-testid="kb-rollover-panel">
-              <b className="block text-sm text-gray-900">{pick(["Hold down as many keys as you can", "盡量同時按住多個鍵"])}</b>
-              <span className="mt-1 block tabular-nums">
-                {pick(["Held now", "目前按住"])}: <b>{rollover.now}</b> · {pick(["most at once", "最多同時"])}: <b>{rollover.most}</b>
-              </span>
-              <span className="mt-1 block text-gray-600">
-                {rollover.most === 0
-                  ? pick(["Try a chord in each hand, e.g. Z C B and Q E T together.", "試著每隻手各按一個和弦，例如同時按 Z C B 和 Q E T。"])
-                  : rollover.most < 6
-                    ? pick([
-                        "Your keyboard stops counting there: more keys at once are lost (common on laptops). For chords in both hands, play one hand at a time, or use a MIDI keyboard.",
-                        "你的鍵盤數到這裡就停了：再多的鍵會被忽略（筆電常見）。雙手和弦請一次練一隻手，或改用 MIDI 鍵盤。",
-                      ])
-                    : pick(["Enough for chords in both hands.", "足夠雙手同時按和弦。"])}
-              </span>
-              <span className="mt-1 block text-gray-400">{pick(["Esc or the button again to close", "按 Esc 或再按一次按鈕關閉"])}</span>
-            </span>
-          )}
         </span>
         {midiState === "none" && <span className="text-xs text-red-700">{pick(["No MIDI access", "無法使用 MIDI"])}</span>}
         <span className="ml-auto text-xs text-gray-500 max-sm:hidden">
@@ -399,6 +380,28 @@ export default function KeyboardTool() {
         <Suspense fallback={null}>
           <FloatingStaff onClose={() => update({ staff: false })} />
         </Suspense>
+      )}
+      {/* the key test, as a row of its own above the keys (a pop-up was hidden under the dock's edge) */}
+      {rollover && (
+        <div className="flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-gray-700" role="status" data-testid="kb-rollover-panel">
+          <b className="text-sm text-gray-900">{pick(["Hold down as many keys as you can", "盡量同時按住多個鍵"])}</b>
+          <span className="tabular-nums">
+            {pick(["Held now", "目前按住"])}: <b>{rollover.now}</b> · {pick(["most at once", "最多同時"])}: <b>{rollover.most}</b>
+          </span>
+          <span className="text-gray-600">
+            {rollover.most === 0
+              ? pick(["Try a chord in each hand, e.g. Z C B and Q E T together.", "試著每隻手各按一個和弦，例如同時按 Z C B 和 Q E T。"])
+              : rollover.now > 0
+                ? pick(["Keep adding keys, then let go of them all.", "繼續加按，然後全部放開。"])
+                : rollover.most < 6
+                ? pick([
+                    "Your keyboard stops counting there: more keys at once are lost (common on laptops). For chords in both hands, play one hand at a time, or use a MIDI keyboard.",
+                    "你的鍵盤數到這裡就停了：再多的鍵會被忽略（筆電常見）。雙手和弦請一次練一隻手，或改用 MIDI 鍵盤。",
+                  ])
+                : pick(["Enough for chords in both hands.", "足夠雙手同時按和弦。"])}
+          </span>
+          <span className="text-gray-400">{pick(["Esc or the button again to close", "按 Esc 或再按一次按鈕關閉"])}</span>
+        </div>
       )}
       <div
         className="relative min-h-[90px] w-full touch-none select-none"
