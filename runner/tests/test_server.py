@@ -82,11 +82,17 @@ class Runner(unittest.TestCase):
 
     def test_a_failing_engine_is_502_and_files_are_cleaned_up(self):
         self.start(omr=FAILING)
-        before = set(Path(tempfile.gettempdir()).glob("pz-runner-*"))
-        r, body = self.call("POST", "/omr", body=b"%PDF", headers={"X-Filename": "a.pdf"})
+        # (a temp folder of this test's own, so other tests' files don't count)
+        own = tempfile.mkdtemp()
+        self.addCleanup(lambda: os.rmdir(own))
+        old, tempfile.tempdir = tempfile.tempdir, own
+        try:
+            r, body = self.call("POST", "/omr", body=b"%PDF", headers={"X-Filename": "a.pdf"})
+        finally:
+            tempfile.tempdir = old
         self.assertEqual(r.status, 502)
         self.assertIn("error", json.loads(body))
-        self.assertEqual(set(Path(tempfile.gettempdir()).glob("pz-runner-*")), before)
+        self.assertEqual(list(Path(own).iterdir()), [])
 
     def test_limits_size_and_names(self):
         self.start(omr=FAKE_OMR, max_bytes=10)

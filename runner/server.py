@@ -170,29 +170,34 @@ def make_server(address, cfg):
             if not template:
                 how = "run pixi run omr-setup, then restart the runner, or set PZ_OMR" if kind == "omr" else "install one or set PZ_TRANSCRIBE"
                 return self.reply(501, {"error": f"No {'OMR' if kind == 'omr' else 'transcription'} engine here: {how} (see docs/plans/transcription.md)"})
+            # the job's files are gone before the answer goes out
             with tempfile.TemporaryDirectory(prefix="pz-runner-") as tmp:
-                d = Path(tmp)
-                src = d / f"input{ext}"
-                src.write_bytes(body)
-                if ext in VIDEO_EXT and shutil.which("ffmpeg"):
-                    wav = d / "input.wav"
-                    subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(src), "-vn", "-ac", "1", "-ar", "44100", str(wav)], check=False, timeout=cfg.timeout)
-                    if wav.exists():
-                        src = wav
-                outdir = d / "out"
-                outdir.mkdir()
-                name, ctype = RESULT[kind]
-                try:
-                    result = run_engine(template, src, outdir / name, outdir, cfg.timeout)
-                except subprocess.TimeoutExpired:
-                    return self.reply(504, {"error": "the engine took too long"})
-                except (RuntimeError, OSError) as e:
-                    return self.reply(502, {"error": str(e)})
-                data = result.read_bytes()
-                if result.suffix.lower() == ".mxl":
-                    ctype = "application/vnd.recordare.musicxml"
-                print(f"{kind}: {ext} {size // 1000} kB → {result.suffix} {len(data) // 1000} kB", file=sys.stderr)
-                self.reply(200, data, ctype)
+                answer = self.job(kind, template, Path(tmp), ext, body, size)
+            self.reply(*answer)
+
+        def job(self, kind, template, d, ext, body, size):
+            """run the engine on the file in d: (status, body, content type)"""
+            src = d / f"input{ext}"
+            src.write_bytes(body)
+            if ext in VIDEO_EXT and shutil.which("ffmpeg"):
+                wav = d / "input.wav"
+                subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(src), "-vn", "-ac", "1", "-ar", "44100", str(wav)], check=False, timeout=cfg.timeout)
+                if wav.exists():
+                    src = wav
+            outdir = d / "out"
+            outdir.mkdir()
+            name, ctype = RESULT[kind]
+            try:
+                result = run_engine(template, src, outdir / name, outdir, cfg.timeout)
+            except subprocess.TimeoutExpired:
+                return 504, {"error": "the engine took too long"}, "application/json"
+            except (RuntimeError, OSError) as e:
+                return 502, {"error": str(e)}, "application/json"
+            data = result.read_bytes()
+            if result.suffix.lower() == ".mxl":
+                ctype = "application/vnd.recordare.musicxml"
+            print(f"{kind}: {ext} {size // 1000} kB → {result.suffix} {len(data) // 1000} kB", file=sys.stderr)
+            return 200, data, ctype
 
     return ThreadingHTTPServer(address, Handler)
 
