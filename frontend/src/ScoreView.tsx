@@ -73,24 +73,24 @@ function printPages(pages: string[], title: string, numbers = true, size: [numbe
   setTimeout(() => w.print(), 300);
 }
 
-/** how large the Score view draws the music: full size from 560 px, smaller on narrower panels (down to half at
- * phone width) so a line still holds three or four bars rather than one or two */
-/** how big the pages are drawn (paper sizes, not Continuous): side by side, one page as wide as the panel (read down),
+/** how big the pages are drawn (paper sizes, not Continuous): one page as wide as the panel, read down (the default), side by side,
  * one whole page in view, or a percentage of the real paper size */
 type PageZoom = "auto" | "width" | "page" | number;
-const PAGE_ZOOMS: PageZoom[] = ["auto", "width", "page", 50, 75, 100, 125, 150, 200];
+const PAGE_ZOOMS: PageZoom[] = ["width", "auto", "page", 50, 75, 100, 125, 150, 200];
 const ZOOM_KEY = "polyphonizer.pageZoom";
 const loadZoom = (): PageZoom => {
   try {
-    const v = localStorage.getItem(ZOOM_KEY) ?? "auto";
-    return PAGE_ZOOMS.find((z) => String(z) === v) ?? "auto";
+    const v = localStorage.getItem(ZOOM_KEY) ?? "width";
+    return PAGE_ZOOMS.find((z) => String(z) === v) ?? "width";
   } catch {
-    return "auto";
+    return "width";
   }
 };
 /** one millimetre in CSS pixels (96 per inch) */
 const MM = 96 / 25.4;
 
+/** how large the Score view draws the music: full size from 560 px, smaller on narrower panels (down to half at
+ * phone width) so a line still holds three or four bars rather than one or two */
 export const scrollZoom = (panelPx: number) => Math.max(20, Math.min(40, Math.round(panelPx / 14)));
 
 export default function ScoreView({
@@ -752,7 +752,7 @@ export default function ScoreView({
               <span className="sr-only">{t("zoom.title")}</span>
               <select
                 value={String(zoom)}
-                onChange={(e) => setZoom(PAGE_ZOOMS.find((z) => String(z) === e.target.value) ?? "auto")}
+                onChange={(e) => setZoom(PAGE_ZOOMS.find((z) => String(z) === e.target.value) ?? "width")}
                 className="cursor-pointer appearance-none bg-transparent pr-4 outline-none"
                 data-testid="page-zoom"
               >

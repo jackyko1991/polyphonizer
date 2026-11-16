@@ -12,9 +12,9 @@ import { LEVEL_STYLE } from "../levels.ts";
 import type { Sound } from "../../engine/engrave.ts";
 import { CHECK, FIELD, SEGMENT, SEGMENTS } from "../../ui.ts";
 import { now, tick } from "../../tools/liveSound.ts";
-import { noteName } from "../../tools/music.ts";
 import { subscribeNotes } from "../../tools/noteInput.ts";
 import { armKeyboard, openTool, requestKeyboardBase, setKeyHint } from "../../tools/toolboxState.ts";
+import { FINGER_SHOWS, type FingerShow } from "../../engine/fingering.ts";
 import { INSTRUMENTS, PLAY_LESSONS, type PlayLesson, type PlayMode } from "./lessons.ts";
 import { gradeInTime, gradeWait, pressWait, startWait, steps, type Grade, type Mark, type TargetNote, type WaitState } from "./matcher.ts";
 
@@ -220,6 +220,8 @@ const MARK_NAMES: Record<Mark, readonly [string, string]> = {
 
 type Phase = "idle" | "countin" | "playing" | "done";
 
+const FINGERING_KEY = "polyphonizer.play.fingering";
+
 function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: string) => void }) {
   const { pick } = useLang();
   const box = useRef<HTMLDivElement>(null);
@@ -233,17 +235,35 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
   const [grade, setGrade] = useState<Grade | null>(null);
   const [listening, setListening] = useState(false);
   const timers = useRef<number[]>([]);
+  // the fingering drawn over the notes: none, where the hand moves (basic), or every note; remembered
+  const [fingering, setFingeringState] = useState<FingerShow>(() => {
+    try {
+      const v = localStorage.getItem(FINGERING_KEY) as FingerShow | null;
+      return v && FINGER_SHOWS.includes(v) ? v : "basic";
+    } catch {
+      return "basic";
+    }
+  });
+  const setFingering = (v: FingerShow) => {
+    setFingeringState(v);
+    try {
+      localStorage.setItem(FINGERING_KEY, v);
+    } catch {
+      /* storage unavailable */
+    }
+  };
 
   // the music, engraved
   useEffect(() => {
     let live = true;
+    const fingers = lesson.fingers ? { fingers: lesson.fingers.map((f) => [f]), show: fingering } : undefined;
     Promise.all([import("../../engine/engrave.ts"), import("../../engine/abc.ts")])
-      .then(([e, a]) => e.engraveSnippet(a.exampleData(lesson.abc), 760, 42, lesson.abc))
+      .then(([e, a]) => e.engraveSnippet(a.exampleData(lesson.abc), 760, 42, lesson.abc, false, fingers))
       .then((r) => live && (setSvg(r.svg), setSounds(r.sounds)));
     return () => {
       live = false;
     };
-  }, [lesson.abc]);
+  }, [lesson.abc, lesson.fingers, fingering]);
 
   // open the keyboard with the computer keys on, home row from middle C
   useEffect(() => {
@@ -435,6 +455,22 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
               aria-label="BPM"
             />
           </label>
+          {lesson.fingers && (
+            <label className="flex items-center gap-1.5 text-sm text-gray-700" title={pick(["Fingers: 1 thumb, 2 index, 3 middle, 4 ring, 5 little", "指法：1 拇指、2 食指、3 中指、4 無名指、5 小指"])}>
+              {pick(["Fingering", "指法"])}
+              <select
+                value={fingering}
+                onChange={(e) => setFingering(e.target.value as FingerShow)}
+                disabled={busy}
+                className={FIELD}
+                data-testid="play-fingering"
+              >
+                <option value="none">{pick(["None", "不顯示"])}</option>
+                <option value="basic">{pick(["Basic (where the hand moves)", "基本（換手位處）"])}</option>
+                <option value="all">{pick(["All", "全部"])}</option>
+              </select>
+            </label>
+          )}
           {mode === "time" && (
             <label className={CHECK}>
               <input type="checkbox" checked={click} onChange={(e) => setClick(e.target.checked)} disabled={busy} />
@@ -507,9 +543,6 @@ function Lesson({ lesson, onPassed }: { lesson: PlayLesson; onPassed: (id: strin
             )}
           </section>
         )}
-        <p className="text-xs text-gray-400">
-          {pick(["The notes:", "音："])} {plan.map((g) => g.map((t) => noteName(t.midi)).join("+")).join(" ")}
-        </p>
       </div>
     </main>
   );

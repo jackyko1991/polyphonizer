@@ -9,6 +9,7 @@
  */
 import type { VerovioToolkit } from "verovio/esm";
 import { fixAbcKeys } from "./abc.ts";
+import { addFingering, type FingerShow } from "./fingering.ts";
 import { barIndices, DEFAULT_SETUP, type PageSetup } from "./pageSetup.ts";
 import { planPages, restAtMeasureStarts, turnsAt, type Plan } from "./pageTurns.ts";
 import type { ScoreData } from "./types.ts";
@@ -33,7 +34,15 @@ let snippetTk: Promise<VerovioToolkit> | null = null;
  * at the given width, and its sounds. Uses its own toolkit, so it never disturbs the editor's score.
  */
 /** `fit`: crop the page to the music's width (a small staff that should fill its box, not sit on the left of a page) */
-export async function engraveSnippet(data: string, widthPx: number, zoom = 38, abc?: string, fit = false): Promise<{ svg: string; sounds: Sound[] }> {
+/** `fingering`: piano fingers to draw (fingering.ts), one string per staff */
+export async function engraveSnippet(
+  data: string,
+  widthPx: number,
+  zoom = 38,
+  abc?: string,
+  fit = false,
+  fingering?: { fingers: string[][]; show: FingerShow },
+): Promise<{ svg: string; sounds: Sound[] }> {
   snippetTk ??= verovio().then(([m, esm]) => new esm.VerovioToolkit(m));
   const t = await snippetTk;
   t.setOptions({
@@ -53,6 +62,7 @@ export async function engraveSnippet(data: string, widthPx: number, zoom = 38, a
   if (!t.loadData(data)) throw new Error("Verovio could not read this example");
   // single-voice ABC: correct the key that Verovio's ABC reader carries over from the previous example
   if (abc !== undefined && !data.startsWith("<")) t.loadData(fixAbcKeys(t.getMEI({}), abc));
+  if (fingering && fingering.show !== "none") t.loadData(addFingering(t.getMEI({}), fingering.fingers, fingering.show));
   return { svg: untitled(t.renderToSVG(1)), sounds: timeline(t) };
 }
 

@@ -134,3 +134,38 @@ test("every lesson fits the computer keys from middle C, except the octave lesso
     for (const m of EXPECTED[id]) assert.ok(reach.has(m), `${id}: ${m} is out of reach`);
   }
 });
+
+import { fingerTokens, shownFingers } from "../src/engine/fingering.ts";
+
+/** an ABC voice's notes and chords (rests and bar lines skipped) */
+const events = (body: string) => body.replace(/"[^"]*"|![^!]*!/g, "").match(/\[[^\]:|]+\]|[_^=]*[A-Ga-g][,']*/g) ?? [];
+
+test("every keyboard lesson has one finger per note or chord, 1 to 5", () => {
+  for (const l of PLAY_LESSONS.filter((x) => x.instrument === "keyboard")) {
+    assert.ok(l.fingers, `${l.id} has no fingering`);
+    const body = l.abc.split("\n").filter((line) => !/^[A-Za-z]:/.test(line));
+    const voices = l.abc.includes("V:") ? l.abc.split(/^V:.*$/m).slice(1) : [body.join("\n")];
+    assert.equal(voices.length, l.fingers!.length, l.id);
+    voices.forEach((v, i) => {
+      const fingers = fingerTokens(l.fingers![i]);
+      assert.equal(fingers.length, events(v).length, `${l.id} voice ${i + 1}`);
+      for (const f of fingers) assert.match(f, /^[1-5]+$/, `${l.id}: ${f}`);
+    });
+  }
+});
+
+test("basic fingering shows only where the hand moves", () => {
+  // C D E F G A B c: C4 = 28; the thumb passes under on F
+  const steps = [28, 29, 30, 31, 32, 33, 34, 35].map((s) => [s]);
+  const scale = fingerTokens("1 2 3 1 | 2 3 4 5");
+  assert.deepEqual(shownFingers(steps, scale, false, "basic"), ["1", "", "", "1", "", "", "", ""]);
+  assert.deepEqual(shownFingers(steps, scale, false, "all"), scale);
+  assert.deepEqual(shownFingers(steps, scale, false, "none"), ["", "", "", "", "", "", "", ""]);
+  // repeated notes keep their finger; a jump is shown
+  assert.deepEqual(shownFingers([[28], [28], [32]], ["1", "1", "5"], false, "basic"), ["1", "", ""]);
+  assert.deepEqual(shownFingers([[28], [28], [35]], ["1", "1", "5"], false, "basic"), ["1", "", "5"]);
+  // the left hand counts the other way: C3 (21) with 5, then D3 with 4
+  assert.deepEqual(shownFingers([[21], [22]], ["5", "4"], true, "basic"), ["5", ""]);
+  // chords: when their fingers change
+  assert.deepEqual(shownFingers([[28, 30, 32], [31, 33, 35], [28, 30, 32]], ["135", "135", "125"], false, "basic"), ["135", "", "125"]);
+});

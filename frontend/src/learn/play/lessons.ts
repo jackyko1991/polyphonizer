@@ -37,6 +37,8 @@ export interface PlayLesson {
   tolerance: number;
   /** the computer keys this lesson uses, shown as a hint */
   keys: string;
+  /** piano fingering, one string per staff: a finger per note or chord, bars as | (engine/fingering.ts) */
+  fingers?: string[];
 }
 
 const head = (q: number, m = "4/4", k = "C") => `X:1\nM:${m}\nL:1/4\nQ:1/4=${q}\nK:${k}\n`;
@@ -60,6 +62,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "wait",
     tolerance: 200,
     keys: "A",
+    fingers: ["1 1 1 1 | 1"],
   },
   {
     id: "five-fingers",
@@ -79,6 +82,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "wait",
     tolerance: 200,
     keys: "A S D F G",
+    fingers: ["1 2 3 4 | 5 | 5 4 3 2 | 1"],
   },
   {
     id: "mary",
@@ -95,6 +99,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "wait",
     tolerance: 180,
     keys: "A S D G",
+    fingers: ["3 2 1 2 | 3 3 3 | 2 2 2 | 3 5 5 | 3 2 1 2 | 3 3 3 3 | 2 2 3 2 | 1"],
   },
   {
     id: "ode-opening",
@@ -114,6 +119,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "wait",
     tolerance: 180,
     keys: "A S D F G",
+    fingers: ["3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 3 2 2 | 3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 2 1 1"],
   },
   {
     id: "in-time",
@@ -133,6 +139,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "time",
     tolerance: 160,
     keys: "A D G K",
+    fingers: ["1 1 | 3 3 3 | 5 5 5 5 | 5"],
   },
   {
     id: "eighths",
@@ -152,6 +159,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "time",
     tolerance: 120,
     keys: "A S D F G",
+    fingers: ["1 2 3 4 5 | 5 4 3 2 1 | 1 3 5 3 1 3 5 3 | 1"],
   },
   {
     id: "black-keys",
@@ -171,6 +179,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "wait",
     tolerance: 180,
     keys: "G H J K L T",
+    fingers: ["1 2 3 4 | 5 4 3 2 | 1 2 1 2 | 1"],
   },
   {
     id: "pentatonic",
@@ -190,6 +199,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "wait",
     tolerance: 180,
     keys: "T Y U O P",
+    fingers: ["1 2 3 4 | 5 4 3 2 | 1 2 3 | 1"],
   },
   {
     id: "scale",
@@ -209,6 +219,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "time",
     tolerance: 140,
     keys: "A S D F G H J K",
+    fingers: ["1 2 3 1 | 2 3 4 5 | 5 4 3 2 | 1 3 2 1"],
   },
   {
     id: "two-octaves",
@@ -228,6 +239,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "wait",
     tolerance: 180,
     keys: "A–J, X, A–K",
+    fingers: ["1 2 3 1 | 2 3 4 1 | 2 3 1 2 | 3 4 5"],
   },
   {
     id: "chords",
@@ -247,6 +259,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "wait",
     tolerance: 180,
     keys: "A D G · F H K · G J L",
+    fingers: ["135 135 | 135 135 | 135 135 | 135"],
   },
   {
     id: "melody-bass",
@@ -266,6 +279,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "wait",
     tolerance: 180,
     keys: "K L ; · A G",
+    fingers: ["3 2 1 2 | 3 3 3 | 2 2 2 | 3 3 3", "5 | 5 | 1 | 5"],
   },
   {
     id: "twinkle",
@@ -282,6 +296,7 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "time",
     tolerance: 140,
     keys: "A S D F G H",
+    fingers: ["1 1 4 4 | 5 5 4 | 4 4 3 3 | 2 2 1 | 5 5 4 4 | 3 3 2 | 5 5 4 4 | 3 3 2 | 1 1 4 4 | 5 5 4 | 4 4 3 3 | 2 2 1"],
   },
   {
     id: "ode-whole",
@@ -298,5 +313,6 @@ export const PLAY_LESSONS: PlayLesson[] = [
     mode: "time",
     tolerance: 130,
     keys: "A S D F G",
+    fingers: ["3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 3 2 2 | 3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 2 1 1"],
   },
 ];
