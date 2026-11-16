@@ -1,7 +1,7 @@
 /**
  * The score editor (#/editor): the project's Python files on the left (main.py sets `score`; other files are modules
  * it imports), the score on the right. Imported files (MusicXML, MIDI …) are kept in this browser and read with
- * load("name"). Either view can show the full score or one player's part; the Pages view lays it out on A4, with
+ * load("name"). The score panel shows the full score or one player's part, continuous or on pages chosen in Page setup, with
  * the player's own layout (bars per line, forced breaks) and page turns moved to rests.
  */
 import { Download, GitFork, PanelLeft, Pencil, RefreshCw, RotateCcw, Save, X } from "lucide-react";
@@ -35,7 +35,7 @@ import {
 } from "./workspace.ts";
 import { locateNote, type CodeSpot } from "./codeLocate.ts";
 import ScoreTree, { type TreePick } from "./ScoreTree.tsx";
-import ScoreView, { type View } from "./ScoreView.tsx";
+import ScoreView from "./ScoreView.tsx";
 import { midiFile } from "./engine/engrave.ts";
 import { fill } from "./strings.ts";
 import { BUTTON, FIELD, PRIMARY } from "./ui.ts";
@@ -141,7 +141,6 @@ export default function EditorPage() {
   const [score, setScore] = useState<ScoreData | null>(null);
   const [sheet, setSheet] = useState<ScoreData | null>(null);
   const [part, setPart] = useState<number | null>(null);
-  const [view, setView] = useState<View>("score");
   const [error, setError] = useState<PyError | null>(null);
   const [running, setRunning] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -621,8 +620,6 @@ export default function EditorPage() {
           allParts={score?.parts}
           fullScore={part !== null ? score : null}
           onExportCode={exportCode}
-          view={view}
-          onView={setView}
           setup={setup}
           onSetup={changeSetup}
           barText={barText}

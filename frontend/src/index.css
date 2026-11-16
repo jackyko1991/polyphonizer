@@ -32,7 +32,7 @@ pre,
   background: #fee2e2;
 }
 
-/* Pages view, editing breaks: a bar under the pointer is the one a click changes */
+/* Edit breaks (on pages): a bar under the pointer is the one a click changes */
 .pz-edit g.measure { cursor: pointer; }
 .pz-edit g.measure:hover { fill: #be123c; stroke: #be123c; }
 

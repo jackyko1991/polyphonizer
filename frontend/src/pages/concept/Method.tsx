@@ -257,8 +257,8 @@ z4 | z4 | z4 | z4 | C D E C | C D E C |]`}
               "**你聆聽。** Verovio 也會給出音符的時間軸，由 WebAudio 播放，每個聲部用自己的樂器，發聲的音符會跟著變色。",
             ],
             [
-              "**The rules check** the note list (in Learn to Code), and the page planner uses it to find rests for page turns (in Pages).",
-              "**規則檢查**音符列表（在「學寫程式」裡），頁面規劃器也用它找出可以翻頁的休止（在「頁面」裡）。",
+              "**The rules check** the note list (in Learn to Code), and the page planner uses it to find rests for page turns (once a paper is chosen in Page setup).",
+              "**規則檢查**音符列表（在「學寫程式」裡），頁面規劃器也用它找出可以翻頁的休止（在「頁面設定」選了紙張之後）。",
             ],
           ]}
         />

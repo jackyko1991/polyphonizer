@@ -1,7 +1,8 @@
 /**
- * The score panel: the engraved score (live) or the printed pages, for the full score or one player's part; a Play
- * button that lights up the notes as they sound; export. The Pages view is also the layout editor: bars per line,
- * staff size, and line and page breaks set by clicking a bar, with page turns planned around them.
+ * The score panel, for the full score or one player's part: one drawing, laid out by the page setup (continuous, fit
+ * to the window, or pages of a paper or screen size), with all the tools in one bar: Play (the notes light up as they
+ * sound), sound, edit notes, and, with pages, edit line and page breaks (click a bar) and the page turns planned
+ * around them; the Page setup dialog; export; full screen (a page reader with pages).
  */
 import { ChevronDown, ChevronLeft, ChevronRight, Download, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, RotateCcw, Square, X } from "lucide-react";
 import { Icon } from "./Button.tsx";
@@ -16,10 +17,9 @@ import { keyTurn, pageSize, pagesPerView, turn, viewOf } from "./engine/reader.t
 import { useSoundSettings } from "./engine/sound.ts";
 import { RANGE, setStage, useStage } from "./progress.ts";
 import SoundPanel from "./SoundPanel.tsx";
-import { BUTTON, BUTTON_ON, CHECK, FIELD, layoutWidth, SEGMENT, SEGMENTS } from "./ui.ts";
+import { BUTTON, BUTTON_ON, CHECK, FIELD, layoutWidth } from "./ui.ts";
 import { fill } from "./strings.ts";
 
-export type View = "score" | "pages";
 
 
 export interface ScoreViewProps {
@@ -43,8 +43,6 @@ export interface ScoreViewProps {
   onNoteClick?: (note: { part: string; partIndex: number; bar: number; index: number }) => void;
   /** offer the Pages view (the editor does; Learn does not) */
   pagesView?: boolean;
-  view?: View;
-  onView?: (v: View) => void;
 }
 
 function download(name: string, data: BlobPart, type: string) {
@@ -87,8 +85,6 @@ export default function ScoreView({
   fullScore,
   onExportCode,
   pagesView = true,
-  view = "score",
-  onView,
   setup,
   onSetup,
   barText,
@@ -314,7 +310,7 @@ export default function ScoreView({
       document.removeEventListener("fullscreenchange", onChange);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [full, bar, view, perView, pageCount]);
+  }, [full, bar, reading, perView, pageCount]);
   useEffect(() => setReaderAt(0), [eng]);
   useEffect(() => {
     try {
@@ -399,7 +395,7 @@ export default function ScoreView({
       });
     }
     onsets.current = onsetTable(items) as (Onset & { page: number })[];
-  }, [eng, width, full, view, readerAt, boxH]);
+  }, [eng, width, full, readerAt, boxH]);
   /** put the line where the music is at `t` (ms, written tempo); scroll it into view if it left */
   const placeCursor = (t: number) => {
     const c = cursorEl.current;
@@ -503,11 +499,10 @@ export default function ScoreView({
   const small = `${BUTTON} shadow-sm`;
   const btn = BUTTON;
 
-  // a click on the music does what the view's tools say: Score edits a bar's notes (Edit notes on), Pages places
-  // breaks (Edit breaks on); otherwise it plays from the note
+  // a click on the music: edits a bar's notes (Edit notes on) or places a break (Edit breaks on), else plays from it
   const onSheetClick = (e: React.MouseEvent) =>
-    view === "pages" && editing && !fit ? onPagesClick(e) : view === "score" && noteEdit ? void onScoreClick(e) : onNote(e);
-  const clickClass = (view === "pages" && editing && !fit) || (view === "score" && noteEdit) ? "pz-edit" : clickPlay ? "pz-clickable" : "";
+    editing && !fit ? onPagesClick(e) : noteEdit ? void onScoreClick(e) : onNote(e);
+  const clickClass = (editing && !fit) || noteEdit ? "pz-edit" : clickPlay ? "pz-clickable" : "";
 
   return (
     <div
@@ -553,21 +548,6 @@ export default function ScoreView({
             <option value="all">{t("partPlay.all")}</option>
           </select>
         )}
-        {pagesView && (
-          <div className={SEGMENTS} role="tablist">
-            {(["score", "pages"] as View[]).map((v) => (
-              <button
-                key={v}
-                role="tab"
-                aria-selected={view === v}
-                onClick={() => onView?.(v)}
-                className={`${SEGMENT} ${view === v ? "bg-(--lk-accent) text-white" : "text-gray-600 hover:bg-gray-100"}`}
-              >
-                {t(`view.${v}`)}
-              </button>
-            ))}
-          </div>
-        )}
         <label className={`${CHECK} gap-1`} title={t("speed.title")}>
           <Icon icon={Gauge} className="text-gray-500" />♩ =
           <input
@@ -602,7 +582,7 @@ export default function ScoreView({
         </button>
         {loading && <span className="text-xs text-gray-500">{t("play.loading")}</span>}
 
-        {view === "score" && <div className="relative">
+        <div className="relative">
           <button
             onClick={() => setSoundOpen((o) => !o)}
             disabled={!score}
@@ -614,10 +594,11 @@ export default function ScoreView({
             <Icon icon={Music} /> {t("sound.button")}
           </button>
           {soundOpen && score && <SoundPanel parts={score.parts} programs={score.programs ?? []} onClose={() => setSoundOpen(false)} />}
-        </div>}
-        {view === "score" && onEditBar && (
+        </div>
+        {onEditBar && (
           <button
-            onClick={() => (setNoteEdit((x) => !x), setBar(null))}
+            // the two edit modes turn each other off, so a click on the music means one thing
+            onClick={() => (setNoteEdit((x) => !x), setEditing(false), setBar(null))}
             disabled={!score}
             aria-pressed={noteEdit}
             className={noteEdit ? BUTTON_ON : BUTTON}
@@ -645,11 +626,10 @@ export default function ScoreView({
           {t("click.label")}
         </label>
         {/* Pages: the layout's tools (breaks, page turns) */}
-        {view === "pages" && (
+        {pagesView && !fit && (
           <>
             <button
-              onClick={() => setEditing((x) => !x)}
-              disabled={fit}
+              onClick={() => (setEditing((x) => !x), setNoteEdit(false), setBar(null))}
               aria-pressed={editing}
               className={editing ? BUTTON_ON : BUTTON}
               title={fit ? t("layout.breaksNeedPages") : t("layout.editHint")}
@@ -695,7 +675,7 @@ export default function ScoreView({
       </div>
       {setupOpen && <PageSetupDialog setup={cur} onChange={update} onLayout={(n) => onLayout({ ...layout, barsPerLine: n })} barsPerLine={layout.barsPerLine} onClose={() => setSetupOpen(false)} />}
 
-      {view === "pages" && turnsOpen && !reading && !fit && eng?.plan && (
+      {turnsOpen && !reading && !fit && eng?.plan && (
         <div className="border-b border-gray-200 bg-white px-3 py-2 text-sm" data-testid="turns">
           <span className="font-medium text-gray-900">{t("pages.turns")}: </span>
           {eng.plan.turns.length === 0 ? (
@@ -719,8 +699,8 @@ export default function ScoreView({
       )}
 
       <ProgressLine />
-      {view === "score" && noteEdit && <p className="border-b border-gray-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900">{t("edit.hint")}</p>}
-      {view === "pages" && editing && !fit && <p className="border-b border-gray-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">{t("layout.editHint")}</p>}
+      {noteEdit && <p className="border-b border-gray-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900">{t("edit.hint")}</p>}
+      {editing && !fit && <p className="border-b border-gray-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">{t("layout.editHint")}</p>}
       <div ref={box} className={`pz-score relative min-h-0 flex-1 bg-gray-100 p-3 ${reading ? "overflow-hidden" : "overflow-auto"}`} data-testid="score">
         {/* export and full screen: just above the sheet, staying in view while the score scrolls */}
         <div className="pointer-events-none sticky top-0 z-20 -mb-2 flex justify-end gap-1.5 [&>*]:pointer-events-auto" data-testid="score-actions">
