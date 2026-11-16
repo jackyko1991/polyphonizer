@@ -244,9 +244,10 @@ export default function MetronomeTool() {
         </div>
       </div>
 
-      <div className={`flex flex-col gap-1 ${onPhone("beat")}`}>
+      {/* the beats, centred (under the tempo on a phone) */}
+      <div className={`flex flex-col items-center gap-1 ${onPhone("beat")}`}>
         <p className="text-[11px] text-gray-500">{pick(["Click a beat: accent · normal · silent", "點拍子：重音 · 一般 · 靜音"])}</p>
-        <div className="flex gap-1.5" data-testid="metro-beats">
+        <div className="flex flex-wrap justify-center gap-1.5" data-testid="metro-beats">
           {Array.from({ length: s.beats }, (_, i) => {
             const a = s.accents[i] ?? "normal";
             const now = beat === i;
@@ -268,7 +269,7 @@ export default function MetronomeTool() {
         {/* a big pulse for watching from the stand */}
         <span
           key={flash}
-          className={`mt-1 h-1.5 rounded-full ${s.running ? "animate-[pz-pulse_0.25s_ease-out] bg-(--lk-accent)" : "bg-gray-200"}`}
+          className={`mt-1 h-1.5 w-full rounded-full ${s.running ? "animate-[pz-pulse_0.25s_ease-out] bg-(--lk-accent)" : "bg-gray-200"}`}
         />
       </div>
     </div>
