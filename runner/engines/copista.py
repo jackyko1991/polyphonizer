@@ -8,6 +8,7 @@ after another), so the editor gets the whole piece.
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -58,11 +59,36 @@ def join_pages(files: list[Path]) -> str:
     return musicxml.m21ToXml.GeneralObjectExporter(first).parse().decode("utf-8")
 
 
+def titled(xml: str, title: str) -> str:
+    """the score's title: the learner's file name, not the reader's page name ("input_p01")"""
+    if not title:
+        return xml
+    from xml.sax.saxutils import escape
+
+    t = escape(title)
+    if "<movement-title>" in xml or "<work-title>" in xml:
+        xml = re.sub(r"<movement-title>[^<]*</movement-title>", f"<movement-title>{t}</movement-title>", xml)
+        return re.sub(r"<work-title>[^<]*</work-title>", f"<work-title>{t}</work-title>", xml)
+    # none (the reader writes none): one where MusicXML has it, before the identification or the part list
+    for before in ("<identification>", "<part-list>"):
+        if before in xml:
+            return xml.replace(before, f"<movement-title>{t}</movement-title>\n  {before}", 1)
+    return xml
+
+
 def main(src: str, out: str) -> None:
     src_p, out_p = Path(src).resolve(), Path(out).resolve()
     with tempfile.TemporaryDirectory(prefix="pz-copista-") as tmp:
         cmd = [sys.executable, "-m", "copisteria.pipeline", "--out", tmp]
-        cmd += ["--pdf", str(src_p), "--range", f"1-{pdf_pages(src_p)}"] if src_p.suffix.lower() == ".pdf" else [str(src_p)]
+        if src_p.suffix.lower() == ".pdf":
+            # the pages as images in this job's own folder: the reader's --pdf keeps them (and what it read on them) in
+            # one shared folder by file name, so a second PDF with the same name got the first one's pages back
+            from copisteria.vision.page.scan import from_pdf
+
+            pages_dir = Path(tmp) / "pages"
+            cmd += [str(from_pdf(src_p, n, pages_dir).path) for n in range(1, pdf_pages(src_p) + 1)]
+        else:
+            cmd += [str(src_p)]
         # (run from the reader's folder: it finds its models/ there)
         p = subprocess.run(cmd, cwd=READER, capture_output=True, text=True)
         sys.stderr.write(p.stdout)
@@ -73,7 +99,7 @@ def main(src: str, out: str) -> None:
         pages = sorted(Path(tmp).glob("*.musicxml"), key=page_order)
         if not pages:
             raise SystemExit("the reader wrote no pages")
-        out_p.write_text(pages[0].read_text() if len(pages) == 1 else join_pages(pages))
+        out_p.write_text(titled(pages[0].read_text() if len(pages) == 1 else join_pages(pages), os.environ.get("PZ_TITLE", "")))
         print(json.dumps({"pages": len(pages)}), file=sys.stderr)
 
 

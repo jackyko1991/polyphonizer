@@ -27,6 +27,18 @@ def page(tmp, name, parts, bars):
     return f
 
 
+class Title(unittest.TestCase):
+    def test_the_score_takes_the_learners_file_name(self):
+        xml = "<work><work-title>input_p01.musicxml</work-title></work><movement-title>input_p01.musicxml</movement-title>"
+        out = copista.titled(xml, "bwv-1006_3 <a4> & co")
+        self.assertIn("<movement-title>bwv-1006_3 &lt;a4&gt; &amp; co</movement-title>", out)
+        self.assertIn("<work-title>bwv-1006_3 &lt;a4&gt; &amp; co</work-title>", out)
+        self.assertEqual(copista.titled(xml, ""), xml)
+        # the reader writes no title: one is added before the identification
+        bare = '<score-partwise version="4.0">\n  <identification></identification>\n  <part-list></part-list>'
+        self.assertIn("<movement-title>Minuet</movement-title>\n  <identification>", copista.titled(bare, "Minuet"))
+
+
 class Join(unittest.TestCase):
     def test_pages_in_reading_order(self):
         names = [Path(f"score-{n}.musicxml") for n in (10, 2, 1)]

@@ -95,10 +95,11 @@ def copista_command():
     return f"{shlex.quote(str(py))} {shlex.quote(str(Path(copista.__file__)))} {{in}} {{out}}"
 
 
-def run_engine(template, src, out, outdir, timeout):
-    """run an engine's command on the files; the result is {out}, or the first MusicXML/MIDI it wrote in {outdir}"""
+def run_engine(template, src, out, outdir, timeout, title=""):
+    """run an engine's command on the files; the result is {out}, or the first MusicXML/MIDI it wrote in {outdir}. The
+    learner's file name is in PZ_TITLE, for the score's title."""
     args = [a.replace("{in}", str(src)).replace("{out}", str(out)).replace("{outdir}", str(outdir)) for a in shlex.split(template)]
-    p = subprocess.run(args, capture_output=True, timeout=timeout)
+    p = subprocess.run(args, capture_output=True, timeout=timeout, env={**os.environ, "PZ_TITLE": title})
     if p.returncode != 0:
         tail = (p.stderr or p.stdout).decode("utf-8", "replace").strip().splitlines()[-1:]
         raise RuntimeError(tail[0] if tail else f"the engine stopped (exit {p.returncode})")
@@ -177,7 +178,10 @@ def make_server(address, cfg):
             if size > cfg.max_bytes:
                 return self.reply(413, {"error": f"the file is larger than {cfg.max_bytes // 1_000_000} MB"})
             # the name only gives the extension
-            ext = Path(unquote(self.headers.get("X-Filename", ""))).suffix.lower()
+            given = Path(unquote(self.headers.get("X-Filename", "")))
+            ext = given.suffix.lower()
+            # (the name, for the score's title only: never a path)
+            self.title = re.sub(r"[^\w .,'()-]+", "", given.stem)[:80]
             if ext not in (OMR_EXT if kind == "omr" else AUDIO_EXT | VIDEO_EXT):
                 return self.reply(415, {"error": f"{kind} does not take {ext or 'files without an extension'}"})
             body = self.rfile.read(size)
@@ -203,7 +207,7 @@ def make_server(address, cfg):
             outdir.mkdir()
             name, ctype = RESULT[kind]
             try:
-                result = run_engine(template, src, outdir / name, outdir, cfg.timeout)
+                result = run_engine(template, src, outdir / name, outdir, cfg.timeout, self.title)
             except subprocess.TimeoutExpired:
                 return 504, {"error": "the engine took too long"}, "application/json"
             except (RuntimeError, OSError) as e:
