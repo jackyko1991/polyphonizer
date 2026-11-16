@@ -96,6 +96,8 @@ export default function ScoreView({
   const [width, setWidth] = useState(800);
   // full screen only zooms: the layout keeps the width it had when full screen began (no re-flow)
   const [frozenWidth, setFrozenWidth] = useState<number | null>(null);
+  // phones: the Pages view's setup is folded until asked for
+  const [setupOpen, setSetupOpen] = useState(false);
   // the full-screen page reader (Pages view): the panel's size, and the first page on show
   const [boxW, setBoxW] = useState(800);
   const [boxH, setBoxH] = useState(600);
@@ -633,8 +635,27 @@ export default function ScoreView({
         {eng && view === "pages" && <span className="text-xs text-gray-500">{fill(t("pages.count"), { n: eng.pages.length })}</span>}
       </div>
 
+      {/* phones: the page setup and the turns fold into one line, so the pages show first (as the Score view does) */}
       {view === "pages" && !reading && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+        <button
+          type="button"
+          onClick={() => setSetupOpen((o) => !o)}
+          aria-expanded={setupOpen}
+          className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-1.5 text-left text-sm text-gray-700 lg:hidden"
+          data-testid="pages-setup-toggle"
+        >
+          <Icon icon={ChevronDown} className={`h-4 w-4 transition-transform ${setupOpen ? "" : "-rotate-90"}`} />
+          <span className="font-medium">{t("pages.setup")}</span>
+          {eng?.plan && eng.plan.turns.length > 0 && (
+            <span className="ml-auto text-xs">
+              {t("pages.turns")}: <span className="text-emerald-700">✓ {eng.plan.turns.filter((x) => x.ok).length}</span>
+              {eng.plan.turns.some((x) => !x.ok) && <span className="ml-1.5 text-red-700">✗ {eng.plan.turns.filter((x) => !x.ok).length}</span>}
+            </span>
+          )}
+        </button>
+      )}
+      {view === "pages" && !reading && (
+        <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 ${setupOpen ? "" : "max-lg:hidden"}`}>
           <label className="flex items-center gap-1.5">
             {t("pages.stand")}
             <select value={stand} onChange={(e) => setStand(e.target.value as Stand)} className="rounded border border-gray-300 bg-white px-1.5 py-0.5">
@@ -747,7 +768,7 @@ export default function ScoreView({
       )}
 
       {view === "pages" && !reading && eng?.plan && (
-        <div className="border-b border-gray-200 bg-white px-3 py-2 text-sm" data-testid="turns">
+        <div className={`border-b border-gray-200 bg-white px-3 py-2 text-sm ${setupOpen ? "" : "max-lg:hidden"}`} data-testid="turns">
           <span className="font-medium text-gray-900">{t("pages.turns")}: </span>
           {eng.plan.turns.length === 0 ? (
             <span className="text-gray-600">{t("pages.noTurns")}</span>

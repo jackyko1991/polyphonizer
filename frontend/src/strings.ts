@@ -81,6 +81,7 @@ export const STRINGS = {
   "ws.saveShort": ["Save", "儲存"],
   "tree.new": ["New", "新增"],
   "tree.import": ["Import", "匯入"],
+  "pages.setup": ["Page setup", "頁面設定"],
   "tree.open": ["Show the scores", "顯示樂譜列表"],
   "tree.close": ["Hide the scores", "隱藏樂譜列表"],
   "tree.rename": ["Rename", "重新命名"],
