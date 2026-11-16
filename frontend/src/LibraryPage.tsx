@@ -15,6 +15,7 @@ import { go, useLang } from "@learnkit/web";
 import { useEffect, useMemo, useState } from "react";
 import { catalogIds, idLabel, idMatches, parseQuery } from "./library/catalogNumbers.ts";
 import { elsewhereLinks, LICENCE_CLASSES, licenceClass, searchTerms, type LicenceClass } from "./library/elsewhere.ts";
+import { MUTOPIA, MUTOPIA_LICENCES, MUTOPIA_SOURCE, mutopiaLinks, mutopiaRow, type MutopiaRow } from "./library/mutopia.ts";
 import { byComposer, codeFor, idText, MUSIC21, sourceOf, type Row, type Source } from "./library/collections.ts";
 import { addRecent } from "./project.ts";
 import { fill } from "./strings.ts";
@@ -179,7 +180,7 @@ const ERAS: Record<string, L> = {
 const ERA_ORDER = Object.keys(ERAS);
 
 /** ensemble by number of parts */
-export const ensembleOf = (parts: number) => (parts <= 1 ? "solo" : parts === 2 ? "duo" : parts === 3 ? "trio" : parts === 4 ? "quartet" : "more");
+export const ensembleOf = (parts: number) => (parts <= 0 ? "" : parts <= 1 ? "solo" : parts === 2 ? "duo" : parts === 3 ? "trio" : parts === 4 ? "quartet" : "more");
 const ENSEMBLES: Record<string, L> = {
   solo: ["One part (melody, solo)", "單一聲部（旋律、獨奏）"],
   duo: ["Two parts", "兩個聲部"],
@@ -208,6 +209,8 @@ export default function LibraryPage() {
   const [version, setVersion] = useState("");
   const [query, setQuery] = useState("");
   const [sources, setSources] = useState<Record<string, Source>>({});
+  // Mutopia's pieces by their page (their files are downloaded there, not opened here)
+  const [mutopia, setMutopia] = useState<Map<string, MutopiaRow>>(new Map());
   const [source, setSource] = useState("");
   const [collection, setCollection] = useState("");
   const [composer, setComposer] = useState("");
@@ -218,11 +221,13 @@ export default function LibraryPage() {
   const [openParts, setOpenParts] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState(PAGE);
   useEffect(() => {
-    void Promise.all([import("./library/catalog.json"), import("./library/collections.json")]).then(([m, o]) => {
+    void Promise.all([import("./library/catalog.json"), import("./library/collections.json"), import("./library/mutopia.json")]).then(([m, o, mu]) => {
       const data = (m.default ?? m) as unknown as { music21: string; works: Row[] };
       const open = (o.default ?? o) as unknown as { sources: Record<string, Source>; works: Row[] };
-      setRows([...data.works, ...open.works].sort(byComposer));
-      setSources(open.sources);
+      const mutopia = ((mu.default ?? mu) as unknown as { works: MutopiaRow[] }).works;
+      setMutopia(new Map(mutopia.map((w) => [mutopiaLinks(w).page, w])));
+      setRows([...data.works, ...open.works, ...mutopia.map(mutopiaRow)].sort(byComposer));
+      setSources({ ...open.sources, [MUTOPIA]: MUTOPIA_SOURCE });
       setVersion(data.music21);
     });
   }, []);
@@ -482,6 +487,9 @@ export default function LibraryPage() {
         {filtered.slice(0, shown).map((r) => {
           const ids = catalogIds(idText(r), r[4]);
           const src = r[13] ? sources[r[13]] : undefined;
+          const mu = r[13] === MUTOPIA ? mutopia.get(r[1]) : undefined;
+          const links = mu ? mutopiaLinks(mu) : null;
+          const lic = mu ? MUTOPIA_LICENCES[mu[6]] : src ? { name: src.licence, url: src.licenceUrl } : null;
           return (
           <li key={`${r[1]}#${r[2] ?? ""}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
             <div className="min-w-0 flex-1">
@@ -497,8 +505,16 @@ export default function LibraryPage() {
                 ))}
                 {r[3]}
               </p>
-              <PartsLine row={r} open={openParts.has(r[1] + (r[2] ?? ""))} onToggle={() => setOpenParts((o) => { const k = r[1] + (r[2] ?? ""); const n = new Set(o); if (!n.delete(k)) n.add(k); return n; })} />
-              {src ? (
+              {mu ? (
+                <p className="truncate text-xs text-gray-600">{mu[4]}</p>
+              ) : (
+                <PartsLine row={r} open={openParts.has(r[1] + (r[2] ?? ""))} onToggle={() => setOpenParts((o) => { const k = r[1] + (r[2] ?? ""); const n = new Set(o); if (!n.delete(k)) n.add(k); return n; })} />
+              )}
+              {mu ? (
+                <p className="truncate text-xs text-gray-500" data-testid="lib-credit">
+                  {MUTOPIA_SOURCE.credit} · {t("lib.mutopiaHow")}
+                </p>
+              ) : src ? (
                 <p className="truncate text-xs text-gray-500" title={fill(t("lib.downloads"), { source: pick(src.name) })} data-testid="lib-credit">
                   {src.credit}
                   {src.nonCommercial && <span className="text-amber-700"> · {t("lib.nonCommercial")}</span>} ·{" "}
@@ -518,22 +534,41 @@ export default function LibraryPage() {
               {r[8] && ERAS[r[8]] ? `${pick(ERAS[r[8]])}` : ""}
               {r[7] && ` · ${r[7]}`}
               {keyText(r[6]) && ` · ${keyText(r[6])}`}
-              {src && (
+              {lic && (
                 <a
-                  href={src.licenceUrl}
+                  href={lic.url}
                   target="_blank"
                   rel="noreferrer"
-                  title={fill(t("lib.licence"), { l: src.licence }) + (src.nonCommercial ? ` · ${t("lib.nonCommercial")}` : "")}
-                  className={`ml-2 rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${src.nonCommercial ? "border-amber-300 bg-amber-50 text-amber-800" : "border-emerald-300 bg-emerald-50 text-emerald-800"}`}
+                  title={fill(t("lib.licence"), { l: lic.name }) + (src?.nonCommercial ? ` · ${t("lib.nonCommercial")}` : "")}
+                  className={`ml-2 rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${src?.nonCommercial ? "border-amber-300 bg-amber-50 text-amber-800" : "border-emerald-300 bg-emerald-50 text-emerald-800"}`}
                   data-testid="lib-licence"
                 >
-                  {src.licence}
+                  {lic.name}
                 </a>
               )}
             </span>
-            <button onClick={() => open(r)} className="rounded-md bg-(--lk-accent) px-3 py-1 text-sm font-medium text-white hover:opacity-90" data-testid="lib-open">
-              {t("lib.open")}
-            </button>
+            {links ? (
+              // Mutopia's files: downloaded from its site, then opened here (Import, or drop the file on the editor)
+              <span className="flex items-center gap-1.5" data-testid="lib-mutopia">
+                {links.midi && (
+                  <a href={links.midi} className="rounded-md bg-(--lk-accent) px-2.5 py-1 text-sm font-medium text-white hover:opacity-90" title={t("lib.midiHint")} data-testid="lib-midi">
+                    MIDI ↓
+                  </a>
+                )}
+                {links.pdf && (
+                  <a href={links.pdf} target="_blank" rel="noreferrer" className="rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50" data-testid="lib-pdf">
+                    PDF ↓
+                  </a>
+                )}
+                <a href={links.page} target="_blank" rel="noreferrer" className="px-1 text-sm text-(--lk-accent) hover:underline" title={t("lib.mutopiaPage")}>
+                  Mutopia ↗
+                </a>
+              </span>
+            ) : (
+              <button onClick={() => open(r)} className="rounded-md bg-(--lk-accent) px-3 py-1 text-sm font-medium text-white hover:opacity-90" data-testid="lib-open">
+                {t("lib.open")}
+              </button>
+            )}
           </li>
           );
         })}

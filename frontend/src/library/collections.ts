@@ -6,9 +6,11 @@
 import type { L } from "../problems.ts";
 
 /** [collection, path, number, title, composer, parts, key, time, era, tradition (or the set a song belongs to),
- * original composer, instrument per part, part names, source]. A collection's work (collections.json) has its pinned
+ * original composer, instrument per part, part names, source, the work's own licence if its source's vary]. A collection's work (collections.json) has its pinned
  * URL as path and its source id last; music21's corpus rows have no source. */
-export type Row = [string, string, number | null, string, string, number, number | null, string, string, string, string, string[]?, string[]?, string?];
+export type Row = [string, string, number | null, string, string, number, number | null, string, string, string, string, string[]?, string[]?, string?, WorkLicence?];
+/** a work's own licence, where a source's works differ (Mutopia: public domain, CC BY or CC BY-SA) */
+export type WorkLicence = "pd" | "by" | "by-sa";
 
 /** an open collection (collections.json "sources") */
 export interface Source {
