@@ -200,8 +200,8 @@ export const STRINGS = {
   "crash.reload": ["Reload", "重新載入"],
   "lib.title": ["Library", "曲庫"],
   "lib.intro": [
-    "Every work in music21's corpus (Bach chorales, quartets by Haydn, Mozart and Beethoven, Renaissance masses and madrigals, thousands of folk tunes), plus open collections: OpenScore's Lieder and string quartets, and Craig Sapp's editions of Mozart's piano sonatas and Joplin's rags. Open one in the editor to play it, lay out a part, or change notes; your changes are kept as lines of code after the original.",
-    "music21 曲庫裡的每一部作品（巴赫聖詠曲、海頓、莫札特與貝多芬的四重奏、文藝復興時期的彌撒曲與牧歌、數千首民謠），以及開放授權曲集：OpenScore 的藝術歌曲與弦樂四重奏，和 Craig Sapp 編的莫札特鋼琴奏鳴曲與喬普林散拍曲。在編輯器中開啟一首來播放、排出分譜或修改音符；你的修改會以程式碼的形式寫在原曲之後。",
+    "Every work in music21's corpus (Bach chorales, quartets by Haydn, Mozart and Beethoven, Renaissance masses and madrigals, thousands of folk tunes), plus open collections: OpenScore's Lieder and string quartets, Craig Sapp's editions of Mozart's, Haydn's and Scarlatti's keyboard sonatas and Joplin's rags, the ASAP dataset's piano scores (Bach to Ravel), and the Josquin Research Project's Renaissance masses and songs. Open one in the editor to play it, lay out a part, or change notes; your changes are kept as lines of code after the original.",
+    "music21 曲庫裡的每一部作品（巴赫聖詠曲、海頓、莫札特與貝多芬的四重奏、文藝復興時期的彌撒曲與牧歌、數千首民謠），以及開放授權曲集：OpenScore 的藝術歌曲與弦樂四重奏，Craig Sapp 編的莫札特、海頓與史卡拉第鍵盤奏鳴曲及喬普林散拍曲、ASAP 資料集的鋼琴樂譜（從巴赫到拉威爾），以及若斯坎研究計畫的文藝復興彌撒曲與歌曲。在編輯器中開啟一首來播放、排出分譜或修改音符；你的修改會以程式碼的形式寫在原曲之後。",
   ],
   "lib.search": ["Search by title, composer or catalogue number (BWV 66.6, K. 458, Op. 59 No. 2 …)", "以曲名、作曲家或作品編號搜尋（BWV 66.6、K. 458、Op. 59 No. 2 …）"],
   "lib.collection": ["Collection", "曲集"],
@@ -237,8 +237,16 @@ export const STRINGS = {
   "lib.downloads": ["Downloaded from {source} when you open it, then kept in this browser.", "開啟時從 {source} 下載，之後保存在這個瀏覽器裡。"],
   "lib.creditOpenScore": ["OpenScore Lieder and String Quartets: OpenScore (openscore.cc), CC0.", "OpenScore 藝術歌曲與弦樂四重奏：OpenScore（openscore.cc），CC0。"],
   "lib.creditSapp": [
-    "Mozart's piano sonatas and Joplin: Craig Stuart Sapp's Humdrum editions, CC BY-NC-SA 4.0 (attribution, non-commercial, share alike).",
-    "莫札特鋼琴奏鳴曲與喬普林：Craig Stuart Sapp 的 Humdrum 版本，CC BY-NC-SA 4.0（姓名標示、非商業性、相同方式分享）。",
+    "Mozart's, Haydn's and Scarlatti's sonatas and Joplin: Craig Stuart Sapp's Humdrum editions, CC BY-NC-SA 4.0 (attribution, non-commercial, share alike).",
+    "莫札特、海頓與史卡拉第奏鳴曲及喬普林：Craig Stuart Sapp 的 Humdrum 版本，CC BY-NC-SA 4.0（姓名標示、非商業性、相同方式分享）。",
+  ],
+  "lib.creditAsap": [
+    "ASAP piano scores: Foscarin, McLeod, Rigaux, Jacquemard and Sakai, the ASAP dataset, CC BY-NC-SA 4.0.",
+    "ASAP 鋼琴樂譜：Foscarin、McLeod、Rigaux、Jacquemard 與 Sakai 的 ASAP 資料集，CC BY-NC-SA 4.0。",
+  ],
+  "lib.creditJrp": [
+    "Renaissance masses and songs: the Josquin Research Project (josquin.stanford.edu), CC BY-NC 4.0 (attribution, non-commercial).",
+    "文藝復興彌撒曲與歌曲：若斯坎研究計畫（josquin.stanford.edu），CC BY-NC 4.0（姓名標示、非商業性）。",
   ],
   "src.music21": ["music21 corpus", "music21 曲庫"],
   "reader.prev": ["Previous page (←, Page Up)", "上一頁（←、Page Up）"],

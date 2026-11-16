@@ -11,6 +11,10 @@ export const SCORE_SOURCES = [
   "https://raw.githubusercontent.com/OpenScore/StringQuartets/",
   "https://raw.githubusercontent.com/craigsapp/mozart-piano-sonatas/",
   "https://raw.githubusercontent.com/craigsapp/joplin/",
+  "https://raw.githubusercontent.com/craigsapp/haydn-piano-sonatas/",
+  "https://raw.githubusercontent.com/craigsapp/scarlatti-keyboard-sonatas/",
+  "https://raw.githubusercontent.com/fosfrancesco/asap-dataset/",
+  "https://raw.githubusercontent.com/josquin-research-project/jrp-scores/",
 ];
 
 /** the Cache API cache the downloaded scores live in */

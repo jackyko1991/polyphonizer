@@ -83,9 +83,42 @@ test("every collection work has a composer, an era, a licensed source and a URL 
   assert.ok(count("openscore-quartets") > 190);
   assert.ok(count("sapp-mozart") > 60);
   assert.ok(count("sapp-joplin") > 40);
+  assert.ok(count("sapp-haydn") > 20);
+  assert.ok(count("sapp-scarlatti") > 60);
+  assert.ok(count("asap") > 230);
+  assert.ok(count("jrp") > 1300);
+  assert.equal(data.sources.jrp.licence, "CC BY-NC 4.0");
+  for (const s of ["sapp-haydn", "sapp-scarlatti", "asap", "jrp"]) assert.ok(data.sources[s].nonCommercial, s);
   assert.equal(data.sources["openscore-lieder"].licence, "CC0");
   assert.equal(data.sources["sapp-joplin"].licence, "CC BY-NC-SA 4.0");
   assert.ok(data.sources["sapp-mozart"].nonCommercial && !data.sources["openscore-quartets"].nonCommercial);
+});
+
+test("the build script tidies ASAP's titles and reads Humdrum headers", (t) => {
+  if (!python()) return t.skip("no python3");
+  assert.deepEqual(parse("asap_title", ["Piano_Sonatas_17-3", "Fugue_bwv_846", "Etudes_op_25_10", "Ballades_2", "Scherzos_31", "Miroirs_3_Une_Barque", "Sonata_3_2nd"]), [
+    "Piano Sonata No. 17 · 3",
+    "Fugue, BWV 846",
+    "Etude Op. 25 No. 10",
+    "Ballade No. 2",
+    "Scherzo, Op. 31",
+    "Miroirs · 3. Une Barque",
+    "Sonata No. 3 · 2",
+  ]);
+  const head = "!!!COA: Josquin des Prez\n!!!OTL: Ave Maria\n!!!SCT: K. 1\n!!!SCT: L. 2\n**kern\t**kern\t**text\t**kern\n*-\t*-\t*-\t*-";
+  assert.deepEqual(parse("humdrum_header", [head]), [{ COA: "Josquin des Prez", OTL: "Ave Maria", SCT: "K. 1 / L. 2", _voices: 3 }]);
+});
+
+test("the new collections: titles, composers (Josquin's attributed works too), no duplicates", () => {
+  const find = (s: string, pred: (r: Row) => boolean) => data.works.find((r) => r[13] === s && pred(r));
+  assert.ok(find("sapp-haydn", (r) => /^Sonata No\. \d+ in .+ \(Hob\. XVI:\d+\) · \d/.test(r[3])));
+  assert.ok(find("sapp-scarlatti", (r) => r[3] === "Sonata in C major, L.1, K.514" && r[4] === "Domenico Scarlatti"));
+  assert.ok(find("asap", (r) => r[3] === "Ballade No. 3" && r[4] === "Frédéric Chopin"));
+  assert.ok(find("jrp", (r) => r[4] === "Josquin des Prez" && r[9] === "Missa Ave maris stella" && r[3] === "Kyrie"));
+  assert.ok(data.works.filter((r) => r[13] === "jrp" && r[4] === "Josquin des Prez").length > 400);
+  // the Josquin Research Project links some files into a second folder: each score is listed once
+  assert.equal(new Set(data.works.map((r) => r[1])).size, data.works.length);
+  assert.ok(!data.works.some((r) => /&\w+;/.test(r[4] + r[3])), "HTML entities left in names");
 });
 
 test("composers merge with the corpus's spelling; catalogue numbers come from titles and sets", () => {
@@ -94,9 +127,9 @@ test("composers merge with the corpus's spelling; catalogue numbers come from ti
     assert.ok(corpusComposers.has(name), name);
     assert.ok(data.works.some((r) => r[4] === name), name);
   }
-  // one era per composer across the Library
+  // one era per composer across the Library (Anonymous is no one composer: its works keep their own eras)
   const eraOf = new Map(corpus.works.map((r) => [r[4], r[8]]));
-  for (const r of data.works) if (eraOf.has(r[4]) && r[4] !== "music21 examples") assert.equal(r[8], eraOf.get(r[4]), r[4]);
+  for (const r of data.works) if (eraOf.has(r[4]) && r[4] !== "music21 examples" && r[4] !== "Anonymous") assert.equal(r[8], eraOf.get(r[4]), r[4]);
   const ids = (pred: (r: Row) => boolean) => catalogIds(idText(data.works.find(pred)!), data.works.find(pred)![4]);
   assert.deepEqual(ids((r) => r[3].startsWith("String Quartet No.17 in B-flat major, K.458")), ["k:458", "op:10.3"]);
   assert.ok(ids((r) => r[3] === "Der Erlkönig, D.328" && r[4] === "Franz Schubert").includes("d:328"));
@@ -122,6 +155,10 @@ test("the allow-list takes exactly the collections' repositories", () => {
     `https://raw.githubusercontent.com/OpenScore/StringQuartets/${sha}/scores/Wolf,_Hugo/String_Quartet/sq8823783.mxl`,
     `https://raw.githubusercontent.com/craigsapp/mozart-piano-sonatas/${sha}/kern/sonata01-1.krn`,
     `https://raw.githubusercontent.com/craigsapp/joplin/${sha}/kern/entertainer.krn`,
+    `https://raw.githubusercontent.com/craigsapp/haydn-piano-sonatas/${sha}/kern/sonata12-1.krn`,
+    `https://raw.githubusercontent.com/craigsapp/scarlatti-keyboard-sonatas/${sha}/kern/L001K514.krn`,
+    `https://raw.githubusercontent.com/fosfrancesco/asap-dataset/${sha}/Chopin/Ballades/3/xml_score.musicxml`,
+    `https://raw.githubusercontent.com/josquin-research-project/jrp-scores/${sha}/Jos/Jos0301a-Missa_Ave_maris_stella-Kyrie.krn`,
   ])
     assert.ok(isAllowedScoreUrl(ok), ok);
   for (const bad of [
@@ -130,6 +167,7 @@ test("the allow-list takes exactly the collections' repositories", () => {
     "https://raw.githubusercontent.com/SomeoneElse/Lieder/main/x.mxl",
     "https://raw.githubusercontent.com/OpenScore/LiederEvil/main/x.mxl",
     "https://raw.githubusercontent.com/craigsapp/beethoven-piano-sonatas/main/kern/sonata01-1.krn",
+    "https://raw.githubusercontent.com/adactio/TheSession-data/main/abc/tunes.abc",
     "https://raw.githubusercontent.com/OpenScore/Lieder/",
     "https://raw.githubusercontent.com/OpenScore/Lieder/main/../../SomeoneElse/x.mxl",
     "https://raw.githubusercontent.com/OpenScore/Lieder/main/%2e%2e/x.mxl",

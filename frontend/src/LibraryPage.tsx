@@ -525,8 +525,29 @@ export default function LibraryPage() {
         <a href="https://github.com/craigsapp/joplin" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
           joplin ↗
         </a>{" "}
+        <a href="https://github.com/craigsapp/haydn-piano-sonatas" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
+          haydn-piano-sonatas ↗
+        </a>{" "}
+        <a href="https://github.com/craigsapp/scarlatti-keyboard-sonatas" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
+          scarlatti-keyboard-sonatas ↗
+        </a>{" "}
         <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
           CC BY-NC-SA 4.0 ↗
+        </a>
+      </p>
+      <p className="mt-1 text-xs text-gray-500" data-testid="lib-credit-asap">
+        {t("lib.creditAsap")}{" "}
+        <a href="https://github.com/fosfrancesco/asap-dataset" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
+          asap-dataset ↗
+        </a>
+      </p>
+      <p className="mt-1 text-xs text-gray-500" data-testid="lib-credit-jrp">
+        {t("lib.creditJrp")}{" "}
+        <a href="https://josquin.stanford.edu" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
+          josquin.stanford.edu ↗
+        </a>{" "}
+        <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noreferrer" className="text-(--lk-accent) hover:underline">
+          CC BY-NC 4.0 ↗
         </a>
       </p>
     </div>
