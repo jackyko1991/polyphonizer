@@ -44,6 +44,32 @@ def corpus_key(name, corpus_paths):
     return hits[0] if len(hits) == 1 else None
 
 
+# Beethoven's and Mozart's piano sonatas by number → When in Rome's folders (by opus, by Köchel number)
+BEETHOVEN = ["Op002_No1", "Op002_No2", "Op002_No3", "Op007", "Op010_No1", "Op010_No2", "Op010_No3", "Op013(Pathetique)",
+             "Op014_No1", "Op014_No2", "Op022", "Op026", "Op027_No1", "Op027_No2(Moonlight)", "Op028(Pastorale)", "Op031_No1",
+             "Op031_No2", "Op031_No3", "Op049_No1", "Op049_No2", "Op053", "Op054", "Op057(Appassionata)", "Op078",
+             "Op079(Sonatina)", "Op081a(Les_Adieux)", "Op090", "Op101", "Op106(Hammerklavier)", "Op109", "Op110", "Op111"]
+MOZART_K = [279, 280, 281, 282, 283, 284, 309, 310, 311, 330, 331, 332, 333, 457, 533, 545, 570, 576]
+
+
+def sonata_folder(source, composer, title):
+    """a sonata movement's When in Rome folder from its Library title: ASAP's 'Piano Sonata No. 8 · 2' (Beethoven,
+    Mozart: by number), Craig Sapp's 'Piano Sonata No. 1 in C major, K. 279 … · 1. Allegro' (Mozart: by K)"""
+    if source == "sapp-mozart":
+        k = re.search(r"K\. ?(\d+)", title)
+        mv = re.search(r"· (\d+)\.", title)
+        return f"Corpus/Piano_Sonatas/Mozart,_Wolfgang_Amadeus/K{k.group(1)}/{mv.group(1)}" if k and mv else None
+    m = re.fullmatch(r"Piano Sonata No\. (\d+) · (\d+)", title)
+    if source != "asap" or not m:
+        return None
+    n, mv = int(m.group(1)), m.group(2)
+    if composer == "Ludwig van Beethoven" and 1 <= n <= len(BEETHOVEN):
+        return f"Corpus/Piano_Sonatas/Beethoven,_Ludwig_van/{BEETHOVEN[n - 1]}/{mv}"
+    if composer == "Wolfgang Amadeus Mozart" and 1 <= n <= len(MOZART_K):
+        return f"Corpus/Piano_Sonatas/Mozart,_Wolfgang_Amadeus/K{MOZART_K[n - 1]}/{mv}"
+    return None
+
+
 def main():
     sha = json.loads(get(f"https://api.github.com/repos/{REPO}/commits/HEAD", api=True))["sha"]
     tree = json.loads(get(f"https://api.github.com/repos/{REPO}/git/trees/{sha}?recursive=1", api=True))
@@ -72,12 +98,27 @@ def main():
             remote = json.loads(get(f"https://raw.githubusercontent.com/{REPO}/{sha}/{quote(folder)}/remote.json"))
         except Exception:
             return []
-        names = remote.get("music21") or []
-        names = [names] if isinstance(names, str) else names
+        # music21's corpus file: "music21" (Bach), "remote_score_music21" (Monteverdi), or a corpus URL
+        names = []
+        for k in ("music21", "remote_score_music21"):
+            v = remote.get(k) or []
+            names += [v] if isinstance(v, str) else list(v)
+        for k, v in remote.items():
+            if k.startswith("remote_score") and isinstance(v, str):
+                m = re.search(r"/music21/corpus/(.+)$", v)
+                if m:
+                    names.append(m.group(1))
         return [(k, folder) for k in (corpus_key(n, corpus_paths) for n in names) if k]
 
     with ThreadPoolExecutor(16) as pool:
         pairs = [pair for found in pool.map(match, folders) for pair in found]
+    # the sonatas, by their titles (Beethoven's and Mozart's folders are by opus and K, the Library's rows by number)
+    have = set(folders)
+    for w in lieder:
+        if w[13] in ("asap", "sapp-mozart"):
+            f = sonata_folder(w[13], w[4], w[3])
+            if f in have:
+                pairs.append((w[1], f))
     works = {key: f"{folder}/analysis.txt" for key, folder in sorted(pairs)}
     OUT.write_text(json.dumps({"sha": sha, "works": works}, ensure_ascii=False, separators=(",", ":")))
     print(f"{len(works)} Library works have an analysis (of {len(folders)}) → {OUT}")

@@ -11,10 +11,13 @@ export interface Analyses {
   works: Record<string, string>;
 }
 
-/** a row's key in analyses.json: music21's corpus path, or an OpenScore song's lc id; null for others */
+/** a row's key in analyses.json: music21's corpus path, an OpenScore song's lc id, or a sonata movement's file (ASAP,
+ * Craig Sapp's Mozart); null for others */
 export function analysisKey(r: Row): string | null {
   if (!r[13]) return r[1];
   if (r[13] === "openscore-lieder") return /\/(lc\d+)\.mxl$/.exec(r[1])?.[1] ?? null;
+  // piano sonatas (Beethoven's, Mozart's): the row's own file
+  if (r[13] === "asap" || r[13] === "sapp-mozart") return r[1];
   return null;
 }
 
