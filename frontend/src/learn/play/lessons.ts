@@ -5,14 +5,26 @@
  * and W E T Y U O P are the black keys, so every lesson here fits under the hands without changing octave, except
  * where an octave change (X) is the lesson. Tunes are public domain.
  */
-import type { L } from "../../problems.ts";
+import type { L, Level } from "../../problems.ts";
 
 export type PlayMode = "wait" | "time";
+
+/** the instruments of Learn to Play, as the lesson list groups them (those with no lessons yet show "coming soon") */
+export type Instrument = "keyboard" | "violin" | "flute" | "voice";
+export const INSTRUMENTS: { id: Instrument; title: L; icon: string }[] = [
+  { id: "keyboard", title: ["Keyboard", "鍵盤"], icon: "🎹" },
+  { id: "violin", title: ["Violin", "小提琴"], icon: "🎻" },
+  { id: "flute", title: ["Flute", "長笛"], icon: "🎵" },
+  { id: "voice", title: ["Singing", "歌唱"], icon: "🎤" },
+];
 
 export interface PlayLesson {
   id: string;
   /** "P0", "P1a" … */
   n: string;
+  instrument: Instrument;
+  /** how hard, as in Learn to Code: L0 Beginner, L1 Warm-up, L2 Core, L3 Stretch */
+  level: Level;
   title: L;
   /** what to do */
   task: L;
@@ -32,6 +44,8 @@ const head = (q: number, m = "4/4", k = "C") => `X:1\nM:${m}\nL:1/4\nQ:1/4=${q}\
 export const PLAY_LESSONS: PlayLesson[] = [
   {
     id: "middle-c",
+    instrument: "keyboard",
+    level: "L0",
     n: "P0",
     title: ["Find middle C", "找到中央 C"],
     task: [
@@ -49,6 +63,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "five-fingers",
+    instrument: "keyboard",
+    level: "L0",
     n: "P1a",
     title: ["Five fingers: C to G", "五指位置：C 到 G"],
     task: [
@@ -66,6 +82,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "mary",
+    instrument: "keyboard",
+    level: "L0",
     n: "P1b",
     title: ["Mary Had a Little Lamb", "瑪莉有隻小綿羊"],
     task: ["Your first tune, in five fingers: E D C D, E E E.", "你的第一首曲子，五指就夠：E D C D，E E E。"],
@@ -80,6 +98,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "ode-opening",
+    instrument: "keyboard",
+    level: "L0",
     n: "P1c",
     title: ["Ode to Joy", "快樂頌"],
     task: [
@@ -97,6 +117,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "in-time",
+    instrument: "keyboard",
+    level: "L1",
     n: "P2",
     title: ["Playing in time", "跟著拍子彈"],
     task: [
@@ -114,6 +136,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "eighths",
+    instrument: "keyboard",
+    level: "L1",
     n: "P2b",
     title: ["Eighth notes", "八分音符"],
     task: [
@@ -131,6 +155,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "black-keys",
+    instrument: "keyboard",
+    level: "L1",
     n: "P3",
     title: ["Black keys: F♯", "黑鍵：F♯"],
     task: [
@@ -148,6 +174,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "pentatonic",
+    instrument: "keyboard",
+    level: "L1",
     n: "P3b",
     title: ["A tune on the black keys only", "只用黑鍵的曲子"],
     task: [
@@ -165,6 +193,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "scale",
+    instrument: "keyboard",
+    level: "L2",
     n: "P4",
     title: ["The C major scale", "C 大調音階"],
     task: [
@@ -182,6 +212,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "two-octaves",
+    instrument: "keyboard",
+    level: "L2",
     n: "P4b",
     title: ["Two octaves: change octave with X", "兩個八度：用 X 換八度"],
     task: [
@@ -199,6 +231,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "chords",
+    instrument: "keyboard",
+    level: "L2",
     n: "P5",
     title: ["Three chords: C, F and G", "三個和弦：C、F、G"],
     task: [
@@ -216,6 +250,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "melody-bass",
+    instrument: "keyboard",
+    level: "L2",
     n: "P6",
     title: ["Melody and bass", "旋律加低音"],
     task: [
@@ -233,6 +269,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "twinkle",
+    instrument: "keyboard",
+    level: "L3",
     n: "P7",
     title: ["Twinkle, Twinkle, the whole song", "小星星，全曲"],
     task: ["The whole tune, in time. Three phrases: up, then down twice, then the first again.", "全曲，跟著拍子。三個樂句：先往上，再往下兩次，最後回到第一句。"],
@@ -247,6 +285,8 @@ export const PLAY_LESSONS: PlayLesson[] = [
   },
   {
     id: "ode-whole",
+    instrument: "keyboard",
+    level: "L3",
     n: "P8",
     title: ["Ode to Joy, in time", "快樂頌，跟著拍子"],
     task: ["Ode to Joy again, now with the beat: the dotted rhythm must land in time.", "再彈一次快樂頌，這次要跟著拍子：附點節奏要準時落下。"],

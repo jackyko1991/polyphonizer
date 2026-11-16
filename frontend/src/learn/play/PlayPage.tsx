@@ -4,16 +4,18 @@
  * and "In time" (a bar of clicks, then play along; notes are graded on pitch and timing). Listen plays it first.
  */
 import { RichText, useLang } from "@learnkit/web";
-import { CircleCheck, Ear, Hourglass, Play, RotateCcw, Square, Timer } from "lucide-react";
+import { ChevronRight, ChevronsLeft, ChevronsRight, CircleCheck, Ear, Hourglass, Play, RotateCcw, Search, Square, Timer, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "../../Button.tsx";
+import { Button, IconButton } from "../../Button.tsx";
+import { LEVELS } from "../../problems.ts";
+import { LEVEL_STYLE } from "../levels.ts";
 import type { Sound } from "../../engine/engrave.ts";
 import { CHECK, FIELD, SEGMENT, SEGMENTS } from "../../ui.ts";
 import { now, tick } from "../../tools/liveSound.ts";
 import { noteName } from "../../tools/music.ts";
 import { subscribeNotes } from "../../tools/noteInput.ts";
 import { armKeyboard, openTool, requestKeyboardBase, setKeyHint } from "../../tools/toolboxState.ts";
-import { PLAY_LESSONS, type PlayLesson, type PlayMode } from "./lessons.ts";
+import { INSTRUMENTS, PLAY_LESSONS, type PlayLesson, type PlayMode } from "./lessons.ts";
 import { gradeInTime, gradeWait, pressWait, startWait, steps, type Grade, type Mark, type TargetNote, type WaitState } from "./matcher.ts";
 
 
@@ -49,46 +51,162 @@ export default function PlayPage({ id }: { id: string | null }) {
       }
       return n;
     });
+  const [libraryOpen, setLibraryOpen] = useState(true);
   return (
     <div className="flex flex-col bg-white xl:h-full xl:min-h-0 xl:flex-row" data-testid="learn-play">
       <style>{STYLE}</style>
+      {/* phones and tablets: a menu instead of the list column (as Learn to Code) */}
       <div className="border-b border-gray-200 p-3 xl:hidden">
-        <select value={lesson.id} onChange={(e) => go(e.target.value)} className={`${FIELD} w-full`} aria-label={pick(["Lesson", "課程"])}>
-          {PLAY_LESSONS.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.n} · {pick(l.title)} {passed.has(l.id) ? "✓" : ""}
-            </option>
+        <select value={lesson.id} onChange={(e) => go(e.target.value)} className={`${FIELD} w-full`} aria-label={pick(["Lesson", "課程"])} data-testid="play-menu">
+          {INSTRUMENTS.filter((i) => PLAY_LESSONS.some((l) => l.instrument === i.id)).map((i) => (
+            <optgroup key={i.id} label={pick(i.title)}>
+              {PLAY_LESSONS.filter((l) => l.instrument === i.id).map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.level} · {l.n} {pick(l.title)} {passed.has(l.id) ? "✓" : ""}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </div>
-      <nav className="hidden w-64 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50/60 p-3 xl:block" aria-label={pick(["Lessons", "課程"])}>
-        <p className="px-2 pb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">{pick(["Keyboard", "鍵盤"])}</p>
-        <ol className="space-y-0.5">
-          {PLAY_LESSONS.map((l) => (
-            <li key={l.id}>
-              <a
-                href={`#/learn/play/${l.id}`}
-                aria-current={l.id === lesson.id ? "page" : undefined}
-                className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
-                  l.id === lesson.id ? "bg-white font-medium text-(--lk-accent) shadow-sm ring-1 ring-gray-200" : "text-gray-700 hover:bg-white"
-                }`}
-              >
-                <span className="w-8 shrink-0 text-xs text-gray-400">{l.n}</span>
-                <span className="min-w-0 flex-1 truncate">{pick(l.title)}</span>
-                {passed.has(l.id) && <span className="text-emerald-600">✓</span>}
-              </a>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-4 px-2 text-xs leading-relaxed text-gray-500">
-          {pick([
-            "Violin and flute lessons, played into the microphone and graded on intonation too, come next.",
-            "接下來會有小提琴與長笛課程：對著麥克風演奏，連音準也會評分。",
-          ])}
-        </p>
-      </nav>
+      {/* the lessons, as Learn to Code's problems: search, then each instrument folds open to its lessons by level */}
+      <aside className={`hidden shrink-0 flex-col border-r border-gray-200 bg-white transition-[width] xl:flex ${libraryOpen ? "w-64" : "w-10"}`}>
+        <div className="flex h-9 shrink-0 items-center gap-1 border-b border-gray-200 bg-gray-50 px-1.5">
+          {libraryOpen && (
+            <span className="flex-1 rounded-md bg-(--lk-accent) px-2 py-1 text-center text-xs font-medium text-white shadow-sm">{pick(["Lessons", "課程"])}</span>
+          )}
+          <IconButton
+            onClick={() => setLibraryOpen((o) => !o)}
+            icon={libraryOpen ? ChevronsLeft : ChevronsRight}
+            label={libraryOpen ? pick(["Fold the lessons", "收起課程"]) : pick(["Show the lessons", "顯示課程"])}
+            className="h-7 w-7"
+          />
+        </div>
+        {libraryOpen ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <LessonLibrary selected={lesson.id} passed={passed} />
+          </div>
+        ) : (
+          <button
+            onClick={() => setLibraryOpen(true)}
+            className="flex-1 py-3 text-xs font-medium tracking-wide text-gray-500 [writing-mode:vertical-rl] hover:text-gray-800"
+          >
+            {pick(["Lessons", "課程"])}
+          </button>
+        )}
+      </aside>
       <Lesson key={lesson.id} lesson={lesson} onPassed={onPassed} />
     </div>
+  );
+}
+
+const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+/** the lesson list: a search box, then each instrument with its lessons grouped by level (as Learn to Code) */
+function LessonLibrary({ selected, passed }: { selected: string; passed: Set<string> }) {
+  const { t, pick } = useLang();
+  const mine = PLAY_LESSONS.find((l) => l.id === selected)?.instrument;
+  const [open, setOpen] = useState<Set<string>>(() => new Set(mine ? [mine] : []));
+  const [query, setQuery] = useState("");
+  const index = useMemo(() => PLAY_LESSONS.map((l) => ({ l, text: fold([l.n, ...l.title, ...l.task, l.id.replace(/-/g, " ")].join(" ")) })), []);
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  const hits = words.length ? index.filter((e) => words.every((w) => e.text.includes(w))).map((e) => e.l) : [];
+  const toggle = (id: string) =>
+    setOpen((s) => {
+      const next = new Set(s);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  const item = (l: PlayLesson, dot = false) => (
+    <li key={l.id}>
+      <a
+        href={`#/learn/play/${l.id}`}
+        aria-current={l.id === selected ? "page" : undefined}
+        className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition ${
+          l.id === selected ? "bg-rose-50 font-medium text-(--lk-accent)" : "text-gray-700 hover:bg-gray-100"
+        }`}
+      >
+        {dot && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${LEVEL_STYLE[l.level].dot}`} />}
+        <span className="w-7 shrink-0 text-xs text-gray-400">{l.n}</span>
+        <span className="min-w-0 flex-1">{pick(l.title)}</span>
+        {passed.has(l.id) && <span className="shrink-0 text-xs font-semibold text-emerald-600">✓</span>}
+      </a>
+    </li>
+  );
+  return (
+    <nav className="space-y-1" aria-label={pick(["Lessons", "課程"])} data-testid="play-library">
+      <div className="sticky -top-3 z-10 -mx-3 -mt-3 mb-2 bg-white px-3 pt-3 pb-1">
+        <div className="relative">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+            placeholder={pick(["Search lessons", "搜尋課程"])}
+            aria-label={pick(["Search lessons", "搜尋課程"])}
+            data-testid="play-search"
+            className="w-full rounded-md border border-gray-200 bg-white py-1.5 pr-7 pl-7 text-sm placeholder:text-gray-400 focus:border-(--lk-accent) focus:outline-none"
+          />
+          <Search className="pointer-events-none absolute top-2 left-2 h-4 w-4 text-gray-400" aria-hidden />
+          {query && (
+            <button onClick={() => setQuery("")} aria-label={t("search.clear")} className="absolute top-1.5 right-1.5 rounded p-0.5 text-gray-400 hover:text-gray-700">
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          )}
+        </div>
+      </div>
+      {words.length > 0 ? (
+        <div data-testid="play-search-results">
+          {hits.length === 0 && <p className="px-2 py-2 text-sm text-gray-400">{pick(["Nothing matches.", "沒有符合的課程。"])}</p>}
+          <ul>{hits.map((l) => item(l, true))}</ul>
+        </div>
+      ) : (
+        INSTRUMENTS.map((ins) => {
+          const isOpen = open.has(ins.id);
+          const lessons = PLAY_LESSONS.filter((l) => l.instrument === ins.id);
+          return (
+            <div key={ins.id} data-testid={`instrument-${ins.id}`}>
+              <button
+                onClick={() => toggle(ins.id)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm font-semibold text-gray-800 hover:bg-gray-100"
+              >
+                <span className="flex items-center gap-2">
+                  <span aria-hidden>{ins.icon}</span>
+                  {pick(ins.title)}
+                </span>
+                <span className="flex items-center gap-2 text-xs font-normal text-gray-400">
+                  {lessons.length || "—"}
+                  <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`} aria-hidden />
+                </span>
+              </button>
+              {isOpen && (
+                <div className="mb-2 ml-2 space-y-2 border-l border-gray-200 pl-2">
+                  {lessons.length === 0 && (
+                    <p className="px-2 py-1 text-xs text-gray-500">
+                      {pick(["Coming soon: played into the microphone and graded on pitch and timing.", "即將推出：對著麥克風演奏，按音準和節奏評分。"])}
+                    </p>
+                  )}
+                  {LEVELS.map((level) => {
+                    const inLevel = lessons.filter((l) => l.level === level);
+                    if (!inLevel.length) return null;
+                    const style = LEVEL_STYLE[level];
+                    return (
+                      <div key={level} data-testid={`play-level-${level}`}>
+                        <h3 className={`flex items-center gap-1.5 px-2 pt-1 pb-0.5 text-[11px] font-semibold tracking-wide uppercase ${style.text}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                          {level} · {t(`level.${level}`)}
+                        </h3>
+                        <ul>{inLevel.map((l) => item(l))}</ul>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })
+      )}
+    </nav>
   );
 }
 
