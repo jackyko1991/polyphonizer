@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { mutopiaLinks, type MutopiaRow } from "../src/library/mutopia.ts";
+import { mutopiaInstruments, mutopiaLinks, mutopiaRow, type MutopiaRow } from "../src/library/mutopia.ts";
 
 /** run a function of scripts/mutopia_catalog.py (standard library only) on JSON arguments */
 function py(fn: string, ...args: unknown[]): unknown {
@@ -142,4 +142,28 @@ test("the catalogue, once built: every row has an id, a title, a composer and a 
     assert.ok(r[8] || r[9], `no files: ${r[0]}`);
     for (const f of [r[8], r[9]]) assert.ok(!f || /^[\w.\-]+\.(mid|pdf|zip)$/.test(f), f);
   }
+});
+
+test("Mutopia's instruments as the Library's: one entry a part, so the instrument and ensemble filters find them", () => {
+  const i = mutopiaInstruments;
+  assert.deepEqual(i("Violin"), ["violin"]);
+  assert.deepEqual(i("Violine"), ["violin"]);
+  assert.deepEqual(i("Piano"), ["piano", "piano"]);
+  assert.deepEqual(i("Voice and Piano"), ["voice", "piano", "piano"]);
+  assert.deepEqual(i("Voice (SATB)"), ["soprano", "alto", "tenor", "bass"]);
+  assert.deepEqual(i("Choir (TTBB)"), ["tenor", "tenor", "bass", "bass"]);
+  assert.deepEqual(i("Voice (Soprano), String Ensemble, Basso Continuo"), ["soprano", "violin", "viola", "cello", "other"]);
+  assert.deepEqual(i("String Quartet: Violins, Viola, 'Cello"), ["violin", "violin", "viola", "cello"]);
+  assert.deepEqual(i("2 Guitars"), ["guitar", "guitar"]);
+  assert.deepEqual(i("Classical Guitar"), ["guitar"]);
+  assert.deepEqual(i("Horn Duet"), ["horn", "horn"]);
+  // keyboards named as alternatives are one keyboard (two staves) that has either name
+  assert.deepEqual(i("Harpsichord, Piano, Clavichord"), ["harpsichord", "piano"]);
+  assert.deepEqual(i("Koto"), ["other"]);
+  assert.deepEqual(i("Voice (T), Basso Continuo"), ["tenor", "other"]);
+  assert.deepEqual(i("Piano, Orgue"), ["piano", "organ"]);
+  assert.deepEqual(i(""), []);
+  const row = mutopiaRow([1700, "Canon in D", "Johann Pachelbel", "", "Violin", "Baroque", "by", "PachelbelJ/CanonInD", "CanonInD.mid", "CanonInD-a4.pdf"]);
+  assert.equal(row[5], 1);
+  assert.deepEqual(row[11], ["violin"]);
 });
