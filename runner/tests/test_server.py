@@ -103,12 +103,20 @@ class Runner(unittest.TestCase):
         self.assertEqual(r.status, 404)
 
     def test_engines_are_found_on_path_or_set_by_the_environment(self):
-        cfg = server.Config.from_env({"PZ_OMR": "mytool {in} {out}"}, which=lambda name: None)
+        cfg = server.Config.from_env({"PZ_OMR": "mytool {in} {out}"}, which=lambda name: None, copista="")
         self.assertEqual(cfg.omr, "mytool {in} {out}")
         self.assertIsNone(cfg.transcribe)
-        cfg = server.Config.from_env({}, which=lambda name: f"/usr/bin/{name}" if name == "transkun" else None)
+        cfg = server.Config.from_env({}, which=lambda name: f"/usr/bin/{name}" if name == "transkun" else None, copista="")
         self.assertEqual(cfg.transcribe, "transkun {in} {out}")
         self.assertIsNone(cfg.omr)
+
+    def test_copista_when_installed_comes_before_audiveris(self):
+        cfg = server.Config.from_env({}, which=lambda n: "/x/audiveris", copista="py copista.py {in} {out}")
+        self.assertEqual(cfg.omr, "py copista.py {in} {out}")
+        cfg = server.Config.from_env({}, which=lambda n: "/x/audiveris" if n == "audiveris" else None, copista="")
+        self.assertTrue(cfg.omr.startswith("audiveris"))
+        # not set up here: nothing found
+        self.assertIn(server.copista_command(), (None,) if not (server.REPO / "runner/engines/copisteria/models/evidence-2m.pt").exists() else (server.copista_command(),))
 
     def test_a_token_when_set(self):
         self.start(omr=FAKE_OMR, token="s3cret")
@@ -118,7 +126,7 @@ class Runner(unittest.TestCase):
         self.assertEqual(r.status, 401)
         r, _ = self.call("GET", "/status", headers={"Authorization": "Bearer s3cret"})
         self.assertEqual(r.status, 200)
-        self.assertEqual(server.Config.from_env({"PZ_TOKEN": "t"}, which=lambda n: None).token, "t")
+        self.assertEqual(server.Config.from_env({"PZ_TOKEN": "t"}, which=lambda n: None, copista="").token, "t")
 
     def test_binds_to_this_computer_only(self):
         self.assertEqual(server.HOST, "127.0.0.1")

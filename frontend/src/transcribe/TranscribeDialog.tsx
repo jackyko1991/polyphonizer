@@ -32,7 +32,10 @@ const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, str
 const WHY: Record<string, readonly [string, string]> = {
   "not-here": ["Reading pages needs the runner or the service.", "讀取樂譜頁面需要執行器或服務。"],
   loading: ["The in-browser model is not installed yet (coming next).", "瀏覽器內的模型尚未安裝（即將推出）。"],
-  "not-running": ["Nothing answers at that address.", "那個位址沒有回應。"],
+  "not-running": [
+    "Nothing answers there yet. Start it: in a terminal, in the Polyphonizer folder, run pixi run runner (once before: pixi run -e omr omr-setup for PDFs). This finds it by itself.",
+    "那裡還沒有回應。請啟動：在終端機的 Polyphonizer 資料夾執行 pixi run runner（讀 PDF 需先執行一次 pixi run -e omr omr-setup）。這裡會自動找到它。",
+  ],
   "no-engine": ["Running, but without an engine for this.", "正在執行，但沒有處理這類檔案的引擎。"],
   coming: ["Coming later.", "之後推出。"],
 };
@@ -44,6 +47,8 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
   // where "my computer or my server" is: the runner on this computer unless changed (kept in this browser)
   const [backend, setBackend] = useState<Backend>(loadBackend);
   const [draft, setDraft] = useState<Backend>(backend);
+  const backendRef = useRef(backend);
+  backendRef.current = backend;
   const [checking, setChecking] = useState(false);
   const check = async (b: Backend) => {
     setChecking(true);
@@ -57,9 +62,11 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     void check(loadBackend());
+    // while open, look again every few seconds: starting the runner is enough
+    const again = window.setInterval(() => void runnerStatus(backendRef.current.url, fetch, backendRef.current.token).then(setRunner), 3000);
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
+    return () => (window.removeEventListener("keydown", esc), window.clearInterval(again));
   }, [onClose]);
 
   const kind = file ? jobKind(file.name, file.type) : null;

@@ -54,11 +54,30 @@ class Config:
     token: str | None = None
 
     @classmethod
-    def from_env(cls, env=os.environ, which=shutil.which):
-        """the engines: PZ_OMR / PZ_TRANSCRIBE, else the tools found on PATH"""
-        omr = env.get("PZ_OMR") or ("audiveris -batch -export -output {outdir} {in}" if which("audiveris") else None)
+    def from_env(cls, env=os.environ, which=shutil.which, copista=None):
+        """the engines: PZ_OMR / PZ_TRANSCRIBE, else copista when pixi run omr-setup has installed it, else the tools
+        found on PATH"""
+        copista = copista if copista is not None else copista_command()
+        omr = env.get("PZ_OMR") or copista or ("audiveris -batch -export -output {outdir} {in}" if which("audiveris") else None)
         tr = env.get("PZ_TRANSCRIBE") or ("transkun {in} {out}" if which("transkun") else None)
         return cls(omr=omr, transcribe=tr, token=env.get("PZ_TOKEN") or None)
+
+
+REPO = Path(__file__).resolve().parent.parent
+
+
+def copista_command():
+    """copisteria's command when it is installed (pixi run omr-setup): the omr environment's Python runs the wrapper"""
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "engines"))
+    try:
+        import copista
+    finally:
+        sys.path.pop(0)
+    env = REPO / ".pixi" / "envs" / "omr"
+    py = env / ("python.exe" if os.name == "nt" else "bin/python")
+    if not (copista.installed() and py.exists()):
+        return None
+    return f"{shlex.quote(str(py))} {shlex.quote(str(Path(copista.__file__)))} {{in}} {{out}}"
 
 
 def run_engine(template, src, out, outdir, timeout):
@@ -149,8 +168,8 @@ def make_server(address, cfg):
             body = self.rfile.read(size)
             template = cfg.omr if kind == "omr" else cfg.transcribe
             if not template:
-                var = "PZ_OMR" if kind == "omr" else "PZ_TRANSCRIBE"
-                return self.reply(501, {"error": f"No {'OMR' if kind == 'omr' else 'transcription'} engine here: install one or set {var} (see docs/plans/transcription.md)"})
+                how = "run pixi run omr-setup, then restart the runner, or set PZ_OMR" if kind == "omr" else "install one or set PZ_TRANSCRIBE"
+                return self.reply(501, {"error": f"No {'OMR' if kind == 'omr' else 'transcription'} engine here: {how} (see docs/plans/transcription.md)"})
             with tempfile.TemporaryDirectory(prefix="pz-runner-") as tmp:
                 d = Path(tmp)
                 src = d / f"input{ext}"
@@ -183,7 +202,7 @@ def main():
     port = int(os.environ.get("PZ_PORT", PORT))
     httpd = make_server((HOST, port), cfg)
     print(f"Polyphonizer runner {VERSION} on http://{HOST}:{port}")
-    print(f"  reading pages (OMR): {cfg.omr or 'no engine (set PZ_OMR)'}")
+    print(f"  reading pages (OMR): {cfg.omr or 'no engine (pixi run omr-setup, or set PZ_OMR)'}")
     print(f"  transcribing:        {cfg.transcribe or 'no engine (set PZ_TRANSCRIBE)'}")
     try:
         httpd.serve_forever()

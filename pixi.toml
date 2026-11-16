@@ -25,3 +25,27 @@ collections = { cmd = "python scripts/collections_catalog.py", description = "re
 mutopia = { cmd = "python scripts/mutopia_catalog.py", description = "rewrite the Library's listing of the Mutopia Project (GITHUB_TOKEN used if set)" }
 runner = { cmd = "python runner/server.py", description = "the transcription runner on 127.0.0.1:8765 (Transcribe ▸ My computer)" }
 test-runner = { cmd = "python -m unittest discover -s runner/tests -v", description = "the runner's tests" }
+
+# The runner's OMR engine (Transcribe ▸ My computer ▸ PDF or photo): KobiMusic copisteria, in its own environment so the
+# site's stays small. Once: pixi run omr-setup (the reader and its weights); then pixi run runner finds it.
+[feature.omr]
+platforms = ["osx-arm64", "linux-64", "win-64"] # PyTorch has no Intel-Mac wheels for this Python
+
+[feature.omr.dependencies]
+poppler = "*" # pdfinfo, and the reader's PDF pages
+pip = "*"
+
+[feature.omr.pypi-dependencies]
+torch = "*"
+torchvision = "*"
+numpy = "*"
+pillow = "*"
+scipy = "*"
+opencv-python = "*"
+huggingface_hub = "*"
+
+[feature.omr.tasks]
+omr-setup = { cmd = "python runner/engines/setup_copista.py", description = "install the runner's OMR engine, KobiMusic copisteria (PDF and photos of printed music; Apache-2.0, about 131 MB of weights, PyTorch on the CPU)" }
+
+[environments]
+omr = { features = ["omr"], solve-group = "default" }
