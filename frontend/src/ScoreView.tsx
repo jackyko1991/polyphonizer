@@ -75,6 +75,10 @@ function printPages(pages: string[], title: string, numbers = true, size: [numbe
   setTimeout(() => w.print(), 300);
 }
 
+/** how large the Score view draws the music: full size from 560 px, smaller on narrower panels (down to half at
+ * phone width) so a line still holds three or four bars rather than one or two */
+export const scrollZoom = (panelPx: number) => Math.max(20, Math.min(40, Math.round(panelPx / 14)));
+
 export default function ScoreView({
   score,
   part,
@@ -191,7 +195,7 @@ export default function ScoreView({
     (view === "pages"
       ? engravePages(score, cur)
       : // a phone-width panel draws the music a little smaller, so a line holds more than a bar or two
-        engraveScroll(score.musicxml, Math.max(320, layoutWidth(width, frozenWidth) - 24), layoutWidth(width, frozenWidth) < 640 ? 30 : 40)
+        engraveScroll(score.musicxml, Math.max(320, layoutWidth(width, frozenWidth) - 24), scrollZoom(layoutWidth(width, frozenWidth)))
     )
       .then((e) => {
         if (!live) return;
