@@ -14,7 +14,7 @@ import { play, stop } from "./engine/player.ts";
 import type { ScoreData } from "./engine/types.ts";
 import { cursorAt, onsetTable, type Onset } from "./engine/cursor.ts";
 import { keyTurn, pageSize, pagesPerView, turn, viewOf } from "./engine/reader.ts";
-import { useSoundSettings } from "./engine/sound.ts";
+import { setSoundSettings, useSoundSettings } from "./engine/sound.ts";
 import { RANGE, setStage, useStage } from "./progress.ts";
 import SoundPanel from "./SoundPanel.tsx";
 import { BUTTON, BUTTON_ON, CHECK, FIELD, layoutWidth } from "./ui.ts";
@@ -660,6 +660,11 @@ export default function ScoreView({
             data-testid="click-note"
           />
           {t("click.label")}
+        </label>
+        {/* the line that follows the music while it plays (the same setting as in Sound) */}
+        <label className={CHECK} title={t("sound.cursor")}>
+          <input type="checkbox" checked={showCursor} onChange={(e) => setSoundSettings({ cursor: e.target.checked })} data-testid="cursor-line" />
+          {t("cursor.label")}
         </label>
         {/* Pages: the layout's tools (breaks, page turns) */}
         {pagesView && !fit && (

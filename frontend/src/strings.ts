@@ -253,6 +253,7 @@ export const STRINGS = {
   "speed.reset": ["Back to the written tempo", "回到樂譜標示的速度"],
   "click.where": ["{part}, bar {bar}: this score is not written note by note in the code; the line that makes it is selected.", "{part}，第 {bar} 小節：這份樂譜不是在程式碼中逐音寫成的；已選取產生它的那一行。"],
   "click.label": ["Click to jump", "點音符跳轉"],
+  "cursor.label": ["Cursor line", "游標線"],
   "click.hint": [
     "Click a note: play from it, show its code. When on, clicking a note sets where ▶ starts (and jumps there while playing) and selects its code.",
     "點音符：從這裡播放、跳到程式碼。開啟時，點一個音符會設定 ▶ 的起點（播放中則跳到那裡），並選取它的程式碼。",
