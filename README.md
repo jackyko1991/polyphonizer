@@ -12,11 +12,29 @@ With [pixi](https://pixi.sh) (Node 24 as CI uses, and Python with music21), from
 pixi run dev          # the site with hot reload (installs frontend/node_modules first)
 pixi run test         # unit tests (node --test)
 pixi run build        # the static site in frontend/dist
-pixi run catalog      # rewrite the Library's music21 corpus catalogue
-pixi run collections  # rewrite the open-licence collections catalogue
+pixi run test-runner  # the transcription runner's tests
+pixi run runner       # the transcription runner on 127.0.0.1:8765 (once before, for PDFs: pixi run -e omr omr-setup)
 ```
 
-Without pixi: `cd frontend && npm install && npm run dev` (Node 24+), and `npm test` there.
+The Library is a catalogue of pieces: it lists works from music21's corpus, open collections (OpenScore, Craig Sapp,
+ASAP, the Josquin Research Project), the Mutopia Project and IMSLP, and links each to where it is opened or
+downloaded. Its catalogue files (readable, in git) are rewritten by:
+
+```
+pixi run catalog      # music21's corpus                    frontend/src/library/catalog.json
+pixi run collections  # the open collections (GITHUB_TOKEN)  frontend/src/library/collections.json
+pixi run mutopia      # the Mutopia Project                  frontend/src/library/mutopia.json
+pixi run imslp        # IMSLP's work list (~10 min, paced)   data/imslp.tsv
+pixi run harmony      # When in Rome's analyses              frontend/src/library/analyses.json
+pixi run aliases      # one spelling per composer            frontend/src/library/composerAliases.json
+pixi run library-db   # all of them → library.sqlite and siblings.json (frontend/public/library; built, not in git)
+```
+
+`pixi run dev` and `pixi run build` build the database first, and so does the deploy. The page reads it over HTTP range
+requests (only the pages a search needs). See docs/plans/open-libraries.md.
+
+Without pixi: `cd frontend && npm install && npm run dev` (Node 24+), and `npm test` there; `node scripts/library-db.ts`
+from the repo root builds the database.
 
 ## Deploying
 

@@ -9,24 +9,35 @@ through the local runner (docs/plans/local-agent.md), which is not bound by CORS
 
 ## Where each library stands (Nov 2026)
 
-| Library | Format | Licence | Browser download | Here |
-|---|---|---|---|---|
-| music21 corpus | mixed | open | built in | in |
-| OpenScore Lieder, String Quartets | MusicXML | CC0 | yes (GitHub) | in |
-| Craig Sapp: Mozart, Joplin, Haydn, Scarlatti | Humdrum | CC BY-NC-SA 4.0 | yes | in (Haydn, Scarlatti added Nov 2026) |
-| ASAP (piano, Bach to Ravel) | MusicXML | CC BY-NC-SA 4.0 | yes | in (Nov 2026) |
-| Josquin Research Project | Humdrum | CC BY-NC 4.0 | yes | in (Nov 2026) |
-| Craig Sapp: Bach 370 chorales | Humdrum | CC BY-NC-SA 4.0 | yes | no: music21's corpus has them |
-| Craig Sapp: Beethoven sonatas, Chopin preludes; Mozart quartets | Humdrum | none stated | yes | no (ask the editor) |
-| The Session | ABC | forbids processing with language models | yes | no: Polyphonizer has an AI helper |
-| Nottingham folk tunes | ABC | GPL-3 | yes | maybe |
-| OpenEWLD | MusicXML | claims public domain; songs into the 1940s | yes | no |
-| When in Rome | RomanText analyses | CC BY-SA 4.0 | yes | later: analyses shown over scores |
-| DCML corpora | MuseScore (.mscx) | CC BY-NC-SA 4.0 | yes | no: neither engine reads .mscx |
-| PDMX | MusicXML in one archive | CC0 / CC BY | yes (Zenodo), not per file | later: a listing with a mirror |
-| IMSLP | mostly scanned PDF | per file (public domain in Canada …) | no (no CORS) | stages A–C below |
-| CPDL | mixed | per work | no (blocks automated requests) | link out |
-| Mutopia | LilyPond, MIDI, PDF | public domain / CC | no | link out; its MIDI opens |
+| Library | Format | Licence | Here |
+|---|---|---|---|
+| music21 corpus | mixed | open | in: opens in the editor |
+| OpenScore Lieder, String Quartets | MusicXML | CC0 | in: opens in the editor |
+| Craig Sapp: Mozart, Joplin, Haydn, Scarlatti | Humdrum | CC BY-NC-SA 4.0 | in: opens in the editor |
+| ASAP (piano, Bach to Ravel) | MusicXML | CC BY-NC-SA 4.0 | in: opens in the editor |
+| Josquin Research Project | Humdrum | CC BY-NC 4.0 | in: opens in the editor |
+| Mutopia Project | LilyPond, MIDI, PDF | PD / CC BY / CC BY-SA | in: 2,036 pieces listed, downloaded from mutopiaproject.org |
+| IMSLP | mostly scanned PDF | per file | in: 267,461 works listed from its public work list, linked to their pages |
+| When in Rome | RomanText analyses | CC BY-SA 4.0 | in: 688 works' Roman numerals written under the bass |
+| MuseScore.com | — | per score; no open catalogue, scraping not allowed | link out (search) |
+| CPDL | mixed | per work | link out; a request to list its works is drafted (it blocks automated access) |
+| PDMX | MusicXML in archives | CC0 / CC BY | left out (no single files to open; a mirror was decided against) |
+| The Session | ABC | forbids processing with language models | left out |
+| Craig Sapp: Beethoven sonatas, Chopin preludes; Mozart quartets | Humdrum | none stated | left out (ask the editor) |
+| DCML corpora | MuseScore (.mscx) | CC BY-NC-SA 4.0 | left out: neither engine reads .mscx |
+
+## The catalogue database
+
+All the sources meet in one SQLite database (scripts/library-db.ts → frontend/public/library/library.sqlite, built by
+the deploy and by pixi run dev/build, not kept in git): 287,957 works, composers, catalogue numbers, instruments,
+licences, analyses and a full-text index (accents folded; composers' Chinese names). The page reads it with
+sql.js-httpvfs over HTTP range requests, so a search reads a few pages, never the whole file; the Library's own
+~22,000 openable works still load as compressed JSON (GitHub Pages compresses JSON, not SQLite), for instant filters.
+
+- One spelling per composer (composerMatch.ts, composer-aliases.ts): IMSLP's where exactly one IMSLP composer fits a
+  name (initials, accents, transliterations, middle names), the Library's own where it names the composer itself.
+- The same work across sources (siblings.json): the same composer and catalogue number (and a Beethoven or Mozart
+  sonata's number standing for its opus or K); a row shows "Also at: IMSLP ↗ · Mutopia ↗ …". 1,560 works linked.
 
 ## Stages for the libraries a page can't reach
 
