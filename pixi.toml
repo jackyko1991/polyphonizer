@@ -1,0 +1,24 @@
+# One environment for the whole repo: Node (the site, as CI uses) and Python with music21 (the Library catalogue
+# scripts). From the repo root: `pixi run dev`, `pixi run test`, `pixi run build`, `pixi run catalog`.
+[workspace]
+name = "polyphonizer"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64", "win-64"]
+
+[dependencies]
+nodejs = "24.*" # the same major version as .github/workflows/pages.yml
+python = "3.13.*"
+
+[pypi-dependencies]
+# the scripts must read the corpus with the music21 the site installs in Pyodide: the latest from PyPI
+music21 = "*"
+
+[tasks]
+install = { cmd = "npm ci", cwd = "frontend", inputs = ["frontend/package.json", "frontend/package-lock.json"], outputs = ["frontend/node_modules/.package-lock.json"] }
+dev = { cmd = "npm run dev", cwd = "frontend", depends-on = ["install"], description = "the site with hot reload" }
+test = { cmd = "npm test", cwd = "frontend", depends-on = ["install"], description = "unit tests (node --test)" }
+typecheck = { cmd = "npx tsc -b", cwd = "frontend", depends-on = ["install"] }
+build = { cmd = "npm run build", cwd = "frontend", depends-on = ["install"], description = "the static site in frontend/dist" }
+preview = { cmd = "npm run preview", cwd = "frontend", depends-on = ["build"] }
+catalog = { cmd = "python scripts/corpus_catalog.py", description = "rewrite the Library's music21 corpus catalogue" }
+collections = { cmd = "python scripts/collections_catalog.py", description = "rewrite the open-licence collections catalogue (GITHUB_TOKEN used if set)" }

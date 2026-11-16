@@ -6,10 +6,17 @@ Music scores written as code: Python with music21, engraved and played in the br
 
 Part of the learnkit series (Tensorizer, Formalizer, Clifford). learnkit is a private submodule at `vendor/learnkit`.
 
+With [pixi](https://pixi.sh) (Node 24 as CI uses, and Python with music21), from the repo root:
+
 ```
-cd frontend && npm install && npm run dev   # site
-npm test                                    # checker and page-turn planner (node --test)
+pixi run dev          # the site with hot reload (installs frontend/node_modules first)
+pixi run test         # unit tests (node --test)
+pixi run build        # the static site in frontend/dist
+pixi run catalog      # rewrite the Library's music21 corpus catalogue
+pixi run collections  # rewrite the open-licence collections catalogue
 ```
+
+Without pixi: `cd frontend && npm install && npm run dev` (Node 24+), and `npm test` there.
 
 ## Deploying
 
