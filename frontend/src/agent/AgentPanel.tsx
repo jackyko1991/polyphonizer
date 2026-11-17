@@ -8,7 +8,7 @@
  * score by itself. The chat survives a reload: a turn still running is followed again.
  */
 import { go, RichText, useLang } from "@learnkit/web";
-import { Bot, Check, ChevronRight, Maximize2, Minimize2, Plus, RefreshCw, Search, Send, Settings2, Square, Undo2, Wrench, X } from "lucide-react";
+import { Bot, Check, ChevronRight, ImagePlus, Maximize2, Minimize2, Plus, RefreshCw, Search, Send, Settings2, Square, Undo2, Wrench, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HANDLES, useFloatingWindow, type Box } from "../tools/floatingWindow.ts";
@@ -35,6 +35,7 @@ import {
   type FoundAgent,
 } from "./client.ts";
 import { counts, diffLines, hunks } from "./diff.ts";
+import { MAX_PICTURES, picturesIn, readPicture, type Picture } from "./pictures.ts";
 
 type L = readonly [string, string];
 const fresh = (): Chat => ({ id: newChatId(), blocks: [], turn: null });
@@ -58,9 +59,10 @@ const AGENT_NAME: Record<AgentId, L> = {
 function selectionLabels(a: PanelState["attach"] | Selection, pick: (l: L) => string): { kind: keyof Selection; label: string }[] {
   const out: { kind: keyof Selection; label: string }[] = [];
   if (a?.bars) {
-    const { from, to, part } = a.bars;
+    const { from, to, part, parts } = a.bars;
     const bars = to && to !== from ? pick([`bars ${from}–${to}`, `第 ${from}–${to} 小節`]) : pick([`bar ${from}`, `第 ${from} 小節`]);
-    out.push({ kind: "bars", label: part ? `${bars} · ${part}` : bars });
+    const who = part ?? parts?.join(", ");
+    out.push({ kind: "bars", label: who ? `${bars} · ${who}` : bars });
   }
   if (a?.code) {
     const { file, from, to } = a.code;
@@ -458,6 +460,18 @@ export default function AgentPanel() {
     return () => mq.removeEventListener("change", on);
   }, []);
   const [draft, setDraft] = useState("");
+  // pictures pasted (or chosen) for the next message
+  const [pictures, setPictures] = useState<Picture[]>([]);
+  const [pictureError, setPictureError] = useState("");
+  const pictureInput = useRef<HTMLInputElement>(null);
+  const addPictures = async (files: File[]) => {
+    setPictureError("");
+    const room = MAX_PICTURES - pictures.length;
+    if (files.length > room) setPictureError(pick([`At most ${MAX_PICTURES} pictures with a message.`, `每則訊息最多 ${MAX_PICTURES} 張圖片。`]));
+    const read = (await Promise.all(files.slice(0, Math.max(0, room)).map((f) => readPicture(f).catch(() => null)))).filter((p): p is Picture => p !== null);
+    if (read.length < Math.min(files.length, room)) setPictureError(pick(["PNG, JPEG, GIF or WebP pictures only.", "只接受 PNG、JPEG、GIF 或 WebP 圖片。"]));
+    setPictures((p) => [...p, ...read].slice(0, MAX_PICTURES));
+  };
   const abort = useRef<AbortController | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const busy = chat.turn !== null;
@@ -524,7 +538,10 @@ export default function AgentPanel() {
     if (!text.trim() || busy) return;
     const attach = panel.attach;
     const label = attachLabel(attach, pick) ?? undefined;
-    update((c) => withMessage(c, text.trim(), label));
+    const sent = pictures;
+    update((c) => withMessage(c, text.trim(), label, sent.map((p) => p.thumb)));
+    setPictures([]);
+    setPictureError("");
     setDraft("");
     clearAttach();
     if (!s) {
@@ -544,6 +561,7 @@ export default function AgentPanel() {
           provider: settings.provider,
           api_key: settings.agent === "claude-api" ? apiKey : undefined,
           files: s.files,
+          images: sent.length ? sent.map(({ name, type, data }) => ({ name, type, data })) : undefined,
           context,
         },
         onEvent,
@@ -685,6 +703,13 @@ export default function AgentPanel() {
                 return (
                   <div key={i} className="my-2 ml-8 rounded-lg bg-gray-100 px-3 py-2 text-sm whitespace-pre-wrap text-gray-900" data-testid="agent-user">
                     {b.context && <span className="mb-1 block text-[11px] font-medium text-gray-500">↳ {b.context}</span>}
+                    {b.pictures && (
+                      <span className="mb-1 flex flex-wrap gap-1">
+                        {b.pictures.map((src, k) => (
+                          <img key={k} src={src} alt="" className="h-12 rounded border border-gray-200 object-cover" />
+                        ))}
+                      </span>
+                    )}
                     {b.text}
                   </div>
                 );
@@ -747,8 +772,42 @@ export default function AgentPanel() {
                 ))}
               </div>
             )}
+            {pictures.length > 0 && (
+              <div className="mb-1.5 flex flex-wrap gap-1.5" data-testid="agent-pictures">
+                {pictures.map((p, k) => (
+                  <span key={k} className="relative">
+                    <img src={p.thumb} alt={p.name} title={p.name} className="h-14 rounded border border-gray-300 object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setPictures((ps) => ps.filter((_, j) => j !== k))}
+                      aria-label={pick(["Remove", "移除"])}
+                      className="absolute -top-1.5 -right-1.5 rounded-full bg-gray-700 p-0.5 text-white hover:bg-gray-900"
+                    >
+                      <Icon icon={X} className="h-2.5 w-2.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {pictureError && <p className="mb-1 text-xs text-red-700">{pictureError}</p>}
             <div className="flex items-end gap-1.5">
+              <button type="button" onClick={() => pictureInput.current?.click()} disabled={pictures.length >= MAX_PICTURES} title={pick(["Add a picture (or paste one)", "加入圖片（或直接貼上）"])} aria-label={pick(["Add a picture", "加入圖片"])} className="rounded p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-40" data-testid="agent-picture">
+                <Icon icon={ImagePlus} />
+              </button>
+              <input ref={pictureInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => (void addPictures([...(e.target.files ?? [])]), (e.target.value = ""))} />
               <textarea
+                onPaste={(e) => {
+                  const files = picturesIn(e.clipboardData?.items);
+                  if (!files.length) return; // text: pasted as usual
+                  e.preventDefault();
+                  void addPictures(files);
+                }}
+                onDrop={(e) => {
+                  const files = picturesIn(e.dataTransfer?.items);
+                  if (!files.length) return;
+                  e.preventDefault();
+                  void addPictures(files);
+                }}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {

@@ -170,6 +170,21 @@ class Policy(unittest.TestCase):
         self.assertIsNone(core.check(self.req(agent="included"), {"PZ_AGENT_KEY": "k"}))
         self.assertEqual(core.status({"PZ_AGENT_KEY": "k"})["included"], True)
 
+    def test_pictures(self):
+        png = {"type": "image/png", "data": "iVBORw0KGgo="}
+        self.assertIsNone(core.check(self.req(agent="claude-api", api_key="k", images=[png]), {}))
+        self.assertIn("PNG", core.check(self.req(agent="claude-api", api_key="k", images=[{"type": "image/svg+xml", "data": "x"}]), {}))
+        self.assertIn("at most", core.check(self.req(agent="claude-api", api_key="k", images=[png] * 5), {}))
+        with tempfile.TemporaryDirectory() as d:
+            s = core.Session(id="chat-x", workspace=Path(d))
+            (Path(d) / "pictures").mkdir()
+            (Path(d) / "pictures" / "old.png").write_bytes(b"x")
+            self.assertEqual(core.save_pictures(s, [png, {"type": "image/jpeg", "data": "not base64!"}]), ["pictures/picture-1.png"])
+            self.assertEqual(sorted(p.name for p in (Path(d) / "pictures").iterdir()), ["picture-1.png"])  # the last turn's are gone
+            self.assertEqual(core.snapshot(s), {})  # pictures are never sent back as score files
+        argv = core.codex.command("codex", "/w", None, "sess-1", "http://x/mcp/t", ["/w/pictures/picture-1.png"])
+        self.assertEqual(argv[-4:], ["resume", "sess-1", "--image=/w/pictures/picture-1.png", "-"])
+
     def test_bad_requests(self):
         self.assertIn("chat id", core.check(self.req(chat="../x"), {}))
         self.assertIn("empty", core.check(self.req(message=" "), {}))

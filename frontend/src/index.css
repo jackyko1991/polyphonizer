@@ -23,6 +23,8 @@
 
 /* Edit breaks (on pages): a bar under the pointer is the one a click changes */
 .pz-edit g.measure { cursor: pointer; }
+/* staves inside a rectangle drawn for the AI agent */
+.pz-score g.staff.pz-picked { fill: #be123c; stroke: #be123c; }
 .pz-edit g.measure:hover { fill: #be123c; stroke: #be123c; }
 
 /* click-note mode: notes are clickable; the chosen start is marked */

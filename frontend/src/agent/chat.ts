@@ -6,7 +6,7 @@
 import type { AgentEvent } from "./client.ts";
 
 export type Block =
-  | { kind: "user"; text: string; context?: string }
+  | { kind: "user"; text: string; context?: string; pictures?: string[] }
   | { kind: "text"; text: string }
   | { kind: "tool"; id: string; name: string; input: Record<string, unknown>; ok?: boolean; result?: string }
   | { kind: "question"; question: string; options: string[]; multi: boolean; answered?: boolean }
@@ -72,10 +72,10 @@ export function withEvent(chat: Chat, e: AgentEvent): Chat {
 }
 
 /** the learner's message, before the turn's events */
-export const withMessage = (chat: Chat, text: string, context?: string): Chat => ({
+export const withMessage = (chat: Chat, text: string, context?: string, pictures?: string[]): Chat => ({
   ...chat,
   // (an unanswered question is answered by this message)
-  blocks: [...chat.blocks.map((b) => (b.kind === "question" && !b.answered ? { ...b, answered: true } : b)), { kind: "user", text, context }],
+  blocks: [...chat.blocks.map((b) => (b.kind === "question" && !b.answered ? { ...b, answered: true } : b)), { kind: "user", text, context, ...(pictures?.length ? { pictures } : {}) }],
   turn: null,
 });
 

@@ -4,10 +4,11 @@
  * sound), sound, edit notes, and, with pages, edit line and page breaks (click a bar) and the page turns planned
  * around them; the Page setup dialog; export; full screen (a page reader with pages).
  */
-import { Bot, ChevronDown, ChevronLeft, ChevronRight, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, Printer, RotateCcw, Square, X, ZoomIn } from "lucide-react";
+import { Bot, BoxSelect, ChevronDown, ChevronLeft, ChevronRight, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, Printer, RotateCcw, Square, X, ZoomIn } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
-import { openAgent, publishSelection } from "./agent/bus.ts";
+import { attach, openAgent, publishSelection } from "./agent/bus.ts";
+import type { AgentContext } from "./agent/client.ts";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { engravePages, engraveScroll, timelineOf, type Engraving } from "./engine/engrave.ts";
 import { barIndices, barNumbers, FIT, isFit, PAPERS, SCREENS, screenPaper, UNSET_SETUP, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
@@ -247,6 +248,80 @@ export default function ScoreView({
     setMarks(out);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eng, fit, width, JSON.stringify(cur.line_breaks), JSON.stringify(cur.page_breaks)]);
+
+  // ── a rectangle drawn over the music (Select, or Shift+drag): the bars and staves it covers go to the AI agent ──
+  const [selecting, setSelecting] = useState(false);
+  const [rect, setRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [picked, setPicked] = useState<{ bars: NonNullable<AgentContext["bars"]>; label: string } | null>(null);
+  const drawing = useRef(false);
+  const justDrew = useRef(false);
+  const inBox = (e: { clientX: number; clientY: number }) => {
+    const r = box.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left + box.current!.scrollLeft, y: e.clientY - r.top + box.current!.scrollTop };
+  };
+  const clearPick = () => {
+    box.current?.querySelectorAll(".pz-picked").forEach((el) => el.classList.remove("pz-picked"));
+    setRect(null);
+    setPicked(null);
+  };
+  useEffect(() => {
+    if (!rect) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && clearPick();
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [rect]);
+  useEffect(clearPick, [eng]); // a new engraving: the old staves are gone
+  const onDrawStart = (e: React.PointerEvent) => {
+    if (!(selecting || e.shiftKey) || e.button !== 0 || !eng || !score || reading) return;
+    if ((e.target as HTMLElement).closest("button, input, select, a, label")) return;
+    e.preventDefault();
+    clearPick();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    drawing.current = true;
+    const p = inBox(e);
+    setRect({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+  };
+  const onDrawMove = (e: React.PointerEvent) => {
+    if (!drawing.current) return;
+    const p = inBox(e);
+    setRect((r) => r && { ...r, x1: p.x, y1: p.y });
+  };
+  const onDrawEnd = () => {
+    if (!drawing.current || !rect || !box.current || !eng || !score) return;
+    drawing.current = false;
+    const left = Math.min(rect.x0, rect.x1);
+    const top = Math.min(rect.y0, rect.y1);
+    const w = Math.abs(rect.x1 - rect.x0);
+    const h = Math.abs(rect.y1 - rect.y0);
+    if (w < 6 && h < 6) return clearPick(); // a click, not a rectangle
+    justDrew.current = true;
+    // the rectangle in the window's coordinates, against each bar's staves
+    const r = box.current.getBoundingClientRect();
+    const sel = { l: left - box.current.scrollLeft + r.left, t: top - box.current.scrollTop + r.top };
+    const hit = (b: DOMRect) => b.right > sel.l && b.left < sel.l + w && b.bottom > sel.t && b.top < sel.t + h;
+    const bars: number[] = [];
+    const parts = new Set<number>();
+    box.current.querySelectorAll("g.measure").forEach((m) => {
+      const index = eng.measureIds.indexOf(m.id);
+      const n = score.measures[index]?.n;
+      if (index < 0 || n === undefined) return;
+      m.querySelectorAll(":scope > g.staff").forEach((st, si) => {
+        if (!hit(st.getBoundingClientRect())) return;
+        st.classList.add("pz-picked");
+        bars.push(n);
+        parts.add(part !== null ? part : si);
+      });
+    });
+    if (!bars.length) return clearPick();
+    const names = [...parts].sort((a, b) => a - b).map((i) => (part !== null ? allParts?.[i] : score.parts[i]) ?? "").filter(Boolean);
+    const all = part === null && names.length === score.parts.length;
+    const from = Math.min(...bars);
+    const to = Math.max(...bars);
+    const sel2: NonNullable<AgentContext["bars"]> = { from, ...(to !== from ? { to } : {}), ...(names.length === 1 ? { part: names[0] } : !all ? { parts: names } : {}) };
+    const label = `${to !== from ? t("pick.bars").replace("{from}", String(from)).replace("{to}", String(to)) : t("pick.bar").replace("{n}", String(from))}${all ? "" : ` · ${names.join(", ")}`}`;
+    setPicked({ bars: sel2, label });
+    publishSelection({ bars: sel2 });
+  };
 
   /** Score view, editing notes: a click on a bar of one staff opens its notes as text */
   const onScoreClick = async (e: React.MouseEvent) => {
@@ -621,6 +696,17 @@ export default function ScoreView({
             <Icon icon={PencilLine} /> {t("edit.notes")}
           </button>
         )}
+        {/* draw a rectangle over bars and staves for the AI agent (Shift+drag does it too) */}
+        <button
+          onClick={() => (setSelecting((x) => !x), setNoteEdit(false), setEditing(false), setBar(null), clearPick())}
+          disabled={!score || reading}
+          aria-pressed={selecting}
+          className={selecting ? BUTTON_ON : BUTTON}
+          data-testid="score-select"
+          title={t("pick.hint")}
+        >
+          <Icon icon={BoxSelect} /> {t("pick.button")}
+        </button>
         <label className={CHECK} title={t("click.hint")}>
           <input
             type="checkbox"
@@ -724,7 +810,44 @@ export default function ScoreView({
       <ProgressLine />
       {noteEdit && <p className="border-b border-gray-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900">{t("edit.hint")}</p>}
       {editing && !fit && <p className="border-b border-gray-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">{t("layout.editHint")}</p>}
-      <div ref={box} className={`pz-score relative min-h-0 flex-1 bg-gray-100 p-3 ${reading ? "overflow-hidden" : "overflow-auto"}`} data-testid="score">
+      {selecting && <p className="border-b border-gray-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900">{t("pick.hint")}</p>}
+      <div
+        ref={box}
+        className={`pz-score relative min-h-0 flex-1 bg-gray-100 p-3 ${reading ? "overflow-hidden" : "overflow-auto"} ${selecting ? "cursor-crosshair select-none" : ""}`}
+        onPointerDown={onDrawStart}
+        onPointerMove={onDrawMove}
+        onPointerUp={onDrawEnd}
+        onPointerCancel={() => ((drawing.current = false), clearPick())}
+        // (the click that ends a rectangle doesn't also play a note or open a bar)
+        onClickCapture={(e) => justDrew.current && ((justDrew.current = false), e.stopPropagation())}
+        data-testid="score"
+      >
+        {rect && (
+          <div
+            className="pointer-events-none absolute z-20 rounded-sm border-2 border-dashed border-(--lk-accent) bg-rose-500/10"
+            style={{ left: Math.min(rect.x0, rect.x1), top: Math.min(rect.y0, rect.y1), width: Math.abs(rect.x1 - rect.x0), height: Math.abs(rect.y1 - rect.y0) }}
+            data-testid="score-rect"
+          />
+        )}
+        {picked && rect && !drawing.current && (
+          <div
+            className="absolute z-30 flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs shadow-lg"
+            style={{ left: Math.min(rect.x0, rect.x1), top: Math.max(rect.y0, rect.y1) + 6 }}
+            data-testid="score-picked"
+          >
+            <span className="px-1 text-gray-700">{picked.label}</span>
+            <button
+              onClick={() => (attach({ bars: picked.bars }), openAgent(), clearPick())}
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-(--lk-accent) hover:bg-rose-50"
+              data-testid="score-picked-ask"
+            >
+              <Icon icon={Bot} className="h-3.5 w-3.5" /> {t("pick.ask")}
+            </button>
+            <button onClick={clearPick} aria-label={t("pick.clear")} className="rounded p-0.5 text-gray-500 hover:bg-gray-100">
+              <Icon icon={X} className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {/* export and full screen: just above the sheet, staying in view while the score scrolls */}
         <div className="pointer-events-none sticky top-0 z-20 -mb-2 flex justify-end gap-1.5 [&>*]:pointer-events-auto" data-testid="score-actions">
           {/* the pages' size (paper layouts; Continuous always fits the window) */}

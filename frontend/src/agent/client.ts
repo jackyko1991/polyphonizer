@@ -37,7 +37,8 @@ export interface FoundAgent {
 export interface AgentContext {
   title?: string;
   file?: string;
-  bars?: { part?: string; from: number; to?: number };
+  /** bars, in one part, in some parts (a rectangle over several staves), or in all of them */
+  bars?: { part?: string; parts?: string[]; from: number; to?: number };
   code?: { file: string; from: number; to: number; text: string };
   error?: string;
   problem?: string;
@@ -52,6 +53,8 @@ export interface ChatRequest {
   api_key?: string;
   files: { name: string; code: string }[];
   context?: AgentContext;
+  /** pictures pasted with the message (base64): PNG, JPEG, GIF or WebP, at most 4 */
+  images?: { name: string; type: string; data: string }[];
 }
 
 export type AgentEvent = (

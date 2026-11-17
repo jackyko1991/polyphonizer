@@ -31,7 +31,7 @@ from .cli import tool_input, tool_name
 LABEL = "Codex"
 
 
-def command(exe: str, workspace: str, model: str | None, resume: str | None, mcp_url: str) -> list[str]:
+def command(exe: str, workspace: str, model: str | None, resume: str | None, mcp_url: str, images: list[str] | None = None) -> list[str]:
     argv = [
         exe,
         "exec",
@@ -62,6 +62,8 @@ def command(exe: str, workspace: str, model: str | None, resume: str | None, mcp
         argv += ["-m", model]
     if resume:
         argv += ["resume", resume]
+    # pictures pasted with the message (--image=…: the prompt's "-" must not be read as one more picture)
+    argv += [f"--image={p}" for p in images or []]
     return [*argv, "-"]
 
 

@@ -13,6 +13,8 @@ Nothing here is an AI of its own. This module only
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import os
 import re
 import shutil
@@ -37,6 +39,10 @@ FILE_NAME = re.compile(r"^[A-Za-z_][\w-]{0,60}\.py$")
 MAX_FILE = 200_000
 MAX_FILES = 40
 MAX_MESSAGE = 20_000
+# pictures pasted into the message (a screenshot, a photo of a page): kept in the chat's folder for that turn
+MAX_PICTURES = 4
+MAX_PICTURE = 5_000_000
+PICTURE_TYPES = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp"}
 MAX_TURNS = int(os.environ.get("PZ_AGENT_MAX_TURNS", "24"))
 IDLE_S = 30 * 60
 ROOT = Path(os.environ.get("PZ_AGENT_WORKSPACES", Path(tempfile.gettempdir()) / "polyphonizer-agent"))
@@ -136,6 +142,24 @@ def sync_files(s: Session, files: list[dict]) -> dict[str, str]:
     return keep
 
 
+def save_pictures(s: Session, pics: list[dict]) -> list[str]:
+    """the message's pictures in the chat's folder (pictures/, replaced each turn; not .py, so never sent back as a
+    change): their paths relative to it"""
+    folder = s.workspace / "pictures"
+    shutil.rmtree(folder, ignore_errors=True)
+    out = []
+    for i, p in enumerate(pics, 1):
+        try:
+            data = base64.b64decode(p["data"], validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        folder.mkdir(exist_ok=True)
+        name = f"picture-{i}.{PICTURE_TYPES[p['type']]}"
+        (folder / name).write_bytes(data)
+        out.append(f"pictures/{name}")
+    return out
+
+
 def snapshot(s: Session) -> dict[str, str]:
     out = {}
     for p in sorted(s.workspace.glob("*.py")):
@@ -163,7 +187,8 @@ def context_text(ctx: dict) -> str:
         lines.append(f"The file open in the editor: {f}")
     sel = ctx.get("bars")
     if isinstance(sel, dict) and isinstance(sel.get("from"), int):
-        part = str(sel.get("part") or "all parts")[:80]
+        parts = [str(x)[:80] for x in sel.get("parts") or [] if isinstance(x, str)][:32]
+        part = str(sel.get("part") or ", ".join(parts) or "all parts")[:400]
         to = sel.get("to") if isinstance(sel.get("to"), int) else sel["from"]
         lines.append(f"Selected: bar{'s' if to != sel['from'] else ''} {sel['from']}{f'-{to}' if to != sel['from'] else ''} ({part})")
     if isinstance(code := ctx.get("code"), dict) and isinstance(code.get("text"), str):
@@ -195,6 +220,14 @@ def check(req: dict, env=os.environ) -> str | None:
         return "the message is empty"
     if len(req["message"]) > MAX_MESSAGE:
         return f"the message is longer than {MAX_MESSAGE} characters"
+    pics = req.get("images") or []
+    if not isinstance(pics, list) or len(pics) > MAX_PICTURES:
+        return f"at most {MAX_PICTURES} pictures with a message"
+    for p in pics:
+        if not isinstance(p, dict) or p.get("type") not in PICTURE_TYPES or not isinstance(p.get("data"), str):
+            return "a picture must be PNG, JPEG, GIF or WebP"
+        if len(p["data"]) * 3 // 4 > MAX_PICTURE:
+            return f"a picture is larger than {MAX_PICTURE // 1_000_000} MB"
     if agent in LOCAL and not local_allowed(env):
         return "this runner is on a server: its computer's own agents aren't offered here; use an API key"
     if agent == "claude-api" and not str(req.get("api_key") or "").strip():
@@ -219,7 +252,10 @@ async def chat(turn: turns.Turn, req: dict, base: str, env=os.environ) -> None:
     except ValueError as e:
         turn.emit({"type": "error", "message": str(e)})
         return
+    pictures = save_pictures(s, req.get("images") or [])
     message = context_text(req.get("context") or {}) + req["message"]
+    if pictures:
+        message += "\n\n[The learner pasted " + ("a picture" if len(pictures) == 1 else f"{len(pictures)} pictures") + " with this message: " + ", ".join(pictures) + ". Look at " + ("it" if len(pictures) == 1 else "them") + " (the Read tool shows a picture) before answering.]"
     key = str(req.get("api_key") or "").strip() if agent == "claude-api" else included_key(env) if agent == "included" else None
     secrets = [key] if key else []
     chosen = model_for(agent, provider, req.get("model"))
@@ -236,7 +272,7 @@ async def chat(turn: turns.Turn, req: dict, base: str, env=os.environ) -> None:
         if agent in ("claude-code", "claude-api", "included"):
             stream = _claude(s, agent, provider, key, chosen, message, mcp_url, secrets)
         else:
-            stream = _codex(s, chosen, message, mcp_url, token)
+            stream = _codex(s, chosen, message, mcp_url, token, pictures)
         async for event in stream:
             if event["type"] in ("done", "error"):
                 if (files := changes(before, snapshot(s))) is not None:
@@ -286,14 +322,14 @@ def _claude(s: Session, agent: str, provider: str, key: str | None, model: str, 
     return claude.run(s, message, model=model, env=env, system_prompt=SYSTEM, max_turns=MAX_TURNS, mcp_url=mcp_url, secrets=secrets, login_hint=hint)
 
 
-def _codex(s: Session, model: str | None, message: str, mcp_url: str, token: str):
+def _codex(s: Session, model: str | None, message: str, mcp_url: str, token: str, pictures: list[str] | None = None):
     exe = scan.executable("codex")
     if s.cli_agent != "codex":
         s.cli_session, s.cli_agent = None, "codex"
     rules = f"{SYSTEM}\n\nThe tools are the MCP tools `compile` and `ask_user` of the `polyphonizer` server.\n\n---\n\n"
     prompt = (rules if s.cli_session is None else "") + message
     mapper = codex.Mapper()
-    argv = codex.command(exe, str(s.workspace), model, s.cli_session, mcp_url)
+    argv = codex.command(exe, str(s.workspace), model, s.cli_session, mcp_url, [str(s.workspace / p) for p in pictures or []])
 
     async def stream():
         try:
