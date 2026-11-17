@@ -34,7 +34,7 @@ test("search: accents folded, a word's beginning, by source or composer, in the 
   assert.ok(erl.some((w) => w.source === "imslp"));
   assert.deepEqual(erl.map((w) => w.id), [...erl.map((w) => w.id)].sort((a, b) => a - b));
   const imslp = await searchWorks(db, { words: ["erlk"], source: "imslp" });
-  assert.ok(imslp.length > 3 && imslp.every((w) => w.source === "imslp" && /^\d+$/.test(w.path)));
+  assert.ok(imslp.length > 3 && imslp.every((w) => w.source === "imslp" && / \(.+\)$/.test(w.path)));
   // Chinese composer names are searchable too
   assert.ok((await searchWorks(db, { words: ["舒伯特"], limit: 5 })).every((w) => w.composer === "Franz Schubert"));
   const byComposer = await searchWorks(db, { words: [], composer: "Scott Joplin", limit: 500 });
@@ -63,23 +63,23 @@ test("the same work across sources: one composer and one catalogue number; not w
   const row = (source: string, path: string, title: string, composer: string, set = ""): Row => [source, path, null, title, composer, 2, null, "", "", set, "", [], [], source === "music21" ? undefined : source];
   const rows: Row[] = [
     row("openscore-lieder", "https://raw/lc1.mxl", "Der Erlkönig, D.328", "Franz Schubert"),
-    row("imslp", "https://imslp.org/index.php?curid=77", "Erlkönig, D.328", "Franz Schubert"),
+    row("imslp", "https://imslp.org/wiki/W77", "Erlkönig, D.328", "Franz Schubert"),
     row("mutopia", "https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=5", "Erlkönig", "Franz Schubert", "D 328"),
-    row("imslp", "https://imslp.org/index.php?curid=78", "Erlkönig, Op.1", "Carl Loewe"), // another composer
+    row("imslp", "https://imslp.org/wiki/W78", "Erlkönig, Op.1", "Carl Loewe"), // another composer
     row("asap", "https://raw/a.musicxml", "Piano Sonata No. 11 · 3", "Wolfgang Amadeus Mozart", "K. 331"),
     row("asap", "https://raw/b.musicxml", "Piano Sonata No. 11 · 1", "Wolfgang Amadeus Mozart", "K. 331"), // same source
-    row("imslp", "https://imslp.org/index.php?curid=99", "Piano Sonata No.11, K.331/300i", "Wolfgang Amadeus Mozart"),
+    row("imslp", "https://imslp.org/wiki/W99", "Piano Sonata No.11, K.331/300i", "Wolfgang Amadeus Mozart"),
   ];
   const s = siblingsOf(rows);
   assert.deepEqual(s.get("https://raw/lc1.mxl#")?.map((x) => x[0]).sort(), ["imslp", "mutopia"]);
-  assert.equal(s.get("https://raw/lc1.mxl#")?.find((x) => x[0] === "imslp")?.[1], "https://imslp.org/index.php?curid=77");
-  assert.deepEqual(s.get("https://raw/a.musicxml#")?.map((x) => x[1]), ["https://imslp.org/index.php?curid=99"]);
+  assert.equal(s.get("https://raw/lc1.mxl#")?.find((x) => x[0] === "imslp")?.[1], "https://imslp.org/wiki/W77");
+  assert.deepEqual(s.get("https://raw/a.musicxml#")?.map((x) => x[1]), ["https://imslp.org/wiki/W99"]);
   // a sonata known only by its number finds its opus elsewhere
   const sonatas = siblingsOf([
     row("asap", "https://raw/p.musicxml", "Piano Sonata No. 8 · 2", "Ludwig van Beethoven"),
-    row("imslp", "https://imslp.org/index.php?curid=5", "Piano Sonata No.8, Op.13", "Ludwig van Beethoven"),
+    row("imslp", "https://imslp.org/wiki/W5", "Piano Sonata No.8, Op.13", "Ludwig van Beethoven"),
   ]);
-  assert.deepEqual(sonatas.get("https://raw/p.musicxml#")?.map((x) => x[1]), ["https://imslp.org/index.php?curid=5"]);
+  assert.deepEqual(sonatas.get("https://raw/p.musicxml#")?.map((x) => x[1]), ["https://imslp.org/wiki/W5"]);
   // IMSLP's rows are not keys (only the Library's own works show their editions elsewhere)
   assert.ok(![...s.keys()].some((k) => k.includes("imslp.org")));
 });

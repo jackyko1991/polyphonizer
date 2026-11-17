@@ -27,7 +27,7 @@ import { catalogIds } from "../frontend/src/library/catalogNumbers.ts";
 import { sonataId } from "../frontend/src/library/sonatas.ts";
 import { byComposer, idText, MUSIC21, type Row, type Source } from "../frontend/src/library/collections.ts";
 import { licenceClass } from "../frontend/src/library/elsewhere.ts";
-import { IMSLP, IMSLP_SOURCE, imslpRows, parseImslp } from "../frontend/src/library/imslp.ts";
+import { IMSLP, IMSLP_SOURCE, imslpPage, imslpRows, parseImslp } from "../frontend/src/library/imslp.ts";
 import { withCanonicalComposer } from "../frontend/src/library/composers.ts";
 import { COLLECTIONS, COMPOSER_ZH, ensembleOf, INSTRUMENTS, VOICES } from "../frontend/src/library/lexicon.ts";
 import { MUTOPIA, MUTOPIA_SOURCE, mutopiaLinks, mutopiaRow, type MutopiaRow } from "../frontend/src/library/mutopia.ts";
@@ -107,7 +107,7 @@ export function build(path = DB_PATH): { works: number } {
     PRAGMA journal_mode = DELETE;
     CREATE TABLE composers (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, zh TEXT, works INTEGER NOT NULL);
     -- (kept small, a quarter of a million rows: the composer by number; a collection only where it differs from the
-    -- source; an IMSLP work's path is its page id; empty lists are NULL)
+    -- source; an IMSLP work's path is its page name, its link imslp.org/wiki/<name>; empty lists are NULL)
     CREATE TABLE works (
       id INTEGER PRIMARY KEY, source TEXT NOT NULL, collection TEXT, path TEXT NOT NULL, number INTEGER,
       title TEXT NOT NULL, composer INTEGER NOT NULL, parts INTEGER, key INTEGER, time TEXT, era TEXT, set_name TEXT,
@@ -139,7 +139,7 @@ export function build(path = DB_PATH): { works: number } {
     const key = analysisKey(r);
     const source = r[13] ?? MUSIC21;
     const mu = source === MUTOPIA ? mutopia.get(r[1]) : undefined;
-    const path = source === IMSLP ? (/curid=(\d+)/.exec(r[1])?.[1] ?? r[1]) : r[1];
+    const path = source === IMSLP ? imslpPage(r[1]) : r[1];
     insWork.run(
       id, source, r[0] === source ? null : r[0], path, r[2], r[3], composerIds.get(r[4])!, r[5], r[6], r[7] || null, r[8] || null,
       r[9] || null, r[10] || null, list(r[11]), list(r[12]), licenceClass(r, sources), r[14] ?? null, ensembleOf(r[5]) || null,

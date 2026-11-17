@@ -6,12 +6,15 @@ IMSLP (imslp.org) holds hundreds of thousands of works, mostly scanned editions 
 reader's country, so their files are not opened here: the Library lists each work and links to its page on IMSLP,
 where the learner downloads it (and Transcribe can turn a PDF into notes). The list comes from IMSLP's public work-list
 API (imslp.org/wiki/IMSLP:API), a page of 1,000 works at a time, read one after another with a pause between pages.
-Only the title, composer, catalogue number and page id are kept.
+Only the title, composer, catalogue number, page id and page name are kept. A work is linked by its page name
+(imslp.org/wiki/<name>): IMSLP no longer answers links by page id (index.php?curid=…) or Special:Redirect without a
+CAPTCHA. Most page names are "<title> (<composer as IMSLP writes it>)", so the composer's IMSLP name is kept once and
+a work's page name only where it differs.
 
 Output: a tab-separated file, loaded by the Library only when IMSLP is asked for:
     #imslp <date> <count>
-    @<composer index>\t<composer name>          (once per composer, "Ludwig van Beethoven")
-    <page id>\t<composer index>\t<title>\t<catalogue number>
+    @<composer index>\t<composer name>\t<IMSLP's name>   (once per composer: "Ludwig van Beethoven", "Beethoven, Ludwig van")
+    <page id>\t<composer index>\t<title>\t<catalogue number>[\t<page name, where not "<title> (<IMSLP's name>)">]
 """
 
 import json
@@ -55,13 +58,15 @@ def clean(text):
 
 
 def work(entry):
-    """an API entry → (page id, composer, title, catalogue number), or None for one that isn't a work"""
+    """an API entry → (page id, composer, IMSLP's composer, title, catalogue number, page name), or None for one that
+    isn't a work"""
     v = entry.get("intvals") or {}
     pid = str(v.get("pageid") or "").strip()
     title = clean(v.get("worktitle") or re.sub(r"\s*\([^()]*\)$", "", entry.get("id", "")))
     if not pid.isdigit() or not title:
         return None
-    return pid, composer_name(v.get("composer") or ""), title, clean(v.get("icatno") or "")
+    raw = clean(v.get("composer") or "")
+    return pid, composer_name(raw), raw, title, clean(v.get("icatno") or ""), clean(entry.get("id", ""))
 
 
 def main():
@@ -77,11 +82,13 @@ def main():
         time.sleep(PAUSE)
     composers = {}
     lines = []
-    for pid, composer, title, cat in works:
-        if composer not in composers:
-            composers[composer] = len(composers)
-            lines.append(f"@{composers[composer]}\t{composer}")
-        lines.append(f"{pid}\t{composers[composer]}\t{title}\t{cat}")
+    for pid, composer, raw, title, cat, page in works:
+        key = (composer, raw)
+        if key not in composers:
+            composers[key] = len(composers)
+            lines.append(f"@{composers[key]}\t{composer}\t{raw}")
+        extra = "" if page == f"{title} ({raw})" else f"\t{page}"
+        lines.append(f"{pid}\t{composers[key]}\t{title}\t{cat}{extra}")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(f"#imslp {date.today().isoformat()} {len(works)}\n" + "\n".join(lines) + "\n", encoding="utf-8")
     print(f"{len(works)} works by {len(composers)} composers → {OUT} ({OUT.stat().st_size // 1_000_000} MB)")
