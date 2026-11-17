@@ -35,8 +35,8 @@ export default function RunnerPage({ section }: { section: string | null }) {
       overline={["AI agent", "AI 代理"] as L}
       title={["Runner and servers", "執行器與伺服器"]}
       intro={[
-        "Transcribe turns a PDF or photo of printed music into notes. A browser can't do that alone, so a small program, the **runner**, does it: on your own computer (free and private), on a server you rent, or as a Hugging Face Space.",
-        "「轉成樂譜」能把印刷樂譜的 PDF 或照片轉成音符。瀏覽器自己做不到，所以由一個小程式 **執行器** 來做：在你自己的電腦上（免費且私密）、在你租的伺服器上，或作為 Hugging Face Space。",
+        "Transcribe turns a PDF or photo of printed music, or a recording (an MP3, a video), into notes. A browser can't do that alone, so a small program, the **runner**, does it: on your own computer (free and private), on a server you rent (one with a GPU is fastest for recordings), or as a Hugging Face Space. Pro (coming) will run it for you.",
+        "「轉成樂譜」能把印刷樂譜的 PDF 或照片、或一段錄音（MP3、影片）轉成音符。瀏覽器自己做不到，所以由一個小程式 **執行器** 來做：在你自己的電腦上（免費且私密）、在你租的伺服器上（有 GPU 的處理錄音最快），或作為 Hugging Face Space。Pro 方案（即將推出）會替你執行。",
       ]}
       sections={SECTIONS}
       focus={section}
@@ -46,6 +46,12 @@ export default function RunnerPage({ section }: { section: string | null }) {
           t={[
             "The site sends the file; the runner reads it with KobiMusic's **copisteria** (an open model, Apache-2.0, on the CPU, about 30 seconds a page) and sends back MusicXML, which opens in the editor. It keeps no files.",
             "網站送出檔案；執行器用 KobiMusic 的 **copisteria**（開放模型，Apache-2.0，用 CPU，每頁約 30 秒）讀譜，再把 MusicXML 傳回來，在編輯器中開啟。它不保留任何檔案。",
+          ]}
+        />
+        <P
+          t={[
+            "A recording (or a video's sound) is heard by **Transkun** for piano (MIT) or Spotify's **Basic Pitch** for any other instrument or voice (Apache-2.0). Then the runner writes it as a score: it finds the beat in the recording (so a performance that speeds up and slows down still lands on the beat), whether the bars have 3 or 4 beats and where they start, rounds the rhythm to sixteenths or triplets, puts piano on two staves, and picks the key signature. Transkun uses the GPU when there is one: an NVIDIA GPU, or a Mac's. A three-minute piano piece takes about 10 seconds on a Mac's GPU and 25 on its CPU.",
+            "錄音（或影片的聲音）由 **Transkun**（鋼琴，MIT）或 Spotify 的 **Basic Pitch**（其他樂器或人聲，Apache-2.0）來聽。接著執行器把它寫成樂譜：從錄音找出拍子（演奏忽快忽慢也能對上拍子）、判斷每小節 3 拍或 4 拍以及從哪裡開始、把節奏整理成十六分音符或三連音、鋼琴分成兩行譜，並選出調號。Transkun 有 GPU 時會使用：NVIDIA GPU 或 Mac 的 GPU。三分鐘的鋼琴曲在 Mac 的 GPU 上約 10 秒，用 CPU 約 25 秒。",
           ]}
         />
         <P
@@ -64,12 +70,19 @@ export default function RunnerPage({ section }: { section: string | null }) {
           ]}
         />
         <Cmd t={"git clone https://github.com/jackyko1991/polyphonizer\ncd polyphonizer\npixi run -e omr omr-setup"} />
+        <P
+          t={[
+            "For recordings, once more (Transkun, Basic Pitch and ffmpeg; about 2 GB on disk, mostly PyTorch):",
+            "要處理錄音，再執行一次（Transkun、Basic Pitch 與 ffmpeg；約佔 2 GB 磁碟空間，大多是 PyTorch）：",
+          ]}
+        />
+        <Cmd t="pixi run -e audio audio-setup" />
         <P t={["Then, whenever you want to transcribe, start the runner and leave it open:", "之後每次要轉譜時，啟動執行器並讓它保持開著："]} />
         <Cmd t="pixi run runner" />
         <P
           t={[
-            "It answers at `http://127.0.0.1:8765`, the address Transcribe tries first: the dialog finds it by itself. On an Intel Mac, PyTorch has no build for this Python: use a server or a Space instead.",
-            "它在 `http://127.0.0.1:8765` 回應，這正是「轉成樂譜」最先嘗試的位址：對話框會自動找到它。Intel 晶片的 Mac 沒有這個 Python 版本的 PyTorch：請改用伺服器或 Space。",
+            "It answers at `http://127.0.0.1:8765`, the address Transcribe tries first: the dialog finds it by itself, and says where recordings run (the Mac's GPU, an NVIDIA GPU, or the CPU). On an Intel Mac, PyTorch has no build for this Python: use a server or a Space instead.",
+            "它在 `http://127.0.0.1:8765` 回應，這正是「轉成樂譜」最先嘗試的位址：對話框會自動找到它，並顯示錄音在哪裡處理（Mac 的 GPU、NVIDIA GPU 或 CPU）。Intel 晶片的 Mac 沒有這個 Python 版本的 PyTorch：請改用伺服器或 Space。",
           ]}
         />
       </Section>
@@ -97,6 +110,19 @@ export default function RunnerPage({ section }: { section: string | null }) {
           t={[
             "Your runner's address is then `https://runner.example.org` (your domain).",
             "你的執行器位址就是 `https://runner.example.org`（換成你的網域）。",
+          ]}
+        />
+        <P
+          t={[
+            "**With an NVIDIA GPU** (a GPU VPS, a gaming PC with Linux), recordings run on it: build the image with PyTorch's CUDA build, and give the container the GPU (this needs the NVIDIA driver and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)):",
+            "**有 NVIDIA GPU 時**（GPU VPS、裝 Linux 的電競電腦），錄音會在 GPU 上處理：用 PyTorch 的 CUDA 版本建置映像檔，並把 GPU 交給容器（需要 NVIDIA 驅動程式與 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)）：",
+          ]}
+        />
+        <Cmd t={"docker build -f runner/Dockerfile --build-arg TORCH=cu124 -t polyphonizer-runner:cuda .\ndocker run -d --restart unless-stopped --gpus all -e PZ_TOKEN=$(openssl rand -hex 24) -p 127.0.0.1:8765:8765 polyphonizer-runner:cuda"} />
+        <P
+          t={[
+            "**A Mac** (Apple silicon) uses its own GPU without Docker: run it as on your own computer, above, and reach it from elsewhere through [Tailscale](https://tailscale.com) (its `tailscale serve` gives the HTTPS address), with `PZ_HOST=0.0.0.0` and a `PZ_TOKEN`.",
+            "**Mac**（Apple 晶片）不需 Docker 就能使用自己的 GPU：照上面「在你自己的電腦上」的方式執行，再透過 [Tailscale](https://tailscale.com) 從別處連線（它的 `tailscale serve` 提供 HTTPS 位址），並設定 `PZ_HOST=0.0.0.0` 與 `PZ_TOKEN`。",
           ]}
         />
       </Section>

@@ -54,3 +54,33 @@ omr-setup = { cmd = "python runner/engines/setup_copista.py", description = "ins
 
 [environments]
 omr = { features = ["omr"], solve-group = "default" }
+audio = { features = ["audio"], solve-group = "default" }
+
+# The runner's sound-to-score engines (Transcribe ▸ a recording or a video): Transkun for piano (MIT; PyTorch, on the
+# GPU when there is one: CUDA, or the Apple GPU) and Spotify's Basic Pitch for any one instrument or voice (Apache-2.0;
+# its ONNX model, so no TensorFlow), with ffmpeg for a video's sound and librosa for the beat. Once:
+# pixi run -e audio audio-setup; then pixi run runner finds them.
+[feature.audio]
+platforms = ["osx-arm64", "linux-64", "win-64"]
+
+[feature.audio.dependencies]
+ffmpeg = "*"
+pip = "*"
+cython = "*" # transkun's ncls builds from source here
+
+[feature.audio.pypi-dependencies]
+torch = "*"
+torchaudio = "*"
+transkun = "*"
+audioop-lts = "*" # pydub (transkun reads audio with it) needs this on Python 3.13
+onnxruntime = "*"
+librosa = "*"
+soundfile = "*"
+pretty-midi = "*"
+mir-eval = "*"
+resampy = "*"
+scikit-learn = "*"
+music21 = "*"
+
+[feature.audio.tasks]
+audio-setup = { cmd = "python runner/engines/setup_audio.py", description = "finish the runner's sound-to-score engines: Basic Pitch's model (no TensorFlow), and a check that Transkun loads" }

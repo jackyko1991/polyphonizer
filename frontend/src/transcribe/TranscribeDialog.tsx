@@ -7,7 +7,7 @@ import { AudioLines, FileMusic, Laptop, Server, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../Button.tsx";
 import { BUTTON, PRIMARY } from "../ui.ts";
-import { backendOk, estimateSeconds, jobKind, loadBackend, pdfPageCount, progressAt, routesFor, RUNNER_URL, runJob, runnerStatus, saveBackend, type Backend, type RouteId, type RunnerStatus } from "./routes.ts";
+import { backendOk, deviceName, estimateSeconds, jobKind, loadBackend, pdfPageCount, progressAt, routesFor, RUNNER_URL, runJob, runnerStatus, saveBackend, type Backend, type Instrument, type RouteId, type RunnerStatus } from "./routes.ts";
 import { Badge, COMING_SOON } from "../Badge.tsx";
 
 const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, string]; about: readonly [string, string] }> = {
@@ -20,8 +20,8 @@ const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, str
     icon: Laptop,
     name: ["My computer or my server", "我的電腦或我的伺服器"],
     about: [
-      "Free and private: start the runner with pixi run runner in the Polyphonizer folder. Or give the address of your own server or Space that speaks the same protocol.",
-      "免費且私密：在 Polyphonizer 資料夾執行 pixi run runner 啟動執行器；或填入你自己的伺服器或 Space 位址（同樣的協定）。",
+      "Free and private: start the runner with pixi run runner in the Polyphonizer folder (it uses the GPU when there is one: NVIDIA, or a Mac's). Or give the address of the same runner on a server of yours: a VPS with a GPU, a Mac at home, a Space.",
+      "免費且私密：在 Polyphonizer 資料夾執行 pixi run runner 啟動執行器（有 GPU 時會使用：NVIDIA 或 Mac 的 GPU）。或填入你自己伺服器上同一個執行器的位址：有 GPU 的 VPS、家裡的 Mac、Space。",
     ],
   },
   service: {
@@ -34,12 +34,14 @@ const WHY: Record<string, readonly [string, string]> = {
   "not-here": ["Reading pages needs the runner or the service.", "讀取樂譜頁面需要執行器或服務。"],
   loading: ["The in-browser model is not installed yet (coming next).", "瀏覽器內的模型尚未安裝（即將推出）。"],
   "not-running": [
-    "Nothing answers there yet. Start it: in a terminal, in the Polyphonizer folder, run pixi run runner (once before: pixi run -e omr omr-setup for PDFs). This finds it by itself.",
-    "那裡還沒有回應。請啟動：在終端機的 Polyphonizer 資料夾執行 pixi run runner（讀 PDF 需先執行一次 pixi run -e omr omr-setup）。這裡會自動找到它。",
+    "Nothing answers there yet. Start it: in a terminal, in the Polyphonizer folder, run pixi run runner (once before: pixi run -e omr omr-setup for PDFs, pixi run -e audio audio-setup for recordings). This finds it by itself.",
+    "那裡還沒有回應。請啟動：在終端機的 Polyphonizer 資料夾執行 pixi run runner（讀 PDF 需先執行一次 pixi run -e omr omr-setup，錄音則是 pixi run -e audio audio-setup）。這裡會自動找到它。",
   ],
-  "no-engine": ["Running, but without an engine for this.", "正在執行，但沒有處理這類檔案的引擎。"],
+  "no-engine": ["Running, but without an engine for this (for recordings: pixi run -e audio audio-setup, then restart it).", "正在執行，但沒有處理這類檔案的引擎（錄音：執行 pixi run -e audio audio-setup，再重新啟動）。"],
   coming: ["Not open yet.", "尚未開放。"],
 };
+
+const INSTRUMENT_KEY = "polyphonizer.transcribe.instrument";
 
 export default function TranscribeDialog({ file: initial, onDone, onClose }: { file?: File | null; onDone: (f: File) => void; onClose: () => void }) {
   const { pick } = useLang();
@@ -68,6 +70,34 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
   }, [job]);
   const [error, setError] = useState("");
   const [over, setOver] = useState(false);
+  // a recording: what it is played on (remembered), and how long it is (for the estimate)
+  const [instrument, setInstrument] = useState<Instrument>(() => {
+    try {
+      return localStorage.getItem(INSTRUMENT_KEY) === "other" ? "other" : "piano";
+    } catch {
+      return "piano";
+    }
+  });
+  const pickInstrument = (i: Instrument) => {
+    setInstrument(i);
+    try {
+      localStorage.setItem(INSTRUMENT_KEY, i);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  const [seconds, setSeconds] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    setSeconds(undefined);
+    if (!file || jobKind(file.name, file.type) !== "transcribe") return;
+    const url = URL.createObjectURL(file);
+    const media = document.createElement(/^video\//.test(file.type) || /\.(mp4|mov|m4v|mkv|webm)$/i.test(file.name) ? "video" : "audio");
+    media.preload = "metadata";
+    media.onloadedmetadata = () => (Number.isFinite(media.duration) && setSeconds(media.duration), URL.revokeObjectURL(url));
+    media.onerror = () => URL.revokeObjectURL(url);
+    media.src = url;
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     void check(loadBackend());
@@ -80,6 +110,7 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
 
   const kind = file ? jobKind(file.name, file.type) : null;
   const routes = kind ? routesFor(kind, { browser: false, runner }) : [];
+  const takes = (i: Instrument) => !runner?.instruments?.length || runner.instruments.includes(i);
   const chosen = route && routes.find((r) => r.id === route && r.ready) ? route : routes.find((r) => r.ready)?.id ?? null;
   const take = (f: File | undefined) => {
     if (!f) return;
@@ -87,14 +118,14 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
     setError("");
   };
   const run = async () => {
-    if (!file || !kind || chosen !== "runner") return;
+    if (!file || !kind || chosen !== "runner" || (kind === "transcribe" && !takes(instrument))) return;
     setBusy(true);
     setError("");
     const pages = kind === "omr" && /\.pdf$/i.test(file.name) ? pdfPageCount(new Uint8Array(await file.arrayBuffer())) : 1;
-    setJob({ pages, estimate: estimateSeconds(kind, pages), start: performance.now() });
+    setJob({ pages, estimate: estimateSeconds(kind, pages, { seconds, device: runner?.device, instrument }), start: performance.now() });
     setNow(performance.now());
     try {
-      const out = await runJob(backend.url, kind, file, fetch, backend.token);
+      const out = await runJob(backend.url, kind, file, fetch, backend.token, kind === "transcribe" ? instrument : undefined);
       onDone(new File([out.bytes as BlobPart], out.name));
       onClose();
     } catch (e) {
@@ -136,6 +167,30 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
           {file && !kind && <span className="text-xs text-red-700">{pick(["This is not a picture of music or a recording.", "這不是樂譜圖片或錄音。"])}</span>}
           <input ref={input} type="file" hidden accept=".pdf,image/*,audio/*,video/*" onChange={(e) => (take(e.target.files?.[0]), (e.target.value = ""))} />
         </div>
+
+        {/* a recording: piano, or another instrument or voice (two different models) */}
+        {kind === "transcribe" && (
+          <fieldset className="mt-3" data-testid="transcribe-instrument">
+            <legend className="mb-1 text-xs font-medium text-gray-500">{pick(["What is playing", "演奏的是什麼"])}</legend>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ["piano", ["Piano", "鋼琴"], ["two staves; chords and both hands", "兩行譜；和弦與雙手"]],
+                  ["other", ["Another instrument or voice", "其他樂器或人聲"], ["one line: a melody", "單行：旋律"]],
+                ] as const
+              ).map(([id, name, hint]) => (
+                <label key={id} className={`flex flex-1 cursor-pointer items-start gap-2 rounded-lg border p-2 text-sm ${instrument === id ? "border-(--lk-accent) bg-rose-50/50" : "border-gray-300 hover:border-gray-400"} ${takes(id) ? "" : "opacity-50"}`}>
+                  <input type="radio" name="instrument" checked={instrument === id} onChange={() => pickInstrument(id)} className="mt-1" data-testid={`instrument-${id}`} />
+                  <span>
+                    <b className="font-medium text-gray-900">{pick(name)}</b>
+                    <span className="block text-xs text-gray-600">{pick(hint)}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {!takes(instrument) && <p className="mt-1 text-xs text-amber-800">{pick(["This runner has no engine for that yet.", "這個執行器還沒有這種引擎。"])}</p>}
+          </fieldset>
+        )}
 
         {/* the routes */}
         {kind && (
@@ -190,7 +245,12 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
                         <a href="#/agents/runner" onClick={onClose} className="basis-full text-xs text-(--lk-accent) hover:underline" data-testid="runner-help">
                           {pick(["How to run it on your computer, a server or a Hugging Face Space →", "如何在你的電腦、伺服器或 Hugging Face Space 上執行 →"])}
                         </a>
-                        {runner && <span className="basis-full text-xs text-emerald-700">✓ {pick(["Connected", "已連線"])} · {[runner.omr && pick(["reads pages", "讀譜"]), runner.transcribe && pick(["transcribes", "採譜"])].filter(Boolean).join(" · ") || pick(["no engine yet", "還沒有引擎"])}</span>}
+                        {runner && (
+                          <span className="basis-full text-xs text-emerald-700" data-testid="runner-connected">
+                            ✓ {pick(["Connected", "已連線"])} · {[runner.omr && pick(["reads pages", "讀譜"]), runner.transcribe && pick(["transcribes", "採譜"])].filter(Boolean).join(" · ") || pick(["no engine yet", "還沒有引擎"])}
+                            {runner.transcribe && deviceName(runner.device) && ` · ${pick(["on", "使用"])} ${pick(deviceName(runner.device)!)}`}
+                          </span>
+                        )}
                       </span>
                     )}
                   </span>
@@ -222,7 +282,7 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
           <button onClick={onClose} className={BUTTON}>
             {pick(["Cancel", "取消"])}
           </button>
-          <button onClick={() => void run()} disabled={!chosen || busy} className={PRIMARY} data-testid="transcribe-run">
+          <button onClick={() => void run()} disabled={!chosen || busy || (kind === "transcribe" && !takes(instrument))} className={PRIMARY} data-testid="transcribe-run">
             {busy ? pick(["Working…", "處理中…"]) : pick(["Transcribe", "轉成樂譜"])}
           </button>
         </div>

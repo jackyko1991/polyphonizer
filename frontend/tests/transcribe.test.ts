@@ -60,7 +60,10 @@ test("the client: status (none when nothing answers), and a job sent with its na
 
   assert.equal(await runnerStatus(RUNNER_URL, fake(() => { throw new TypeError("Failed to fetch"); })), null);
   const status = await runnerStatus(RUNNER_URL, fake(() => Response.json({ omr: true, transcribe: false, version: "0.1" })));
-  assert.deepEqual(status, { omr: true, transcribe: false, version: "0.1", agent: null });
+  assert.deepEqual(status, { omr: true, transcribe: false, instruments: [], device: null, version: "0.1", agent: null });
+  // the built-in sound engine says which instruments it takes and where it runs (unknown ones are dropped)
+  const sound = await runnerStatus(RUNNER_URL, fake(() => Response.json({ omr: false, transcribe: true, instruments: ["piano", "other", "kazoo"], device: "mps" })));
+  assert.deepEqual([sound!.instruments, sound!.device], [["piano", "other"], "mps"]);
   assert.equal(calls.at(-1)!.url, "http://127.0.0.1:8765/status");
 
   const file = new File([new Uint8Array([37, 80, 68, 70])], "Erlkonig.pdf", { type: "application/pdf" });
@@ -117,6 +120,12 @@ test("progress: a PDF's pages counted from its bytes, an estimate of the time, a
   assert.equal(estimateSeconds("omr", 1), 30);
   assert.equal(estimateSeconds("omr", 4), 120);
   assert.equal(estimateSeconds("transcribe", 1), 60);
+  // a recording of known length: piano faster on a GPU than the CPU; other instruments fastest
+  assert.equal(estimateSeconds("transcribe", 1, { seconds: 100, device: "mps", instrument: "piano" }), 14);
+  assert.equal(estimateSeconds("transcribe", 1, { seconds: 100, device: "cpu", instrument: "piano" }), 23);
+  assert.equal(estimateSeconds("transcribe", 1, { seconds: 100, device: "cpu", instrument: "other" }), 10);
+  assert.equal(jobUrl("http://x/", "transcribe", "other"), "http://x/transcribe?instrument=other");
+  assert.equal(jobUrl("http://x", "omr", "other"), "http://x/omr");
   // never full before the answer: 95 % at most, half way at half the time
   assert.equal(progressAt(0, 30), 0);
   assert.equal(progressAt(15, 30), 47.5);

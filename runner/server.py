@@ -7,13 +7,15 @@ MusicXML or MIDI. Nothing leaves the computer. It speaks the protocol of docs/pl
 
     GET  /status                      → {"omr": bool, "transcribe": bool, "version": "…"}
     POST /omr        (PDF or image)   → MusicXML           (body: the file; X-Filename: its name)
-    POST /transcribe (audio or video) → MIDI
+    POST /transcribe (audio or video) → MusicXML (the built-in engine) or MIDI   (?instrument=piano|other)
 
 An engine is a command with {in} and {out} for the files, so any tool can be used:
     PZ_OMR="audiveris -batch -export -output {outdir} {in}"     (or copista, homr …; see docs/plans/transcription.md)
     PZ_TRANSCRIBE="transkun {in} {out}"
-Found by themselves when on PATH: transkun (piano recordings), audiveris (printed pages). A video is turned into
-audio first with ffmpeg when it is installed.
+Found by themselves: copista (pixi run -e omr omr-setup) for pages; for recordings the built-in engine
+(engines/audio.py: Transkun for piano, Basic Pitch for other instruments, then bars, key and two staves; pixi run -e
+audio audio-setup), on the GPU when there is one (CUDA, or the Apple GPU). Else on PATH: transkun, audiveris. A video
+is turned into audio first with ffmpeg when it is installed.
 
 It also runs the learner's own AI agent (agent/, docs/plans/local-agent.md):
 
@@ -37,7 +39,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -67,13 +69,21 @@ class Config:
     timeout: int = 900
     # when set (a runner on a server), every request must carry it: Authorization: Bearer <token>
     token: str | None = None
+    # the built-in sound-to-score engine (engines/audio.py): the instruments it takes and where it runs; empty for a
+    # command of one's own (PZ_TRANSCRIBE), which takes whatever it takes
+    instruments: list = field(default_factory=list)
+    device: str | None = None
 
     @classmethod
-    def from_env(cls, env=os.environ, which=shutil.which, copista=None):
-        """the engines: PZ_OMR / PZ_TRANSCRIBE, else copista when pixi run omr-setup has installed it, else the tools
-        found on PATH"""
+    def from_env(cls, env=os.environ, which=shutil.which, copista=None, audio=None):
+        """the engines: PZ_OMR / PZ_TRANSCRIBE, else copista (pixi run -e omr omr-setup) and the built-in sound engine
+        (pixi run -e audio audio-setup) when installed, else the tools found on PATH"""
         copista = copista if copista is not None else copista_command()
         omr = env.get("PZ_OMR") or copista or ("audiveris -batch -export -output {outdir} {in}" if which("audiveris") else None)
+        built_in = None if env.get("PZ_TRANSCRIBE") else (audio if audio is not None else audio_engine())
+        if built_in:
+            tr, info = built_in
+            return cls(omr=omr, transcribe=tr, token=env.get("PZ_TOKEN") or None, instruments=info["instruments"], device=info["device"])
         tr = env.get("PZ_TRANSCRIBE") or ("transkun {in} {out}" if which("transkun") else None)
         return cls(omr=omr, transcribe=tr, token=env.get("PZ_TOKEN") or None)
 
@@ -110,11 +120,35 @@ def copista_command():
     return f"{shlex.quote(str(py))} {shlex.quote(str(Path(copista.__file__)))} {{in}} {{out}}"
 
 
-def run_engine(template, src, out, outdir, timeout, title=""):
+def audio_engine():
+    """the built-in sound-to-score engine when it is set up: (its command, {"instruments": […], "device": "…"}), asked
+    once of the audio environment's Python (pixi run -e audio audio-setup), or this Python when it has the models (a
+    container); None when neither does"""
+    engines = Path(__file__).resolve().parent / "engines"
+    env = REPO / ".pixi" / "envs" / "audio"
+    probe = "import sys, json; sys.path.insert(0, sys.argv[1]); import audio; print(json.dumps({'instruments': audio.engines(), 'device': audio.device()}))"
+    for py in (env / ("python.exe" if os.name == "nt" else "bin/python"), Path(sys.executable)):
+        if not py.exists():
+            continue
+        try:
+            p = subprocess.run([str(py), "-I", "-W", "ignore", "-c", probe, str(engines)], capture_output=True, text=True, timeout=120)
+            info = json.loads(p.stdout.strip().splitlines()[-1]) if p.returncode == 0 and p.stdout.strip() else None
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            info = None
+        if info and info["instruments"]:
+            return f"{shlex.quote(str(py))} -I {shlex.quote(str(engines / 'audio.py'))} {{in}} {{out}}", info
+    return None
+
+
+INSTRUMENTS = {"piano", "other"}
+CTYPES = {".musicxml": "application/vnd.recordare.musicxml+xml", ".xml": "application/vnd.recordare.musicxml+xml", ".mxl": "application/vnd.recordare.musicxml", ".mid": "audio/midi", ".midi": "audio/midi"}
+
+
+def run_engine(template, src, out, outdir, timeout, title="", instrument=""):
     """run an engine's command on the files; the result is {out}, or the first MusicXML/MIDI it wrote in {outdir}. The
-    learner's file name is in PZ_TITLE, for the score's title."""
+    learner's file name is in PZ_TITLE, for the score's title; the instrument asked for in PZ_INSTRUMENT."""
     args = [a.replace("{in}", str(src)).replace("{out}", str(out)).replace("{outdir}", str(outdir)) for a in shlex.split(template)]
-    p = subprocess.run(args, capture_output=True, timeout=timeout, env={**os.environ, "PZ_TITLE": title})
+    p = subprocess.run(args, capture_output=True, timeout=timeout, env={**os.environ, "PZ_TITLE": title, "PZ_INSTRUMENT": instrument})
     if p.returncode != 0:
         tail = (p.stderr or p.stdout).decode("utf-8", "replace").strip().splitlines()[-1:]
         raise RuntimeError(tail[0] if tail else f"the engine stopped (exit {p.returncode})")
@@ -179,7 +213,7 @@ def make_server(address, cfg):
                 return self.reply(401, {"error": "a token is needed"})
             url = urlsplit(self.path)
             if url.path.rstrip("/") == "/status":
-                return self.reply(200, {"omr": bool(cfg.omr), "transcribe": bool(cfg.transcribe), "version": VERSION, "agent": agent_core.status()})
+                return self.reply(200, {"omr": bool(cfg.omr), "transcribe": bool(cfg.transcribe), "instruments": cfg.instruments, "device": cfg.device, "version": VERSION, "agent": agent_core.status()})
             m = re.fullmatch(r"/api/agents/turns/(\w+)/events", url.path)
             if m:
                 turn = agent_turns.get(m.group(1))
@@ -258,6 +292,10 @@ def make_server(address, cfg):
             if path.startswith("/api/agents/"):
                 return self.agent_post(path.rstrip("/"))
             kind = path.strip("/")
+            # which sound engine (the built-in one: piano, or any other instrument or voice)
+            self.instrument = (parse_qs(urlsplit(self.path).query).get("instrument") or [""])[0]
+            if kind == "transcribe" and self.instrument and (self.instrument not in INSTRUMENTS or (cfg.instruments and self.instrument not in cfg.instruments)):
+                return self.reply(501, {"error": f"No engine here for {'other instruments' if self.instrument == 'other' else self.instrument or '?'}: run pixi run -e audio audio-setup, then restart the runner"})
             if kind not in RESULT:
                 return self.reply(404, {"error": "no such path"})
             size = int(self.headers.get("Content-Length") or 0)
@@ -273,7 +311,7 @@ def make_server(address, cfg):
             body = self.rfile.read(size)
             template = cfg.omr if kind == "omr" else cfg.transcribe
             if not template:
-                how = "run pixi run omr-setup, then restart the runner, or set PZ_OMR" if kind == "omr" else "install one or set PZ_TRANSCRIBE"
+                how = "run pixi run omr-setup, then restart the runner, or set PZ_OMR" if kind == "omr" else "run pixi run -e audio audio-setup, then restart the runner, or set PZ_TRANSCRIBE"
                 return self.reply(501, {"error": f"No {'OMR' if kind == 'omr' else 'transcription'} engine here: {how} (see docs/plans/transcription.md)"})
             # the job's files are gone before the answer goes out
             with tempfile.TemporaryDirectory(prefix="pz-runner-") as tmp:
@@ -292,15 +330,16 @@ def make_server(address, cfg):
             outdir = d / "out"
             outdir.mkdir()
             name, ctype = RESULT[kind]
+            if kind == "transcribe" and cfg.instruments:
+                name = "score.musicxml"  # the built-in engine writes the score itself
             try:
-                result = run_engine(template, src, outdir / name, outdir, cfg.timeout, self.title)
+                result = run_engine(template, src, outdir / name, outdir, cfg.timeout, self.title, self.instrument if kind == "transcribe" else "")
             except subprocess.TimeoutExpired:
                 return 504, {"error": "the engine took too long"}, "application/json"
             except (RuntimeError, OSError) as e:
                 return 502, {"error": str(e)}, "application/json"
             data = result.read_bytes()
-            if result.suffix.lower() == ".mxl":
-                ctype = "application/vnd.recordare.musicxml"
+            ctype = CTYPES.get(result.suffix.lower(), ctype)
             print(f"{kind}: {ext} {size // 1000} kB → {result.suffix} {len(data) // 1000} kB", file=sys.stderr)
             return 200, data, ctype
 
@@ -314,7 +353,7 @@ def main():
     httpd = make_server((host, port), cfg)
     print(f"Polyphonizer runner {VERSION} on http://{host}:{port}" + (" (token required)" if cfg.token else ""))
     print(f"  reading pages (OMR): {cfg.omr or 'no engine (pixi run omr-setup, or set PZ_OMR)'}")
-    print(f"  transcribing:        {cfg.transcribe or 'no engine (set PZ_TRANSCRIBE)'}")
+    print(f"  transcribing:        " + (f"{', '.join(cfg.instruments)} on {cfg.device} (engines/audio.py)" if cfg.instruments else cfg.transcribe or "no engine (pixi run -e audio audio-setup, or set PZ_TRANSCRIBE)"))
     st = agent_core.status()
     print("  AI agent:            " + ", ".join(w for w, on in (("this computer's Claude Code or Codex", st["local"]), ("an API key", True), ("included (Pro)", st["included"])) if on))
     try:
