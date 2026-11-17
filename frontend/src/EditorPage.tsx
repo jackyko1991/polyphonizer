@@ -560,7 +560,7 @@ export default function EditorPage() {
     setProject(p);
     setNewFolderAt(path);
   };
-  const materialsTree = <MaterialsTree uploads={uploads} error={uploadError} nodes={treeOf(project)} folders={allFolders(project)} actions={materialActions} startRename={newFolderAt} onRenameStarted={() => setNewFolderAt(null)} />;
+  const materialsTree = <MaterialsTree uploads={uploads} error={uploadError} nodes={treeOf(project)} folders={allFolders(project)} actions={materialActions} startRename={newFolderAt} onRenameStarted={() => setNewFolderAt(null)} addable={ws.current.kind === "own"} />;
 
   const errorHere = error && (error.file ?? MAIN) === active.name ? error.line : null;
   return (

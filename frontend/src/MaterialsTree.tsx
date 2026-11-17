@@ -66,6 +66,7 @@ export default function MaterialsTree({
   actions: a,
   startRename,
   onRenameStarted,
+  addable = true,
 }: {
   /** files being added, each shown in its folder with a progress circle */
   uploads?: Upload[];
@@ -77,6 +78,8 @@ export default function MaterialsTree({
   /** a path to name at once (a folder just made) */
   startRename?: string | null;
   onRenameStarted?: () => void;
+  /** files can be added here (your own score; not a sample, whose files, if any, are only listed) */
+  addable?: boolean;
 }) {
   const { pick } = useLang();
   const [closed, setClosed] = useState<Set<string>>(new Set());
@@ -237,6 +240,7 @@ export default function MaterialsTree({
       );
     });
 
+  if (!addable && !nodes.length && !uploads.length && !error) return null;
   return (
     <ul role="group" className={`ml-3 rounded ${over === "" ? "bg-rose-50 ring-1 ring-(--lk-accent)" : ""}`} {...dropOn("")} data-testid="materials">
       {pending("", 0)}
@@ -246,7 +250,8 @@ export default function MaterialsTree({
           {error}
         </li>
       )}
-      {/* the only place files are added: dropped here, or chosen with the button */}
+      {/* the only place files are added: dropped here, or chosen with the button (your own score only) */}
+      {addable && (
       <li role="none" className={`mt-0.5 rounded border border-dashed px-2 py-1.5 text-xs ${over === "" ? "border-(--lk-accent) text-rose-900" : "border-gray-300 text-gray-500"}`} data-testid="materials-drop">
         {!nodes.length && <span className="block">{pick(["Keep PDFs, recordings and other files with this score.", "把 PDF、錄音和其他檔案與這份樂譜放在一起。"])}</span>}
         <button onClick={() => a.pick("")} className="font-medium text-(--lk-accent) hover:underline" data-testid="materials-add">
@@ -254,6 +259,7 @@ export default function MaterialsTree({
         </button>{" "}
         {pick(["or drop them here", "或拖放到這裡"])}
       </li>
+      )}
     </ul>
   );
 }
