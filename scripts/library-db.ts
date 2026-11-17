@@ -19,7 +19,7 @@
  *   meta              when it was built, and counts
  */
 import { DatabaseSync } from "node:sqlite";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { analysisKey, type Analyses } from "../frontend/src/library/analyses.ts";
@@ -98,6 +98,8 @@ export function siblingsOf(rows: Row[]): Map<string, [string, string, string][]>
 export function build(path = DB_PATH): { works: number } {
   const { rows, sources, mutopia, analyses } = allRows();
   if (existsSync(path)) rmSync(path);
+  // (a fresh checkout has no public/library/ folder: everything in it is built)
+  mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   // small pages: a search reads only the pages it needs over HTTP range requests
   db.exec(`
