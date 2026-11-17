@@ -346,11 +346,40 @@ def make_server(address, cfg):
     return ThreadingHTTPServer(address, Handler)
 
 
+def port_taken(host, port):
+    """what to say when the port is in use: whether a runner answers there (an older one?) and how to stop it"""
+    import urllib.request
+
+    who = "another program"
+    try:
+        with urllib.request.urlopen(f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}/status", timeout=2) as r:
+            st = json.loads(r.read() or b"{}")
+        who = "a Polyphonizer runner already" + ("" if st.get("agent") is not None else " (an older one, from before the AI agent)")
+    except Exception:
+        pass
+    pids = ""
+    if shutil.which("lsof"):
+        pids = " ".join(subprocess.run(["lsof", "-ti", f"tcp:{port}", "-sTCP:LISTEN"], capture_output=True, text=True).stdout.split())
+    stop = f"kill {pids}" if pids else (f"stop the program using port {port}")
+    return (
+        f"Port {port} is in use by {who}" + (f" (process {pids})" if pids else "") + ".\n"
+        f"  If it is a runner whose terminal is gone, stop it:  {stop}\n"
+        f"  then start this one again, or use another port:    PZ_PORT=8766 pixi run runner"
+    )
+
+
 def main():
+    import errno
+
     cfg = Config.from_env()
     port = int(os.environ.get("PZ_PORT", PORT))
     host = bind_host()
-    httpd = make_server((host, port), cfg)
+    try:
+        httpd = make_server((host, port), cfg)
+    except OSError as e:
+        if e.errno != errno.EADDRINUSE:
+            raise
+        raise SystemExit(port_taken(host, port))
     print(f"Polyphonizer runner {VERSION} on http://{host}:{port}" + (" (token required)" if cfg.token else ""))
     print(f"  reading pages (OMR): {cfg.omr or 'no engine (pixi run omr-setup, or set PZ_OMR)'}")
     print(f"  transcribing:        " + (f"{', '.join(cfg.instruments)} on {cfg.device} (engines/audio.py)" if cfg.instruments else cfg.transcribe or "no engine (pixi run -e audio audio-setup, or set PZ_TRANSCRIBE)"))
