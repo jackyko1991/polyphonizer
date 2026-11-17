@@ -25,6 +25,9 @@ It also runs the learner's own AI agent (agent/, docs/plans/local-agent.md):
     GET  /api/agents/turns/<id>/events?from=N   → the same turn again from event N (after a reload)
     POST /api/agents/turns/<id>/cancel          → Stop
     POST /mcp/<chat token>                      → Polyphonizer's tools for the agent (MCP), for that turn only
+    POST /api/agents/connector                  → a token for an agent outside the site: <runner>/mcp/<token>
+    POST /api/agents/connector/sync  (X-Connector) the score on the page → the runner's copy the agent works on
+    GET  /api/agents/connector/events?after=N    what that agent did (files written, compiles), for the page
 
 Only the site's own pages may call it (CORS), it listens on 127.0.0.1 only, and it keeps no files. On a server (a VPS
 behind HTTPS, a Hugging Face Space; runner/Dockerfile): PZ_HOST=0.0.0.0 with PZ_TOKEN, which the site sends as a bearer
@@ -46,6 +49,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from agent import core as agent_core
 from agent import scan as agent_scan
+from agent import connector as agent_connector
 from agent import tools as agent_tools
 from agent import turns as agent_turns
 
@@ -199,7 +203,7 @@ def make_server(address, cfg):
             self.send_response(204)
             self.cors()
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "content-type, x-filename, authorization")
+            self.send_header("Access-Control-Allow-Headers", "content-type, x-filename, authorization, x-connector")
             # Chrome's Private Network Access: a public HTTPS page asking for 127.0.0.1
             if self.headers.get("Access-Control-Request-Private-Network") == "true":
                 self.send_header("Access-Control-Allow-Private-Network", "true")
@@ -214,6 +218,12 @@ def make_server(address, cfg):
             url = urlsplit(self.path)
             if url.path.rstrip("/") == "/status":
                 return self.reply(200, {"omr": bool(cfg.omr), "transcribe": bool(cfg.transcribe), "instruments": cfg.instruments, "device": cfg.device, "version": VERSION, "agent": agent_core.status()})
+            if url.path == "/api/agents/connector/events":
+                c = agent_connector.lookup(self.headers.get("X-Connector", ""))
+                if c is None:
+                    return self.reply(404, {"error": "no such connection: make a new one"})
+                after = int((parse_qs(url.query).get("after") or ["0"])[0] or 0)
+                return self.reply(200, {"events": c.after(after), **agent_connector.status(c)})
             m = re.fullmatch(r"/api/agents/turns/(\w+)/events", url.path)
             if m:
                 turn = agent_turns.get(m.group(1))
@@ -253,6 +263,24 @@ def make_server(address, cfg):
                 if not agent_core.local_allowed():
                     return self.reply(403, {"error": "this runner is on a server: it doesn't search its computer"})
                 return self.reply(200, {"agents": agent_scan.scan()})
+            # an agent outside the site, connected to the score on this page (agent/connector.py)
+            if path == "/api/agents/connector":
+                req = self.body_json(10_000) or {}
+                token, c = agent_connector.create(req.get("previous") if isinstance(req.get("previous"), str) else None)
+                return self.reply(200, {"token": token, "id": c.id})
+            if path in ("/api/agents/connector/sync", "/api/agents/connector/revoke"):
+                token = self.headers.get("X-Connector", "")
+                if path.endswith("revoke"):
+                    return self.reply(200, {"revoked": agent_connector.revoke(token)})
+                c = agent_connector.lookup(token)
+                if c is None:
+                    return self.reply(404, {"error": "no such connection: make a new one"})
+                req = self.body_json(MAX_CHAT_BYTES)
+                try:
+                    n = agent_connector.sync(c, (req or {}).get("title", ""), (req or {}).get("files"))
+                except ValueError as e:
+                    return self.reply(400, {"error": str(e)})
+                return self.reply(200, {"files": n, **agent_connector.status(c)})
             if path == "/api/agents/chat":
                 req = self.body_json(MAX_CHAT_BYTES)
                 if req is None:
@@ -372,6 +400,7 @@ def main():
     import errno
 
     cfg = Config.from_env()
+    agent_connector.load()  # agents connected before this start stay connected
     port = int(os.environ.get("PZ_PORT", PORT))
     host = bind_host()
     try:

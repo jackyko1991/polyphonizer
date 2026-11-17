@@ -16,7 +16,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from agent import core, scan, tools, turns  # noqa: E402
+from agent import connector, core, scan, tools, turns  # noqa: E402
 
 SITE = "https://jackyko1991.github.io"
 MAIN = 'melody = tiny("c4 d e f g2 g", name="Violin", inst="violin")\nscore = together(melody, title="Test")\n'
@@ -291,3 +291,83 @@ class ChatOverHttp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConnectorOverHttp(unittest.TestCase):
+    """an agent outside the site: a token from the page, the score synced, MCP tools on it, its writes back as events"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.patches = [mock.patch.object(connector, "STORE", Path(self.tmp.name) / "connectors.json"), mock.patch.dict(os.environ, {"PZ_TOKEN": "", "PZ_HOST": "127.0.0.1"})]
+        for p in self.patches:
+            p.start()
+        self.httpd = server.make_server(("127.0.0.1", 0), server.Config())
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        for p in self.patches:
+            p.stop()
+        self.tmp.cleanup()
+
+    def call(self, method, path, body=None, headers=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=120)
+        c.request(method, path, None if body is None else json.dumps(body), {"Origin": SITE, "Content-Type": "application/json", **(headers or {})})
+        r = c.getresponse()
+        raw = r.read()
+        return r.status, json.loads(raw) if raw else None
+
+    def rpc(self, token, method, params=None, mid=1):
+        # (an agent is no browser: no Origin)
+        c = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=120)
+        c.request("POST", f"/mcp/{token}", json.dumps({"jsonrpc": "2.0", "id": mid, "method": method, "params": params or {}}), {"Content-Type": "application/json"})
+        r = c.getresponse()
+        return r.status, json.loads(r.read() or b"null")
+
+    def test_an_outside_agent_reads_writes_and_compiles_the_score_on_the_page(self):
+        status, made = self.call("POST", "/api/agents/connector", {})
+        self.assertEqual(status, 200)
+        token = made["token"]
+        self.assertTrue(token.startswith("pzc_"))
+        # the token is kept (hashed) for the next start of the runner
+        self.assertNotIn(token, connector.STORE.read_text())
+        # before the page syncs, the agent is told to open it
+        _, a = self.rpc(token, "tools/call", {"name": "get_score", "arguments": {}})
+        self.assertTrue(a["result"]["isError"])
+        hdr = {"X-Connector": token}
+        status, synced = self.call("POST", "/api/agents/connector/sync", {"title": "Test", "files": [{"name": "main.py", "code": MAIN}]}, hdr)
+        self.assertEqual((status, synced["files"]), (200, 1))
+        _, init = self.rpc(token, "initialize", {"clientInfo": {"name": "claude-code"}})
+        self.assertIn("get_score", init["result"]["instructions"])
+        _, tl = self.rpc(token, "tools/list")
+        self.assertEqual([t["name"] for t in tl["result"]["tools"]], ["get_score", "read_file", "write_file", "compile"])
+        _, got = self.rpc(token, "tools/call", {"name": "get_score", "arguments": {}})
+        self.assertEqual(json.loads(got["result"]["content"][0]["text"])["title"], "Test")
+        new = MAIN.replace("4/4", "3/4") if "4/4" in MAIN else MAIN + "\n# changed\n"
+        _, w = self.rpc(token, "tools/call", {"name": "write_file", "arguments": {"name": "main.py", "code": new}})
+        self.assertFalse(w["result"]["isError"], w)
+        _, bad = self.rpc(token, "tools/call", {"name": "write_file", "arguments": {"name": "../x.py", "code": "x"}})
+        self.assertTrue(bad["result"]["isError"])
+        _, comp = self.rpc(token, "tools/call", {"name": "compile", "arguments": {}})
+        self.assertIn("isError", comp["result"])
+        status, ev = self.call("GET", "/api/agents/connector/events?after=0", None, hdr)
+        kinds = [e["type"] for e in ev["events"]]
+        self.assertEqual(ev["client"], "claude-code")
+        self.assertIn("connected", kinds)
+        files = [e for e in ev["events"] if e["type"] == "files"]
+        self.assertEqual(files[0]["files"], {"main.py": new})
+        self.assertIn("compiled", kinds)
+        last = ev["events"][-1]["seq"]
+        _, ev2 = self.call("GET", f"/api/agents/connector/events?after={last}", None, hdr)
+        self.assertEqual(ev2["events"], [])
+        # a connection made earlier works after a restart (the store is read again)
+        connector._connectors.clear()
+        connector.load()
+        self.assertIsNotNone(connector.lookup(token))
+        # revoked: gone
+        self.call("POST", "/api/agents/connector/revoke", {}, hdr)
+        status, _ = self.rpc(token, "tools/list")
+        self.assertEqual(status, 404)
+        status, _ = self.call("GET", "/api/agents/connector/events", None, hdr)
+        self.assertEqual(status, 404)

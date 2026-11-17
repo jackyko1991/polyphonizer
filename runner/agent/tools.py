@@ -2,7 +2,9 @@
 
 Every agent reaches them the same way: Claude Code through the Agent SDK's HTTP MCP config, Codex through
 `-c mcp_servers.polyphonizer.url=…`. A token belongs to one chat's turn and is revoked when the turn ends, so the tools
-only ever see that chat's workspace.
+only ever see that chat's workspace. A connector token (connector.py) is an agent outside the site connected to the
+score on the learner's page: it also gets get_score, read_file and write_file (it has no folder of its own), and its
+writes reach the page as changes to apply.
 
     compile   run the score with the site's prelude (compile_score.py, in a child process) and say what came out:
               parts, bars, key, time, tempo, pages, or the error and its line; optionally the notes of some bars
@@ -19,10 +21,11 @@ import secrets
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import turns
+from . import connector, turns
 
 PROTOCOL = "2025-06-18"
 COMPILE_TIMEOUT_S = 90
@@ -32,7 +35,8 @@ COMPILER = Path(__file__).resolve().parent / "compile_score.py"
 @dataclass
 class Binding:
     workspace: Path
-    turn: turns.Turn
+    turn: turns.Turn | connector.Connector  # where its events go (both have emit)
+    kind: str = "chat"  # or "connector": an agent outside the site
 
 
 _tokens: dict[str, Binding] = {}
@@ -55,6 +59,41 @@ def binding(token: str) -> Binding | None:
     with _lock:
         return _tokens.get(token)
 
+
+FILE_TOOLS = [
+    {
+        "name": "get_score",
+        "description": (
+            "The score open on the learner's Polyphonizer page: its title and files (main.py, which must set `score`, "
+            "and any other .py modules), with main.py's code. Polyphonizer scores are Python with music21 and the "
+            "site's helpers (tiny(), together(), edit_bar() …). Call this first."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "read_file",
+        "description": "One of the score's .py files as it is now.",
+        "inputSchema": {"type": "object", "properties": {"name": {"type": "string", "description": "main.py, or another .py file"}}, "required": ["name"]},
+    },
+    {
+        "name": "write_file",
+        "description": (
+            "Write one of the score's .py files (all of its code). It is shown on the learner's page as a change "
+            "they apply or discard; compile after writing, to be sure it runs."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}, "code": {"type": "string"}},
+            "required": ["name", "code"],
+        },
+    },
+]
+INSTRUCTIONS = (
+    "Polyphonizer (music scores as code): these tools work on the score open on the learner's page. Start with "
+    "get_score; change files with write_file (the learner applies or discards each change on the page); run compile "
+    "after every change and fix what it reports. Keep `score` set in main.py, use only music21 names that exist, and "
+    "change only what was asked."
+)
 
 TOOLS = [
     {
@@ -112,6 +151,18 @@ def compile_in(workspace: Path, part=None, first=None, last=None, python: str = 
 
 def call_tool(b: Binding, name: str, args: dict) -> tuple[str, bool]:
     """(text for the agent, is_error)"""
+    if b.kind == "connector":
+        if name == "ask_user":
+            return "ask the learner in your own chat instead", True
+        if name in ("get_score", "read_file", "write_file"):
+            text, err, files = file_tool(b, name, args)
+            # the tool's row, then what it wrote (shown on the page to apply)
+            b.turn.emit({"type": "tool", "name": name, "input": {k: v for k, v in args.items() if k not in ("code", "content")}, "ok": not err})
+            if files:
+                b.turn.emit(files)
+            return text, err
+        if not (b.workspace / "main.py").exists():
+            return "no score yet: open the AI panel on the learner's page (it sends the score on screen)", True
     if name == "compile":
         r = compile_in(b.workspace, args.get("part"), args.get("from_bar"), args.get("to_bar"))
         if r.get("ok"):
@@ -130,9 +181,35 @@ def call_tool(b: Binding, name: str, args: dict) -> tuple[str, bool]:
     return f"no tool named {name}", True
 
 
+def file_tool(b: Binding, name: str, args: dict) -> tuple[str, bool, dict | None]:
+    """get_score, read_file, write_file on a connector's copy of the score: (text, is_error, the files event)"""
+    ws = b.workspace
+    if not (ws / "main.py").exists():
+        return "no score yet: open the AI panel on the learner's page (it sends the score on screen)", True, None
+    names = sorted(p.name for p in ws.glob("*.py"))
+    if name == "get_score":
+        c = b.turn
+        return json.dumps({"title": getattr(c, "title", ""), "files": names, "main.py": (ws / "main.py").read_text(encoding="utf-8")}, ensure_ascii=False), False, None
+    file = str(args.get("name") or args.get("path") or args.get("file") or "")
+    if not connector.FILE_NAME.match(file):
+        return "a file name like main.py or parts.py (the `name` argument)", True, None
+    if name == "read_file":
+        return ((ws / file).read_text(encoding="utf-8"), False, None) if (ws / file).exists() else (f"no file {file}; the files are {', '.join(names)}", True, None)
+    code = args.get("code", args.get("content"))  # (some agents say content)
+    if not isinstance(code, str) or len(code) > connector.MAX_FILE:
+        return "give the file's whole code in `code` (at most 200 kB)", True, None
+    if file not in names and len(names) >= connector.MAX_FILES:
+        return "too many files", True, None
+    (ws / file).write_text(code, encoding="utf-8")
+    return f"{file} written; it is shown on the learner's page to apply. Now compile.", False, {"type": "files", "files": {file: code}, "removed": []}
+
+
 def handle(token: str, body: bytes) -> tuple[int, dict | None]:
     """one MCP request (a JSON-RPC message or a batch) → (HTTP status, answer or None for 202)"""
     b = binding(token)
+    if b is None and (c := connector.lookup(token)) is not None:
+        c.last_seen = time.time()
+        b = Binding(c.workspace, c, "connector")
     if b is None:
         return 404, {"jsonrpc": "2.0", "id": None, "error": {"code": -32001, "message": "this chat's tools have closed"}}
     try:
@@ -154,11 +231,15 @@ def _one(b: Binding, m) -> dict | None:
     mid, method, params = m["id"], m["method"], m.get("params") or {}
     ok = lambda result: {"jsonrpc": "2.0", "id": mid, "result": result}  # noqa: E731
     if method == "initialize":
+        if b.kind == "connector":
+            b.turn.client = str((params.get("clientInfo") or {}).get("name") or "")[:60]
+            b.turn.emit({"type": "connected", "client": b.turn.client})
         return ok(
             {
                 "protocolVersion": params.get("protocolVersion") or PROTOCOL,
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "polyphonizer", "version": "0.1"},
+                **({"instructions": INSTRUCTIONS} if b.kind == "connector" else {}),
             }
         )
     if method == "ping":
@@ -166,7 +247,7 @@ def _one(b: Binding, m) -> dict | None:
     if method in ("resources/list", "resources/templates/list", "prompts/list"):  # (asked for by some agents anyway)
         return ok({method.split("/")[0] if method != "resources/templates/list" else "resourceTemplates": []})
     if method == "tools/list":
-        return ok({"tools": TOOLS})
+        return ok({"tools": FILE_TOOLS + TOOLS[:1] if b.kind == "connector" else TOOLS})
     if method == "tools/call":
         text, is_error = call_tool(b, str(params.get("name")), params.get("arguments") or {})
         return ok({"content": [{"type": "text", "text": text}], "isError": is_error})

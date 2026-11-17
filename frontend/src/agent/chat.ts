@@ -82,7 +82,7 @@ export const withMessage = (chat: Chat, text: string, context?: string, pictures
 /** a short name for a tool row: Read main.py, Compile bars 2–3 … */
 export function toolLabel(name: string, input: Record<string, unknown>): { verb: string; what: string } {
   const short = name.replace(/^mcp__polyphonizer__/, "");
-  const file = String(input.file_path ?? input.path ?? "").split(/[\\/]/).pop() ?? "";
+  const file = String(input.file_path ?? input.path ?? (short.endsWith("_file") ? input.name : "") ?? "").split(/[\\/]/).pop() ?? "";
   if (short === "compile") {
     const from = input.from_bar as number | undefined;
     const to = (input.to_bar as number | undefined) ?? from;

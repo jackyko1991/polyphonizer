@@ -8,7 +8,7 @@
  * score by itself. The chat survives a reload: a turn still running is followed again.
  */
 import { go, RichText, useLang } from "@learnkit/web";
-import { Bot, Check, ChevronRight, ImagePlus, Maximize2, Minimize2, Plus, RefreshCw, Search, Send, Settings2, Square, Undo2, Wrench, X } from "lucide-react";
+import { Bot, Check, ChevronRight, Copy, ImagePlus, Plug, Maximize2, Minimize2, Plus, RefreshCw, Search, Send, Settings2, Square, Undo2, Wrench, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HANDLES, useFloatingWindow, type Box } from "../tools/floatingWindow.ts";
@@ -33,6 +33,16 @@ import {
   type AgentId,
   type AgentSettings,
   type FoundAgent,
+  ConnectionGone,
+  connectionEvents,
+  createConnection,
+  loadConnection,
+  mcpUrl,
+  revokeConnection,
+  saveConnection,
+  syncConnection,
+  type Connection,
+  type ConnectorState,
 } from "./client.ts";
 import { counts, diffLines, hunks } from "./diff.ts";
 import { MAX_PICTURES, picturesIn, readPicture, type Picture } from "./pictures.ts";
@@ -432,6 +442,102 @@ function Settings({
   );
 }
 
+/** Settings ▸ your own agent outside the site (MCP): a token for this page, the URL to give the agent, how to add it */
+function Connect({
+  backend,
+  connection,
+  state,
+  onConnection,
+}: {
+  backend: Backend;
+  connection: Connection | null;
+  state: Omit<ConnectorState, "events"> | null;
+  onConnection: (c: Connection | null) => void;
+}) {
+  const { pick } = useLang();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState("");
+  const here = connection && connection.base === backend.url ? connection : null;
+  const make = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      onConnection(await createConnection(backend.url, backend.token || undefined, here?.token));
+    } catch (e) {
+      setError(/no such path|HTTP 404/.test((e as Error).message) ? pick(["This runner is too old for this: restart it.", "這個執行器太舊：請重新啟動它。"]) : (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = (text: string, what: string) => void navigator.clipboard?.writeText(text).then(() => (setCopied(what), window.setTimeout(() => setCopied(""), 1500)));
+  const url = here ? mcpUrl(here) : "";
+  const local = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])/.test(backend.url);
+  const row = (label: string, cmd: string, id: string) => (
+    <div className="mt-1.5">
+      <span className="text-xs text-gray-600">{label}</span>
+      <div className="mt-0.5 flex items-start gap-1">
+        <code className="min-w-0 flex-1 rounded bg-gray-900 px-2 py-1 font-mono text-[11px] break-all text-gray-100">{cmd}</code>
+        <button type="button" onClick={() => copy(cmd, id)} title={pick(["Copy", "複製"])} aria-label={pick(["Copy", "複製"])} className="rounded p-1 text-gray-500 hover:bg-gray-100">
+          {copied === id ? <Icon icon={Check} className="h-3.5 w-3.5 text-emerald-600" /> : <Icon icon={Copy} className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+    </div>
+  );
+  return (
+    <section className="border-t border-gray-100 p-3 text-sm" data-testid="agent-connect">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+        <Icon icon={Plug} className="h-3.5 w-3.5" /> {pick(["Your agent, outside the site (MCP)", "網站外你自己的代理（MCP）"])}
+      </h3>
+      <p className="mt-1 text-xs text-gray-500">
+        {pick([
+          "Work from your own terminal or app instead: Claude Code, Codex, Claude Desktop or any MCP client gets tools for the score on this page (read it, write a file, compile). Each change it writes appears here to apply or discard. Keep this panel open while it works.",
+          "也可以從你自己的終端機或應用程式操作：Claude Code、Codex、Claude Desktop 或任何 MCP 用戶端，都能取得操作這頁樂譜的工具（讀取、寫入檔案、編譯）。它寫入的每個修改會出現在這裡，讓你套用或捨棄。它工作時請保持這個面板開著。",
+        ])}
+      </p>
+      {!here ? (
+        <button type="button" onClick={() => void make()} disabled={busy} className={`${BUTTON} mt-2`} data-testid="agent-connect-make">
+          <Icon icon={Plug} /> {busy ? "…" : pick(["Make a connection", "建立連線"])}
+        </button>
+      ) : (
+        <div className="mt-2">
+          {row(pick(["The MCP address (it holds the key: keep it to yourself)", "MCP 位址（內含金鑰：請勿外流）"]), url, "url")}
+          {row("Claude Code", `claude mcp add --transport http polyphonizer ${url}`, "claude")}
+          {row("Codex", `codex mcp add polyphonizer --url ${url}`, "codex")}
+          <p className="mt-1.5 text-xs text-gray-600">
+            {local
+              ? pick([
+                  "Claude Desktop and claude.ai connect from the internet, so they need the runner on a server with an HTTPS address (Runner ▸ On a VPS); agents on this computer can use this one.",
+                  "Claude Desktop 與 claude.ai 是從網際網路連線，需要放在有 HTTPS 位址的伺服器上的執行器（執行器 ▸ 在 VPS 上）；這台電腦上的代理可以用這個位址。",
+                ])
+              : pick(["Claude Desktop or claude.ai: Settings ▸ Connectors ▸ Add custom connector, with the address above.", "Claude Desktop 或 claude.ai：設定 ▸ 連接器 ▸ 新增自訂連接器，填入上面的位址。"])}
+          </p>
+          <p className="mt-2 text-xs" data-testid="agent-connect-state">
+            {state?.client || state?.last_seen_s != null ? (
+              <span className="text-emerald-700">
+                ● {pick(["Connected", "已連線"])}
+                {state.client ? `: ${state.client}` : ""}
+                {state.last_seen_s != null ? ` · ${pick(["last request", "最近一次請求"])} ${state.last_seen_s < 60 ? `${state.last_seen_s} s` : `${Math.round(state.last_seen_s / 60)} min`} ${pick(["ago", "前"])}` : ""}
+              </span>
+            ) : (
+              <span className="text-gray-500">○ {pick(["Waiting for an agent to connect…", "等待代理連線…"])}</span>
+            )}
+          </p>
+          <div className="mt-2 flex gap-3 text-xs">
+            <button type="button" onClick={() => void make()} className="font-medium text-(--lk-accent) hover:underline" title={pick(["The old address stops working", "舊位址會失效"])}>
+              {pick(["New address", "換新位址"])}
+            </button>
+            <button type="button" onClick={() => (void revokeConnection(here, backend.token || undefined), onConnection(null))} className="font-medium text-gray-600 hover:underline" data-testid="agent-connect-off">
+              {pick(["Disconnect", "中斷連線"])}
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
+    </section>
+  );
+}
+
 export default function AgentPanel() {
   const { pick } = useLang();
   const panel = usePanel();
@@ -460,6 +566,57 @@ export default function AgentPanel() {
     return () => mq.removeEventListener("change", on);
   }, []);
   const [draft, setDraft] = useState("");
+  // an agent outside the site (MCP): the connection, what it says, and its work brought into the chat
+  const [connection, setConnectionState] = useState<Connection | null>(loadConnection);
+  const [connState, setConnState] = useState<Omit<ConnectorState, "events"> | null>(null);
+  const setConnection = (c: Connection | null) => (setConnectionState(c), saveConnection(c), setConnState(null));
+  const connRef = useRef(connection);
+  connRef.current = connection;
+  const live = panel.open && connection !== null && connection.base === backend.url && !!status?.agent;
+  // the score on screen → the runner's copy (when it changes, a moment later)
+  useEffect(() => {
+    if (!live || !score || !connection) return;
+    const t = window.setTimeout(
+      () =>
+        void syncConnection(connection, { title: score.title, files: score.files }, backend.token || undefined)
+          .then(({ client, last_seen_s, has_score }) => setConnState({ client, last_seen_s, has_score }))
+          .catch((e) => e instanceof ConnectionGone && setConnection(null)),
+      600,
+    );
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, score, connection?.token]);
+  // what the agent did: every 2 s while the panel is open
+  useEffect(() => {
+    if (!live) return;
+    const poll = async () => {
+      const c = connRef.current;
+      if (!c) return;
+      try {
+        const st = await connectionEvents(c, backend.token || undefined);
+        setConnState({ client: st.client, last_seen_s: st.last_seen_s, has_score: st.has_score });
+        if (!st.events.length) return;
+        const blocks: Block[] = [];
+        for (const e of st.events) {
+          const who = st.client || "MCP";
+          if (e.type === "files") blocks.push({ kind: "files", files: e.files, removed: e.removed ?? [], state: "new" });
+          else if (e.type === "tool") blocks.push({ kind: "tool", id: `mcp-${e.seq}`, name: e.name, input: { ...e.input, via: who }, ok: e.ok });
+          else if (e.type === "compiled") blocks.push({ kind: "tool", id: `mcp-${e.seq}`, name: "compile", input: { via: who }, ok: e.ok });
+        }
+        const seq = st.events[st.events.length - 1].seq;
+        const next = { ...c, seq };
+        setConnectionState(next);
+        saveConnection(next);
+        if (blocks.length) update((ch) => ({ ...ch, blocks: [...ch.blocks, ...blocks] }));
+      } catch (e) {
+        if (e instanceof ConnectionGone) setConnection(null);
+      }
+    };
+    void poll();
+    const t = window.setInterval(() => void poll(), 2000);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, backend.url]);
   // pictures pasted (or chosen) for the next message
   const [pictures, setPictures] = useState<Picture[]>([]);
   const [pictureError, setPictureError] = useState("");
@@ -651,6 +808,7 @@ export default function AgentPanel() {
             apiKey={apiKey}
             onKey={(k) => (setApiKey(k), saveKey(k))}
           />
+          {status?.agent && <Connect backend={backend} connection={connection} state={connState} onConnection={setConnection} />}
           <div className="border-t border-gray-100 p-3">
             <button onClick={() => setShowSettings(false)} className={PRIMARY}>
               {pick(["Done", "完成"])}

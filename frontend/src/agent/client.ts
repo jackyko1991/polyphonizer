@@ -188,3 +188,65 @@ export async function followTurn(base: string, turn: string, from: number, onEve
 export async function cancelTurn(base: string, turn: string, token?: string, f: typeof fetch = fetch): Promise<void> {
   await f(at(base, `/api/agents/turns/${encodeURIComponent(turn)}/cancel`), { method: "POST", headers: auth(token) }).catch(() => undefined);
 }
+
+// ── an agent outside the site, connected to the score on this page (runner/agent/connector.py) ──
+
+/** a connection: its token (the MCP URL is <runner>/mcp/<token>), the runner it is on, and the events already seen */
+export interface Connection {
+  token: string;
+  base: string;
+  seq: number;
+}
+export type ConnectorEvent = (
+  | { type: "connected"; client: string }
+  | { type: "files"; files: Record<string, string>; removed: string[] }
+  | { type: "tool"; name: string; input: Record<string, unknown>; ok: boolean }
+  | { type: "compiled"; ok: boolean }
+) & { seq: number };
+export interface ConnectorState {
+  events: ConnectorEvent[];
+  client: string;
+  /** seconds since the agent's last request (null: none yet) */
+  last_seen_s: number | null;
+  has_score: boolean;
+}
+const CONNECTION = "polyphonizer.agent.connection";
+export function loadConnection(): Connection | null {
+  try {
+    const c = JSON.parse(localStorage.getItem(CONNECTION) ?? "null") as Connection | null;
+    return c && typeof c.token === "string" && typeof c.base === "string" ? { ...c, seq: Number(c.seq) || 0 } : null;
+  } catch {
+    return null;
+  }
+}
+export function saveConnection(c: Connection | null) {
+  try {
+    if (c) localStorage.setItem(CONNECTION, JSON.stringify(c));
+    else localStorage.removeItem(CONNECTION);
+  } catch {
+    /* storage unavailable */
+  }
+}
+export const mcpUrl = (c: Pick<Connection, "token" | "base">) => at(c.base, `/mcp/${c.token}`);
+/** the connection is gone from the runner (revoked, or a runner that never knew it) */
+export class ConnectionGone extends Error {}
+
+export async function createConnection(base: string, token?: string, previous?: string, f: typeof fetch = fetch): Promise<Connection> {
+  const r = await f(at(base, "/api/agents/connector"), { method: "POST", headers: { "content-type": "application/json", ...auth(token) }, body: JSON.stringify(previous ? { previous } : {}) });
+  if (!r.ok) throw await failure(r);
+  return { token: ((await r.json()) as { token: string }).token, base, seq: 0 };
+}
+async function connectorCall(c: Connection, path: string, init: RequestInit, token?: string, f: typeof fetch = fetch): Promise<Response> {
+  const r = await f(at(c.base, path), { ...init, headers: { ...(init.headers as Record<string, string>), "x-connector": c.token, ...auth(token) } });
+  if (r.status === 404) throw new ConnectionGone("this connection is gone: make a new one");
+  if (!r.ok) throw await failure(r);
+  return r;
+}
+/** the score on screen → the runner's copy the agent works on */
+export const syncConnection = async (c: Connection, score: { title: string; files: { name: string; code: string }[] }, token?: string, f: typeof fetch = fetch) =>
+  (await connectorCall(c, "/api/agents/connector/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(score) }, token, f)).json() as Promise<Omit<ConnectorState, "events">>;
+/** what the agent did since event `c.seq` */
+export const connectionEvents = async (c: Connection, token?: string, f: typeof fetch = fetch) =>
+  (await connectorCall(c, `/api/agents/connector/events?after=${c.seq}`, { method: "GET" }, token, f)).json() as Promise<ConnectorState>;
+export const revokeConnection = (c: Connection, token?: string, f: typeof fetch = fetch) =>
+  connectorCall(c, "/api/agents/connector/revoke", { method: "POST" }, token, f).catch(() => undefined);

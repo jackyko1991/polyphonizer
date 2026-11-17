@@ -197,7 +197,7 @@ score = together(flute, cello, title="Duet", bpm=80)`}
             ]}
           />
           <p className="flex flex-wrap gap-4">
-            <SiteLink to={["agents", "skills"]} label={["Agent skill", "代理 Skill"]} />
+            <SiteLink to={["agents", "mcp"]} label={["Your own agent, by MCP", "透過 MCP 使用你自己的代理"]} />
             <SiteLink to={["agents", "roadmap"]} label={["Product roadmap", "產品路線圖"]} />
           </p>
         </Callout>
