@@ -30,3 +30,22 @@ test("reduced motion: step from onset to onset", () => {
   assert.equal(cursorAt(table, 500, false)!.x, 96);
   assert.equal(cursorAt(table, 1000, false)!.x, 300);
 });
+
+test("a repeat: the notes played the second time are the drawn ones (the cursor and lit notes follow the repeat)", async () => {
+  const { drawnId } = await import("../src/engine/engrave.ts");
+  assert.equal(drawnId("cjxj6ul-rend2"), "cjxj6ul");
+  assert.equal(drawnId("cjxj6ul-rend12"), "cjxj6ul");
+  assert.equal(drawnId("n-render"), "n-render");
+  // Verovio plays bar 1 twice (12 onsets for 8 notes); every onset's note, renamed, is one in the drawing
+  const createVerovioModule = (await import("verovio/wasm")).default;
+  const { VerovioToolkit } = await import("verovio/esm");
+  const { readFileSync } = await import("node:fs");
+  const tk = new VerovioToolkit(await createVerovioModule());
+  tk.loadData(readFileSync(new URL("./fixtures/repeat.musicxml", import.meta.url), "utf8"));
+  const svg = tk.renderToSVG(1);
+  const ons = (tk.renderToTimemap() as { tstamp: number; on?: string[] }[]).filter((e) => e.on?.length);
+  assert.equal(ons.length, 12);
+  for (const e of ons) for (const id of e.on!) assert.ok(svg.includes(`id="${drawnId(id)}"`), id);
+  // and the repeated bar starts where the first did
+  assert.equal(drawnId(ons[4].on![0]), ons[0].on![0]);
+});

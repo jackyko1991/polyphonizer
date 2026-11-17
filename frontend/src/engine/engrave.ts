@@ -104,13 +104,18 @@ function staffOfNotes(t: VerovioToolkit): Map<string, number> {
 /** Verovio's SVG names elements in <title> tags, which browsers show as "title" tooltips: drop them */
 export const untitled = (svg: string) => svg.replace(/<title\b[^>]*>[^<]*<\/title>/g, "");
 
+/** the drawn note a sound belongs to: Verovio plays a repeated passage again under ids "<id>-rend2", "-rend3" …, which
+ * the drawing doesn't have (so the cursor and the lit notes would skip the repeat) */
+export const drawnId = (id: string) => id.replace(/-rend\d+$/, "");
+
 function timeline(t: VerovioToolkit): Sound[] {
   const staffOf = staffOfNotes(t);
   const out: Sound[] = [];
   for (const ev of t.renderToTimemap() as { on?: string[] }[]) {
     for (const id of ev.on ?? []) {
       const v = t.getMIDIValuesForElement(id) as { pitch: number; time: number; duration: number };
-      if (v && v.pitch > 0) out.push({ id, pitch: v.pitch, time: v.time, duration: v.duration, staff: staffOf.get(id) ?? 0 });
+      // (a repeat's second time names its notes "<id>-rend2": the drawn note is the one without the suffix)
+      if (v && v.pitch > 0) out.push({ id: drawnId(id), pitch: v.pitch, time: v.time, duration: v.duration, staff: staffOf.get(drawnId(id)) ?? 0 });
     }
   }
   return out;
