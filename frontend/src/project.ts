@@ -16,6 +16,14 @@ export interface Project {
   /** by sheet: "full" or "part:<name>" */
   /** page layouts kept per browser by earlier versions; the page setup now lives in the code (pages(...)) */
   layouts: Record<string, unknown>;
+  /** files kept with the score, in the learner's folders (materials.ts; their bytes in materialStore.ts) */
+  materials?: import("./materials.ts").Material[];
+  /** folders made, even while empty */
+  folders?: string[];
+  /** the licence the score is shared under, and who holds it, written into its exports (licences.ts); unset: the
+   * learner's default */
+  licence?: string;
+  holder?: string;
 }
 
 const KEY = "polyphonizer.project";
@@ -69,15 +77,15 @@ function crc32(b: Uint8Array): number {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-/** a .zip holding these files, uncompressed */
-export function zip(files: ProjectFile[]): Uint8Array {
+/** a .zip holding these files, uncompressed: text (code) or bytes (data); names may hold folders ("sources/a.pdf") */
+export function zip(files: ({ name: string; code: string } | { name: string; data: Uint8Array })[]): Uint8Array {
   const enc = new TextEncoder();
   const local: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
   for (const f of files) {
     const name = enc.encode(f.name);
-    const data = enc.encode(f.code);
+    const data = "data" in f ? f.data : enc.encode(f.code);
     const crc = crc32(data);
     const head = new DataView(new ArrayBuffer(30));
     head.setUint32(0, 0x04034b50, true);

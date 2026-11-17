@@ -3,10 +3,10 @@
  * community quota, with rename, export and delete); Samples; Recently opened; and a way to the Library. Arrow keys
  * move through it, Enter opens, ← / → fold and unfold.
  */
-import { AudioLines, ChevronRight, Download, Music, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { AudioLines, ChevronRight, Download, FolderPlus, Music, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { EXAMPLES } from "./examples.ts";
 import type { Recent } from "./project.ts";
 import { fill } from "./strings.ts";
@@ -26,7 +26,10 @@ export default function ScoreTree({
   onImport,
   onTranscribe,
   onRename,
-  onExport,
+  exportMenu,
+  onExportZip,
+  onNewFolder,
+  materials,
   onDelete,
 }: {
   ws: Workspace;
@@ -38,8 +41,14 @@ export default function ScoreTree({
   /** a PDF, photo, recording or video into notes */
   onTranscribe: () => void;
   onRename: (name: string) => void;
-  /** "py": the code (.py or .zip); "musicxml" / "midi" when the score has been compiled */
-  onExport: (format: "py" | "musicxml" | "midi") => void;
+  /** the same Export menu as the score panel's (ExportMenu), for the own score */
+  exportMenu: ReactNode;
+  /** the whole project as a .zip (before deleting it) */
+  onExportZip: () => void;
+  /** a new folder in the open project's files */
+  onNewFolder: () => void;
+  /** the files kept with the open project, shown under it */
+  materials: ReactNode;
   onDelete: () => void;
 }) {
   const { t, pick } = useLang();
@@ -51,7 +60,8 @@ export default function ScoreTree({
     }
   });
   const [renaming, setRenaming] = useState(false);
-  const [menu, setMenu] = useState<"export" | "delete" | null>(null);
+  const [folded, setFolded] = useState<Set<string>>(new Set());
+  const [menu, setMenu] = useState<"delete" | null>(null);
   const tree = useRef<HTMLUListElement>(null);
   const toggle = (g: string) =>
     setOpen((o) => {
@@ -89,34 +99,69 @@ export default function ScoreTree({
 
   const row = (p: TreePick, label: string, title?: string) => (
     <li role="none">
+      {rowButton(p, label, title)}
+      {/* the open project's files, under it */}
+      {p.kind !== "own" && unfolded(p) && materials}
+    </li>
+  );
+  // each project folds: its files show under it while it is open and unfolded (unfolding another opens it)
+  const keyOf = (p: TreePick) => (p.kind === "example" ? `ex:${p.id}` : p.kind === "recent" ? `recent:${recents[p.index]?.label}` : p.kind);
+  const unfolded = (p: TreePick) => isCurrent(p) && !folded.has(keyOf(p));
+  const fold = (p: TreePick) => {
+    const k = keyOf(p);
+    if (!isCurrent(p)) {
+      onPick(p);
+      return setFolded((f) => new Set([...f].filter((x) => x !== k)));
+    }
+    setFolded((f) => {
+      const next = new Set(f);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  };
+  const rowButton = (p: TreePick, label: string, title?: string) => (
+    <div className="flex items-center">
+      <button
+        onClick={() => fold(p)}
+        aria-label={t(unfolded(p) ? "tree.fold" : "tree.unfold")}
+        aria-expanded={unfolded(p)}
+        className="inline-flex h-6 w-5 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-200"
+        data-testid="project-fold"
+      >
+        <Icon icon={ChevronRight} className={`h-3 w-3 transition-transform ${unfolded(p) ? "rotate-90" : ""}`} />
+      </button>
       <button
         role="treeitem"
         aria-selected={isCurrent(p)}
         data-tree-item
         onClick={() => onPick(p)}
         title={title ?? label}
-        className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm ${isCurrent(p) ? "bg-rose-50 font-medium text-(--lk-accent)" : "text-gray-700 hover:bg-gray-100"}`}
+        className={`flex min-w-0 flex-1 items-center gap-1.5 rounded px-1.5 py-1 text-left text-sm ${isCurrent(p) ? "bg-rose-50 font-medium text-(--lk-accent)" : "text-gray-700 hover:bg-gray-100"}`}
       >
         <span aria-hidden className="text-gray-400">
           <Icon icon={Music} className="h-3.5 w-3.5" />
         </span>
         <span className="min-w-0 flex-1 truncate">{label}</span>
       </button>
-    </li>
+    </div>
   );
-  const group = (id: string, label: string, children: React.ReactNode) => (
+  const group = (id: string, label: string, children: ReactNode, extra?: ReactNode) => (
     <li role="none">
+      <div className="flex items-center">
       <button
         role="treeitem"
         aria-expanded={!!open[id]}
         data-tree-item
         data-group={id}
         onClick={() => toggle(id)}
-        className="flex w-full items-center gap-1 rounded px-1 py-1 text-left text-xs font-semibold tracking-wide text-gray-500 uppercase hover:bg-gray-100"
+        className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-1 text-left text-xs font-semibold tracking-wide text-gray-500 uppercase hover:bg-gray-100"
       >
         <Icon icon={ChevronRight} className={`h-3.5 w-3.5 transition-transform ${open[id] ? "rotate-90" : ""}`} />
         {label}
       </button>
+      {extra}
+      </div>
       {open[id] && (
         <ul role="group" className="ml-2 border-l border-gray-200 pl-1">
           {children}
@@ -161,40 +206,23 @@ export default function ScoreTree({
                 />
               ) : (
                 <div className="group flex items-center">
-                  <div className="min-w-0 flex-1">{row({ kind: "own" }, ownName)}</div>
+                  <div className="min-w-0 flex-1">{rowButton({ kind: "own" }, ownName)}</div>
                   <span className="flex shrink-0 items-center text-xs text-gray-500">
                     <button onClick={() => setRenaming(true)} title={t("tree.rename")} aria-label={t("tree.rename")} className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-gray-200" data-testid="tree-rename">
                       <Icon icon={Pencil} />
                     </button>
-                    <button onClick={() => setMenu(menu === "export" ? null : "export")} title={t("ws.export")} aria-label={t("ws.export")} className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-gray-200">
-                      <Icon icon={Download} />
-                    </button>
+                    {exportMenu}
                     <button onClick={() => setMenu(menu === "delete" ? null : "delete")} title={t("ws.delete")} aria-label={t("ws.delete")} className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-gray-200" data-testid="tree-delete">
                       <Icon icon={Trash2} />
                     </button>
                   </span>
                 </div>
               )}
-              {menu === "export" && (
-                <div className="mt-1 space-y-0.5 rounded-md border border-gray-200 bg-white p-1 text-sm shadow-sm">
-                  {(["py", "musicxml", "midi"] as const).map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => (onExport(f), setMenu(null))}
-                      disabled={f !== "py" && cur.kind !== "own"}
-                      title={f !== "py" && cur.kind !== "own" ? t("tree.openFirst") : undefined}
-                      className="block w-full rounded px-2 py-1 text-left hover:bg-gray-100 disabled:opacity-40"
-                    >
-                      {t(`tree.export.${f}`)}
-                    </button>
-                  ))}
-                </div>
-              )}
               {menu === "delete" && (
                 <div className="mt-1 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-900" role="alertdialog" data-testid="tree-delete-confirm">
                   <p>{fill(t("tree.deleteAsk"), { name: ownName })}</p>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    <button onClick={() => onExport("py")} className="rounded border border-red-200 bg-white px-2 py-0.5 hover:bg-red-100">
+                    <button onClick={onExportZip} className="rounded border border-red-200 bg-white px-2 py-0.5 hover:bg-red-100">
                       <Icon icon={Download} className="inline h-3.5 w-3.5" /> {t("tree.exportFirst")}
                     </button>
                     <button onClick={() => (onDelete(), setMenu(null))} className="rounded bg-red-700 px-2 py-0.5 text-white hover:bg-red-800" data-testid="tree-delete-yes">
@@ -206,12 +234,22 @@ export default function ScoreTree({
                   </div>
                 </div>
               )}
+              {unfolded({ kind: "own" }) && materials}
             </li>
           ) : (
             <li role="none" className="px-2 py-1 text-xs text-gray-400">
               {t("tree.noneYet")}
             </li>
           ),
+          // a new project, and a folder for the open project's files, beside My scores
+          <span className="flex shrink-0 items-center text-gray-500">
+            <button onClick={onNew} title={t("tree.newProject")} aria-label={t("tree.newProject")} className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-gray-200" data-testid="tree-new-project">
+              <Icon icon={Plus} />
+            </button>
+            <button onClick={onNewFolder} title={t("tree.newFolder")} aria-label={t("tree.newFolder")} className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-gray-200" data-testid="tree-new-folder">
+              <Icon icon={FolderPlus} />
+            </button>
+          </span>,
         )}
         {group(
           "samples",

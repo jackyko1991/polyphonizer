@@ -4,11 +4,11 @@
  * sound), sound, edit notes, and, with pages, edit line and page breaks (click a bar) and the page turns planned
  * around them; the Page setup dialog; export; full screen (a page reader with pages).
  */
-import { ChevronDown, ChevronLeft, ChevronRight, Download, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, Printer, RotateCcw, Square, X, ZoomIn } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, Printer, RotateCcw, Square, X, ZoomIn } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { engravePages, engraveScroll, midiFile, timelineOf, type Engraving } from "./engine/engrave.ts";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { engravePages, engraveScroll, timelineOf, type Engraving } from "./engine/engrave.ts";
 import { barIndices, barNumbers, FIT, isFit, PAPERS, SCREENS, screenPaper, UNSET_SETUP, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
 import { play, stop } from "./engine/player.ts";
 import type { ScoreData } from "./engine/types.ts";
@@ -19,11 +19,7 @@ import { RANGE, setStage, useStage } from "./progress.ts";
 import SoundPanel from "./SoundPanel.tsx";
 import { BUTTON, BUTTON_ON, CHECK, FIELD, layoutWidth } from "./ui.ts";
 import { fill } from "./strings.ts";
-import { lilypondText } from "./engine/python.ts";
-import { SITE_IDS, SITES, type ShareFile, type SiteId } from "./share/sites.ts";
-
-// Export ▸ For a library: loads when first opened
-const ShareDialog = lazy(() => import("./share/ShareDialog.tsx"));
+import { printPages } from "./exporting.ts";
 
 
 
@@ -36,10 +32,10 @@ export interface ScoreViewProps {
   allParts?: string[];
   /** the full score while one part is shown: for playing the other parts along */
   fullScore?: ScoreData | null;
-  /** Export ▸ Code (the editor's project files) */
-  onExportCode?: () => void;
-  /** the score's code, for Export ▸ For a library (an OpenScore original and the bars changed) */
-  shareCode?: () => string;
+  /** the Export menu (the editor's, ExportMenu: the same as My scores'), shown above the sheet */
+  exportMenu?: ReactNode;
+  /** Print: the editor's (with the score's licence under the first page); else the pages as shown */
+  onPrint?: () => Promise<void>;
   /** this sheet's page setup (the score's pages(...) call) and how to change it (the editor rewrites the call) */
   setup?: PageSetup;
   onSetup?: (s: PageSetup) => void;
@@ -50,34 +46,6 @@ export interface ScoreViewProps {
   onNoteClick?: (note: { part: string; partIndex: number; bar: number; index: number }) => void;
   /** offer the Pages view (the editor does; Learn does not) */
   pagesView?: boolean;
-}
-
-function download(name: string, data: BlobPart, type: string) {
-  const url = URL.createObjectURL(new Blob([data], { type }));
-  const a = Object.assign(document.createElement("a"), { href: url, download: name });
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function printPages(pages: string[], title: string, numbers = true, size: [number, number] = [210, 297]) {
-  const w = window.open("", "_blank");
-  if (!w) return;
-  w.document.title = title || "Polyphonizer";
-  const style = w.document.createElement("style");
-  style.textContent =
-    `@page{size:${size[0]}mm ${size[1]}mm;margin:0}body{margin:0}div{position:relative;width:${size[0]}mm;height:${size[1]}mm;page-break-after:always;display:flex}svg{width:100%;height:100%}span{position:absolute;bottom:2.5%;width:100%;text-align:center;font:10pt sans-serif;color:#555}`;
-  w.document.head.appendChild(style);
-  pages.forEach((svg, i) => {
-    const div = w.document.createElement("div");
-    div.innerHTML = svg; // Verovio's own SVG output
-    if (numbers && pages.length > 1) {
-      const n = w.document.createElement("span");
-      n.textContent = String(i + 1);
-      div.appendChild(n);
-    }
-    w.document.body.appendChild(div);
-  });
-  setTimeout(() => w.print(), 300);
 }
 
 /** how big the pages are drawn (paper sizes, not Continuous): one page as wide as the panel, read down (the default), side by side,
@@ -106,8 +74,8 @@ export default function ScoreView({
   onPart,
   allParts,
   fullScore,
-  onExportCode,
-  shareCode,
+  exportMenu,
+  onPrint,
   pagesView = true,
   setup,
   onSetup,
@@ -133,7 +101,6 @@ export default function ScoreView({
   const [err, setErr] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [full, setFull] = useState(false);
-  const [share, setShare] = useState<SiteId | null>(null);
   // the page setup: from the score's code (editor), or kept here (Learn, which has no Pages view)
   const [localSetup, setLocalSetup] = useState<PageSetup>(UNSET_SETUP);
   const cur = setup ?? localSetup;
@@ -159,7 +126,6 @@ export default function ScoreView({
     );
   const onLayout = (l: { barsPerLine: number; lineBreaks: number[]; pageBreaks: number[] }) =>
     update({ ...cur, bars_per_line: l.barsPerLine, line_breaks: barNumbers(l.lineBreaks, measures), page_breaks: barNumbers(l.pageBreaks, measures) });
-  const [menu, setMenu] = useState(false);
   const [soundOpen, setSoundOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [noteEdit, setNoteEdit] = useState(false);
@@ -207,7 +173,8 @@ export default function ScoreView({
           ? `${Math.round((cur.width_mm * MM * zoom) / 100)}px`
           : null;
   // print or save as PDF: the pages as laid out (Continuous prints on A4)
-  const print = async () => score && printPages((await engravePages(score, cur)).pages, score.title, cur.page_numbers, [cur.width_mm, cur.height_mm]);
+  const print = async () =>
+    onPrint ? onPrint() : score && printPages((await engravePages(score, cur)).pages, score.title, { numbers: cur.page_numbers, size: [cur.width_mm, cur.height_mm] });
 
   useEffect(() => {
     const el = box.current;
@@ -540,7 +507,6 @@ export default function ScoreView({
     el?.classList.add("pz-start");
     return () => el?.classList.remove("pz-start");
   }, [startId, eng]);
-  const name = (score?.title || "score").replace(/[^\w-]+/g, "_");
   const small = `${BUTTON} shadow-sm`;
   const btn = BUTTON;
 
@@ -779,52 +745,7 @@ export default function ScoreView({
               <Icon icon={ChevronDown} className="pointer-events-none absolute right-2 h-3.5 w-3.5" />
             </label>
           )}
-          {onExportCode !== undefined && (
-            <div className="relative">
-              <button onClick={() => setMenu((m) => !m)} disabled={!score} className={small} aria-expanded={menu}>
-                <Icon icon={Download} /> {t("export")} <Icon icon={ChevronDown} className="h-3.5 w-3.5" />
-              </button>
-              {menu && score && (
-                <div
-                  className="absolute right-0 z-20 mt-1 flex w-72 flex-col rounded-lg border border-gray-200 bg-white p-1 text-sm shadow-lg"
-                  onMouseLeave={() => setMenu(false)}
-                >
-                  {[
-                    ["export.musicxml", () => download(`${name}.musicxml`, score.musicxml, "application/vnd.recordare.musicxml+xml")],
-                    ["export.midi", async () => download(`${name}.mid`, (await midiFile()) as BlobPart, "audio/midi")],
-                    ["export.print", print],
-                    ["export.code", onExportCode],
-                  ].map(([k, f]) => (
-                    <button
-                      key={k as string}
-                      onClick={() => (setMenu(false), void (f as () => unknown)())}
-                      className="rounded-md px-3 py-2 text-left hover:bg-gray-100"
-                    >
-                      {t(k as string)}
-                    </button>
-                  ))}
-                  {shareCode && (
-                    <>
-                      {/* the files a library wants, its rules, and where its upload page is */}
-                      <p className="mt-1 border-t border-gray-100 px-3 pt-2 pb-1 text-xs font-semibold text-gray-500">{t("export.forLibrary")}</p>
-                      <div className="flex flex-wrap gap-1 px-2 pb-1" data-testid="export-sites">
-                        {SITE_IDS.map((id) => (
-                          <button
-                            key={id}
-                            onClick={() => (setMenu(false), setShare(id))}
-                            className="rounded-md border border-gray-200 px-2 py-1 text-xs hover:border-(--lk-accent) hover:text-(--lk-accent)"
-                            data-testid={`export-site-${id}`}
-                          >
-                            {SITES[id].name[0].replace(/ \(.*\)$/, "")}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          {exportMenu}
           <button
             onClick={toggleFull}
             className={small}
@@ -836,22 +757,6 @@ export default function ScoreView({
             <Icon icon={full ? Minimize2 : Maximize2} />
           </button>
         </div>
-        {share && score && shareCode && (
-          <Suspense fallback={null}>
-            <ShareDialog
-              site={share}
-              score={score}
-              code={shareCode()}
-              onFile={async (kind: ShareFile, header?: Record<string, string>) => {
-                if (kind === "musicxml") download(`${name}.musicxml`, score.musicxml, "application/vnd.recordare.musicxml+xml");
-                else if (kind === "midi") download(`${name}.mid`, (await midiFile()) as BlobPart, "audio/midi");
-                else if (kind === "pdf") await print();
-                else download(`${name}.ly`, await lilypondText(header ?? {}), "text/x-lilypond");
-              }}
-              onClose={() => setShare(null)}
-            />
-          </Suspense>
-        )}
         {showCursor && cursorShown && (
           <div
             ref={cursorEl}

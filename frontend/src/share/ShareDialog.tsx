@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "../Button.tsx";
 import type { ScoreData } from "../engine/types.ts";
 import { BUTTON, FIELD, PRIMARY } from "../ui.ts";
+import { licenceOf, type Rights } from "../licences.ts";
 import { correctionIssueUrl, metadataOf, mutopiaComposerId, openScoreOf, SITES, type ShareFile, type SiteId } from "./sites.ts";
 
 export interface ShareDialogProps {
@@ -16,17 +17,32 @@ export interface ShareDialogProps {
   score: ScoreData;
   /** the score's code (finds an OpenScore original read with fetch_score) */
   code: string;
+  /** the score's licence: Mutopia's licence field and maintainer come from it */
+  rights?: Rights | null;
   /** download one of the score's files (MusicXML, MIDI, PDF, LilyPond with these header fields) */
   onFile: (kind: ShareFile, header?: Record<string, string>) => Promise<void>;
   onClose: () => void;
 }
 
-export default function ShareDialog({ site: id, score, code, onFile, onClose }: ShareDialogProps) {
+export default function ShareDialog({ site: id, score, code, rights, onFile, onClose }: ShareDialogProps) {
   const { pick } = useLang();
   const site = SITES[id];
   const meta = metadataOf(score.musicxml);
   const [fields, setFields] = useState<Record<string, string>>(() =>
-    Object.fromEntries((site.fields ?? []).map((f) => [f.key, f.from === "title" ? score.title || meta.title : f.from === "composer" ? meta.composer : (f.value ?? "")])),
+    Object.fromEntries(
+      (site.fields ?? []).map((f) => [
+        f.key,
+        f.from === "title"
+          ? score.title || meta.title
+          : f.from === "composer"
+            ? meta.composer
+            : f.key === "license"
+              ? (licenceOf(rights?.licence)?.mutopia ?? "")
+              : f.key === "maintainer"
+                ? (rights?.holder ?? "")
+                : (f.value ?? ""),
+      ]),
+    ),
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);

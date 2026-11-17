@@ -36,12 +36,22 @@ import {
 import { locateNote, type CodeSpot } from "./codeLocate.ts";
 import ScoreTree, { type TreePick } from "./ScoreTree.tsx";
 import ScoreView from "./ScoreView.tsx";
-import { midiFile } from "./engine/engrave.ts";
+import { engravePages, midiFile } from "./engine/engrave.ts";
+import ExportMenu, { type ExportActions } from "./ExportMenu.tsx";
+import MaterialsTree, { type MaterialActions, type Upload } from "./MaterialsTree.tsx";
+import { addFolder, addMaterial, allFolders, baseName, idsIn, moveItem, removeItem, renameItem, treeOf, type Material } from "./materials.ts";
+import { getBlob, newId, putBlob, readWithProgress, sweep } from "./materialStore.ts";
+import { download, fileStem, musicxmlOf, printPages, projectEntries } from "./exporting.ts";
+import { licenceOf, loadDefaultRights, rightsFor, rightsLine, saveDefaultRights, type Rights } from "./licences.ts";
+import { lilypondText } from "./engine/python.ts";
+import type { ShareFile, SiteId } from "./share/sites.ts";
 import { fill } from "./strings.ts";
 import { fileKind, importCode, type FileKind } from "./library/elsewhere.ts";
 import { jobKind } from "./transcribe/routes.ts";
 
 const TranscribeDialog = lazy(() => import("./transcribe/TranscribeDialog.tsx"));
+const ShareDialog = lazy(() => import("./share/ShareDialog.tsx"));
+const LicenceDialog = lazy(() => import("./LicenceDialog.tsx"));
 import { BUTTON, FIELD, PRIMARY } from "./ui.ts";
 
 const FILES_KEY = "polyphonizer.editor.files";
@@ -292,29 +302,53 @@ export default function EditorPage() {
     const ex = EXAMPLES.find((x) => x.id === p.id);
     if (ex) openSampleScore(`ex:${ex.id}`, ex.title[0], ex.code);
   };
-  /** export the own score: its code, or (when it is the one open and compiled) MusicXML / MIDI */
-  const exportOwn = async (format: "py" | "musicxml" | "midi") => {
-    const own = wsRef.current.own;
-    if (!own) return;
-    const name = wsRef.current.ownLabel || "my-score";
-    if (format === "py") return exportProject(own, name);
-    if (wsRef.current.current.kind !== "own" || !score) return;
-    const file = name.replace(/[^\w-]+/g, "_");
-    if (format === "musicxml") download(`${file}.musicxml`, score.musicxml, "application/vnd.recordare.musicxml+xml");
-    else download(`${file}.mid`, (await midiFile()) as BlobPart, "audio/midi");
-  };
   const isSample = ws.current.kind === "sample";
   const sample = ws.current.kind === "sample" ? ws.samples[ws.current.key] : null;
 
   // a file that is not a score (a PDF, a recording, anything else): what to do with it instead
   const [importNote, setImportNote] = useState<{ name: string; kind: FileKind; file?: File } | null>(null);
-  // a file being dragged over the editor
-  const [dropping, setDropping] = useState(false);
   // the Transcribe dialog, with the file that brought it up (if any)
   const [transcribe, setTranscribe] = useState<{ file: File | null } | null>(null);
+  /** keep a file's bytes in this browser; the material to list (in a project's files) */
+  // files being added: shown in their folder with a progress circle until they are stored
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const keep = async (f: File | Blob, name: string, onProgress?: (done: number) => void): Promise<Omit<Material, "path"> & { name: string }> => {
+    const id = newId();
+    // read it (the progress a learner sees), then store it in this browser
+    const bytes = await readWithProgress(f, (x) => onProgress?.(x * 0.9));
+    await putBlob(id, new Blob([bytes], { type: f.type }));
+    onProgress?.(1);
+    return { id, name, type: f.type || "application/octet-stream", size: f.size, added: Date.now() };
+  };
+  /** files from the computer into the open project's files (a folder of them, "" = the top), each listed once stored */
+  const keepFiles = async (files: File[], folder = "") => {
+    setUploadError(null);
+    const batch = files.map((f) => ({ key: newId(), folder, name: f.name, done: 0 }));
+    setUploads((u) => [...u, ...batch]);
+    await Promise.all(
+      files.map(async (f, i) => {
+        const key = batch[i].key;
+        try {
+          const m = await keep(f, f.name, (done) => setUploads((u) => u.map((x) => (x.key === key ? { ...x, done } : x))));
+          const p = addMaterial(projectRef.current, m, folder);
+          projectRef.current = p;
+          setProject(p);
+        } catch (e) {
+          setUploadError(`${f.name}: ${(e as Error)?.message ?? e}`);
+        } finally {
+          setUploads((u) => u.filter((x) => x.key !== key));
+        }
+      }),
+    );
+  };
   const onFile = async (f: File) => {
     const kind = fileKind(f.name, f.type);
-    if (kind !== "score") return setImportNote({ name: f.name, kind, file: jobKind(f.name, f.type) ? f : undefined });
+    // a PDF, a recording, anything not a score: kept with the open score, and what it can become
+    if (kind !== "score") {
+      await keepFiles([f]);
+      return setImportNote({ name: f.name, kind, file: jobKind(f.name, f.type) ? f : undefined });
+    }
     setImportNote(null);
     const bytes = new Uint8Array(await f.arrayBuffer());
     const name = f.name.replace(/[^\w.\- ]+/g, "_");
@@ -322,8 +356,9 @@ export default function EditorPage() {
     if (bytes.length < 3_000_000) write(FILES_KEY, JSON.stringify({ ...savedFiles(), [name]: toB64(bytes) }));
     const code = importCode(name);
     addRecent({ label: name, code });
-    // an imported file becomes the visitor's own score
-    makeOwn((replace) => setOwn(wsRef.current, freshProject(code), name, replace), "import");
+    // an imported file becomes the visitor's own score, the file kept with it
+    const fresh = addMaterial(freshProject(code), await keep(f, name));
+    makeOwn((replace) => setOwn(wsRef.current, fresh, name, replace), "import");
   };
 
   // project files
@@ -340,12 +375,12 @@ export default function EditorPage() {
   };
   const remove = (name: string) =>
     setProject((p) => ({ ...p, active: p.active === name ? MAIN : p.active, files: p.files.filter((f) => f.name !== name) }));
-  const exportProject = (p: Project, name: string) => {
-    const title = (name || "score").replace(/[^\w-]+/g, "_");
+  const exportCode = () => {
+    const p = projectRef.current;
+    const title = fileStem(projectTitle());
     if (p.files.length === 1) download(`${title}.py`, p.files[0].code, "text/x-python");
     else download(`${title}.zip`, zip(p.files) as BlobPart, "application/zip");
   };
-  const exportCode = () => exportProject(project, score?.title || "score");
 
   /** write (or rewrite) the edit_bar line for this part and bar in main.py, then run */
   const editBar = (partName: string, bar: number, text: string) => {
@@ -400,41 +435,143 @@ export default function EditorPage() {
     void run();
   };
 
+  // ── export, the same from the score panel and from My scores (ExportMenu, exporting.ts) ──
+  const [defaultRights, setDefaultRights] = useState<Rights | null>(loadDefaultRights);
+  const rights = rightsFor(project, defaultRights);
+  const [licenceOpen, setLicenceOpen] = useState(false);
+  const [share, setShare] = useState<SiteId | null>(null);
+  /** the sheet on show (the full score, or one player's part) */
+  const shown = part !== null ? sheet : score;
+  const projectTitle = () => (wsRef.current.current.kind === "own" ? wsRef.current.ownLabel : "") || score?.title || "score";
+  const bytesOf = async (id: string) => {
+    const b = await getBlob(id).catch(() => undefined);
+    return b ? new Uint8Array(await b.arrayBuffer()) : null;
+  };
+  /** a project as a .zip; the score's files only when they were compiled from it as it is */
+  const zipProject = async (p: Project, title: string) => {
+    const compiled = score && lastRun === JSON.stringify(p.files) ? score : null;
+    const entries = await projectEntries(p, { title, score: compiled, midi: compiled ? await midiFile().catch(() => null) : null, rights: rightsFor(p, defaultRights), bytes: bytesOf });
+    download(`${fileStem(title)}.zip`, zip(entries) as BlobPart, "application/zip");
+  };
+  /** the own score as a .zip, open or not (before it is replaced or deleted) */
+  const zipOwn = () => ws.own && void zipProject(ws.own, ws.ownLabel || "my-score");
+  const printShown = async () => {
+    if (!shown) return;
+    printPages((await engravePages(shown, setup)).pages, shown.title, {
+      numbers: setup.page_numbers,
+      size: [setup.width_mm, setup.height_mm],
+      footer: rights ? rightsLine(rights) : "",
+    });
+  };
+  const exportActions: ExportActions = {
+    ready: !!shown,
+    musicxml: () => shown && download(`${fileStem(shown.title)}.musicxml`, musicxmlOf(shown, rights), "application/vnd.recordare.musicxml+xml"),
+    midi: async () => {
+      if (shown) download(`${fileStem(shown.title)}.mid`, (await midiFile()) as BlobPart, "audio/midi");
+    },
+    print: printShown,
+    zip: () => zipProject(projectRef.current, projectTitle()),
+    code: exportCode,
+    licence: () => setLicenceOpen(true),
+    licenceName: rights ? (licenceOf(rights.licence)?.name[0].replace(/ \(.*\)$/, "") ?? "") : "",
+    site: (id) => setShare(id),
+  };
+  const shareFile = async (kind: ShareFile, header?: Record<string, string>) => {
+    if (!shown) return;
+    const stem = fileStem(shown.title);
+    if (kind === "musicxml") exportActions.musicxml();
+    else if (kind === "midi") await exportActions.midi();
+    else if (kind === "pdf") await printShown();
+    else download(`${stem}.ly`, await lilypondText({ ...(header ?? {}), ...(rights ? { copyright: rightsLine(rights) } : {}) }), "text/x-lilypond");
+  };
+
+  // ── the open project's files (materials.ts), under it in the score explorer ──
+  // bytes no project lists any more (a deleted score, a removed file) are cleared once the editor opens
+  useEffect(() => {
+    const w = wsRef.current;
+    void sweep(idsIn([w.own, w.ownSaved?.project, ...Object.values(w.samples).map((x) => x.project)])).catch(() => 0);
+  }, []);
+  const [newFolderAt, setNewFolderAt] = useState<string | null>(null);
+  const materialActions: MaterialActions = {
+    open: async (m) => {
+      const b = await getBlob(m.id).catch(() => undefined);
+      if (!b) return;
+      const kind = fileKind(m.path, m.type);
+      if (kind === "score") return void onFile(new File([b], baseName(m.path), { type: m.type }));
+      const url = URL.createObjectURL(b);
+      window.open(url, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+    download: async (m) => {
+      const b = await getBlob(m.id).catch(() => undefined);
+      if (b) download(baseName(m.path), b, m.type);
+    },
+    transcribe: async (m) => {
+      const b = await getBlob(m.id).catch(() => undefined);
+      if (b) setTranscribe({ file: new File([b], baseName(m.path), { type: m.type }) });
+    },
+    rename: (path, name) => setProject((p) => renameItem(p, path, name)),
+    move: (path, folder) => setProject((p) => moveItem(p, path, folder)),
+    remove: (path) => {
+      setProject((p) => removeItem(p, path).project);
+      const w = wsRef.current;
+      void sweep(idsIn([w.own, w.ownSaved?.project, ...Object.values(w.samples).map((x) => x.project)])).catch(() => 0);
+    },
+    add: (files, folder) => void keepFiles(files, folder),
+    pick: (folder) => {
+      addInto.current = folder;
+      attachInput.current?.click();
+    },
+  };
+  // Add files: the file picker, into the folder it was asked from
+  const attachInput = useRef<HTMLInputElement>(null);
+  const addInto = useRef("");
+  const newFolder = () => {
+    const { project: p, path } = addFolder(projectRef.current, t("tree.newFolderName"));
+    projectRef.current = p;
+    setProject(p);
+    setNewFolderAt(path);
+  };
+  const materialsTree = <MaterialsTree uploads={uploads} error={uploadError} nodes={treeOf(project)} folders={allFolders(project)} actions={materialActions} startRename={newFolderAt} onRenameStarted={() => setNewFolderAt(null)} />;
+
   const errorHere = error && (error.file ?? MAIN) === active.name ? error.line : null;
   return (
     <div
       className="relative flex h-[calc(100dvh-var(--pz-dock,0px)-8.75rem)] min-h-[24rem] flex-col lg:grid lg:h-full lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
       data-testid="editor-page"
-      // a score file dropped anywhere on the editor opens like Open file
-      onDragOver={(e) => {
-        if (![...e.dataTransfer.types].includes("Files")) return;
-        e.preventDefault();
-        setDropping(true);
-      }}
-      onDragLeave={(e) => e.currentTarget.contains(e.relatedTarget as Node) || setDropping(false)}
-      onDrop={(e) => {
-        const f = e.dataTransfer.files[0];
-        setDropping(false);
-        if (!f) return;
-        e.preventDefault();
-        void onFile(f);
-      }}
     >
-      {dropping && (
-        <div className="pointer-events-none absolute inset-2 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-(--lk-accent) bg-rose-50/80 text-center text-sm font-medium text-rose-900" data-testid="drop-zone">
-          {t("import.drop")}
-        </div>
-      )}
       {transcribe && (
         <Suspense fallback={null}>
           <TranscribeDialog file={transcribe.file} onDone={(f) => void onFile(f)} onClose={() => setTranscribe(null)} />
+        </Suspense>
+      )}
+      {share && shown && (
+        <Suspense fallback={null}>
+          <ShareDialog site={share} score={shown} code={projectRef.current.files[0].code} rights={rights} onFile={shareFile} onClose={() => setShare(null)} />
+        </Suspense>
+      )}
+      {licenceOpen && (
+        <Suspense fallback={null}>
+          <LicenceDialog
+            own={{ licence: project.licence, holder: project.holder }}
+            fallback={defaultRights}
+            onSave={(own, makeDefault) => {
+              setProject((p) => ({ ...p, licence: own.licence, holder: own.holder }));
+              if (makeDefault && own.licence) {
+                const d = { licence: own.licence, holder: own.holder ?? "" };
+                saveDefaultRights(d);
+                setDefaultRights(d);
+              }
+            }}
+            onClose={() => setLicenceOpen(false)}
+          />
         </Suspense>
       )}
       {importNote && (
         <div className="absolute top-12 left-1/2 z-40 w-[min(32rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 shadow-lg" role="status" data-testid="import-note">
           <div className="flex items-start gap-2">
             <p className="min-w-0 flex-1">
-              <b className="break-all">{importNote.name}</b>: {t(`import.${importNote.kind}`)}
+              <b className="break-all">{importNote.name}</b>: {t(`import.${importNote.kind}`)} {t("import.kept")}
               {importNote.file && (
                 <button
                   onClick={() => (setTranscribe({ file: importNote.file! }), setImportNote(null))}
@@ -496,11 +633,26 @@ export default function EditorPage() {
               onImport={() => fileInput.current?.click()}
               onTranscribe={() => setTranscribe({ file: null })}
               onRename={(name) => switchName(name)}
-              onExport={exportOwn}
+              exportMenu={<ExportMenu actions={exportActions} variant="icon" align="left" onOpen={() => ws.current.kind !== "own" && pickFromTree({ kind: "own" })} />}
+              onExportZip={zipOwn}
+              onNewFolder={newFolder}
+              materials={materialsTree}
               onDelete={() => switchTo(deleteOwn(wsRef.current))}
             />
           ) : null}
         </div>
+        <input
+          ref={attachInput}
+          type="file"
+          multiple
+          className="hidden"
+          data-testid="attach-input"
+          onChange={(e) => {
+            const files = [...(e.target.files ?? [])];
+            e.target.value = "";
+            if (files.length) void keepFiles(files, addInto.current);
+          }}
+        />
         <input
           ref={fileInput}
           type="file"
@@ -590,7 +742,7 @@ export default function EditorPage() {
               <p>{t("ws.full")}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {ws.own && (
-                  <button onClick={() => exportOwn("py")} className={BUTTON}>
+                  <button onClick={zipOwn} className={BUTTON}>
                     <Icon icon={Download} /> {t("ws.export")}
                   </button>
                 )}
@@ -682,8 +834,8 @@ export default function EditorPage() {
           onPart={choosePart}
           allParts={score?.parts}
           fullScore={part !== null ? score : null}
-          onExportCode={exportCode}
-          shareCode={() => projectRef.current.files[0].code}
+          exportMenu={<ExportMenu actions={exportActions} />}
+          onPrint={printShown}
           setup={setup}
           onSetup={changeSetup}
           barText={barText}
@@ -695,9 +847,3 @@ export default function EditorPage() {
   );
 }
 
-function download(name: string, data: BlobPart, type: string) {
-  const url = URL.createObjectURL(new Blob([data], { type }));
-  const a = Object.assign(document.createElement("a"), { href: url, download: name });
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
