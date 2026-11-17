@@ -1,9 +1,9 @@
 /**
  * AI agent ▸ Agent skill (#/agents/skills) and ▸ MCP server (#/agents/mcp): the visitor's own AI coding agent.
  *
- * Polyphonizer has not published its skill (no SKILL.md, no generated/agent files) and has no local runner or MCP
- * server yet, so these pages say what is planned and give a prompt that works today. When the skill and the runner
- * exist, swap in learnkit's SkillSetup and McpSetup the way Formalizer's agents/Setup.tsx does.
+ * Polyphonizer has not published its skill (no SKILL.md, no generated/agent files), and its runner's MCP tools serve
+ * only the site's own AI panel so far (runner/agent/), so these pages say what is planned and give a prompt that works
+ * today. When the skill and an outside agent's connection exist, swap in learnkit's SkillSetup and McpSetup the way Formalizer's agents/Setup.tsx does.
  */
 import { ShellCommand, TwoLists, useLang } from "@learnkit/web";
 import { Callout, List, P, Page, Section, SiteLink, type L, type SectionInfo } from "../kit";
@@ -258,8 +258,8 @@ export function McpAgent({ section }: { section: string | null }) {
               "它只監聽 `localhost`：你電腦上的代理可以使用，網路上的任何東西都不行。",
             ],
             [
-              "The same runner will later do the heavy jobs a browser cannot, such as reading printed music from a PDF (OMR).",
-              "之後同一個執行器也會處理瀏覽器做不來的重工作，例如從 PDF 辨識印刷樂譜（OMR）。",
+              "The same runner already reads printed music from a PDF (OMR) and runs the AI panel's agent, with a compile tool over MCP.",
+              "同一個執行器已經能從 PDF 辨識印刷樂譜（OMR），並執行 AI 面板的代理，透過 MCP 提供編譯工具。",
             ],
           ]}
         />
@@ -269,18 +269,19 @@ export function McpAgent({ section }: { section: string | null }) {
         <Callout kind="warn" title={["Not available yet", "尚未提供"]}>
           <p>
             {pick([
-              "There is no local runner or MCP server yet. When there is, this section will have the same connection steps as Formalizer's: start the runner with one command, pick your agent, and copy its MCP config.",
-              "目前還沒有本機執行器，也沒有 MCP 伺服器。完成之後，這一節會提供和 Formalizer 相同的連接步驟：用一行指令啟動執行器，選擇你的代理，再複製它的 MCP 設定。",
+              "The runner exists (`pixi run runner`) and its MCP tools already serve the site's AI panel (toolbox ▸ AI agent), but an agent running elsewhere (a terminal, Claude Desktop) can't connect to them yet. When it can, this section will have the connection steps: a token for your browser, and the MCP config to copy.",
+              "執行器已經有了（`pixi run runner`），它的 MCP 工具也已在網站的 AI 面板（工具箱 ▸ AI 代理）中使用，但在其他地方執行的代理（終端機、Claude Desktop）還無法連上。可以連之後，這一節會提供連接步驟：你瀏覽器的權杖，以及要複製的 MCP 設定。",
             ])}
           </p>
         </Callout>
         <P
           t={[
-            "Meanwhile, the prompt on the Agent skill page lets any agent write score code you paste into the editor and check yourself.",
-            "在那之前，代理 Skill 頁面上的提示詞可以讓任何代理寫出樂譜程式碼，由你貼進編輯器並自己檢查。",
+            "Meanwhile, use the AI panel, or the prompt on the Agent skill page with any agent and paste its score code into the editor.",
+            "在那之前，請使用 AI 面板，或把代理 Skill 頁面上的提示詞交給任何代理，再把它寫的樂譜程式碼貼進編輯器。",
           ]}
         />
         <p className="flex flex-wrap gap-4">
+          <SiteLink to={["agents", "runner", "agent"]} label={["The AI panel", "AI 面板"]} />
           <SiteLink to={["agents", "skills", "today"]} label={["Use your agent today", "今天就用你的代理"]} />
           <SiteLink to={["agents", "roadmap"]} label={["Product roadmap", "產品路線圖"]} />
         </p>

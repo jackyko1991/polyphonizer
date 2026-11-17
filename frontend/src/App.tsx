@@ -1,5 +1,5 @@
 import { go, READING_TABS, RichText, routeHash, SeriesPage, seriesText, Shell, Timeline, useLang, useRoute, type ShellPage } from "@learnkit/web";
-import { Component, lazy, Suspense, type ComponentType, type ErrorInfo, type ReactNode } from "react";
+import { Component, lazy, Suspense, useState, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import EditorPage from "./EditorPage.tsx";
 import LearnPage from "./LearnPage.tsx";
 import { SCROLL } from "./pages/kit.tsx";
@@ -7,6 +7,20 @@ import { LEARN_TABS } from "./learn/route.ts";
 import RoadmapPage from "./RoadmapPage.tsx";
 import { STRINGS } from "./strings.ts";
 import Toolbox from "./tools/Toolbox.tsx";
+import { usePanel } from "./agent/bus.ts";
+
+const AgentPanel = lazy(() => import("./agent/AgentPanel.tsx"));
+/** the AI panel, loaded the first time it is opened, then kept (a running answer goes on while it is closed) */
+function AgentHost() {
+  const open = usePanel().open;
+  const [opened, setOpened] = useState(open);
+  if (open && !opened) setOpened(true);
+  return opened ? (
+    <Suspense fallback={null}>
+      <AgentPanel />
+    </Suspense>
+  ) : null;
+}
 
 const REPO_URL = "https://github.com/jackyko1991/polyphonizer";
 /** Concept's sub-pages (Tensorizer's and Formalizer's order, History last) */
@@ -158,6 +172,7 @@ export default function App() {
       </Suspense>
       </PageBoundary>
       <Toolbox />
+      <AgentHost />
     </Shell>
   );
 }

@@ -1,4 +1,13 @@
-# The learner's own AI agent, through a local runner (planned)
+# The learner's own AI agent, through a local runner
+
+**Status (2026-11-17): built** for the score editor: runner/agent/ (Claude Code through the Claude Agent SDK, Codex,
+the learner's API key, and "included" with Pro when the runner has PZ_AGENT_KEY), MCP tools `compile` and `ask_user`
+at `/mcp/<chat token>`, detached numbered turns (reconnect after a reload, Stop), and the site's AI panel
+(frontend/src/agent/: diff with Apply / Undo / Discard, "Ask AI" on a bar). Checked with real Claude Code and Codex
+turns. Not yet: the long-lived connector token for agents running elsewhere, Learn to Code / Learn to Play tools
+(`get_problem`, `check`, `get_attempt`, `play_passage`, `set_practice`, `perform`), OpenCode and Gemini, and Pro
+accounts (the "included" agent also needs a sandbox for the compile tool before it serves the public). The runner
+stays on the standard library's HTTP server (not FastAPI); the MCP side is hand-written JSON-RPC.
 
 Roadmap item: AI help in Polyphonizer the way Tensorizer does it. The site builds no AI of its own and holds no API
 keys: the learner's own coding agent (Claude Code, Codex, OpenCode, Gemini CLI), already logged in on their computer,

@@ -12,6 +12,7 @@ python = "3.13.*"
 [pypi-dependencies]
 # the scripts must read the corpus with the music21 the site installs in Pyodide: the latest from PyPI
 music21 = "*"
+claude-agent-sdk = ">=0.2.176, <0.3"
 
 [tasks]
 install = { cmd = "npm ci", cwd = "frontend", inputs = ["frontend/package.json", "frontend/package-lock.json"], outputs = ["frontend/node_modules/.package-lock.json"] }

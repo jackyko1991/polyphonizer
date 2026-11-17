@@ -29,7 +29,7 @@ const ITEMS: [boolean, L, L][] = [
   ],
   [false, ["IMSLP import from a link", "從 IMSLP 連結匯入"], ["Find a digital edition first (OpenScore, Mutopia, KernScores), else read the scan; IMSLP's copyright flag is shown.", "先找數位版（OpenScore、Mutopia、KernScores），否則辨識掃描；顯示 IMSLP 的版權標示。"]],
   [false, ["Read printed music from a photo or PDF", "從照片或 PDF 辨識印刷樂譜"], ["Optical music recognition on your own computer (local runner).", "在你自己的電腦上做光學樂譜辨識（本機執行器）。"]],
-  [false, ["AI agent in the editor", "編輯器裡的 AI 代理"], ["Edits the score code with you: \"add bowings\", \"move this bar to the next line\", \"arrange for violin, flute and piano\", checked by the same rules.", "和你一起修改樂譜程式碼：「加上弓法」、「把這小節移到下一行」、「改編給小提琴、長笛和鋼琴」，並用同一套規則檢查。"]],
+  [true, ["AI agent in the editor", "編輯器裡的 AI 代理"], ["Your own agent (Claude Code or Codex on your computer, or your API key) edits the score code with you through the runner; its changes come as a diff to apply or undo. Included with Pro: coming.", "你自己的代理（電腦上的 Claude Code 或 Codex，或你的 API 金鑰）透過執行器和你一起修改樂譜程式碼；修改以差異呈現，可套用或復原。Pro 方案內含：即將推出。"]],
   [false, ["Transcribe a recording", "從錄音轉譜"], ["One melodic line first (violin, flute, voice), in the browser.", "先做單一旋律（小提琴、長笛、人聲），在瀏覽器中執行。"]],
   [
     false,

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "../Button.tsx";
 import { BUTTON, PRIMARY } from "../ui.ts";
 import { backendOk, estimateSeconds, jobKind, loadBackend, pdfPageCount, progressAt, routesFor, RUNNER_URL, runJob, runnerStatus, saveBackend, type Backend, type RouteId, type RunnerStatus } from "./routes.ts";
+import { Badge, COMING_SOON } from "../Badge.tsx";
 
 const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, string]; about: readonly [string, string] }> = {
   browser: {
@@ -39,16 +40,6 @@ const WHY: Record<string, readonly [string, string]> = {
   "no-engine": ["Running, but without an engine for this.", "正在執行，但沒有處理這類檔案的引擎。"],
   coming: ["Not open yet.", "尚未開放。"],
 };
-
-export const COMING_SOON = ["Coming soon", "即將推出"] as const;
-function Badge({ text, pro = false }: { text: readonly [string, string]; pro?: boolean }) {
-  const { pick } = useLang();
-  return (
-    <span className={`ml-1.5 inline-block rounded px-1.5 py-px align-middle text-[10px] font-semibold ${pro ? "bg-(--lk-accent) text-white" : "bg-amber-100 text-amber-900"}`} data-testid={pro ? "badge-pro" : "badge-soon"}>
-      {pick(text)}
-    </span>
-  );
-}
 
 export default function TranscribeDialog({ file: initial, onDone, onClose }: { file?: File | null; onDone: (f: File) => void; onClose: () => void }) {
   const { pick } = useLang();

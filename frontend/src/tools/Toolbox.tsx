@@ -1,12 +1,14 @@
 /**
- * The music toolbox, on every page: one launcher at the bottom right that fans out the tools (virtual keyboard,
- * metronome, tuner) on hover or click, and a dock along the bottom of the window where the open tools live as tabs.
+ * The music toolbox, on every page: one launcher at the bottom right that fans out the AI agent's panel
+ * (agent/AgentPanel.tsx) and the tools (virtual keyboard, metronome, tuner) on hover or click, and a dock along the
+ * bottom of the window where the open tools live as tabs.
  * Tools keep running in the background (the metronome keeps ticking while you change pages); a dot on the launcher
  * says so. Shortcuts: ⌘⇧K keyboard, ⌘⇧M metronome, ⌘⇧U tuner (Ctrl on Windows and Linux).
  */
 import { useLang } from "@learnkit/web";
-import { AudioWaveform, Maximize2, Minimize2, Piano, Timer, Wrench, X, type LucideIcon } from "lucide-react";
+import { AudioWaveform, Bot, Maximize2, Minimize2, Piano, Timer, Wrench, X, type LucideIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { toggleAgent, usePanel } from "../agent/bus.ts";
 import { closeTool, hideDock, moveTool, openTool, setDockHeight, setExpanded, toggleTool, useToolbox, type ToolId } from "./toolboxState.ts";
 
 const KeyboardTool = lazy(() => import("./KeyboardTool.tsx"));
@@ -22,9 +24,12 @@ export const TOOLS: { id: ToolId; icon: LucideIcon; name: readonly [string, stri
   { id: "tuner", icon: AudioWaveform, name: ["Tuner", "調音器"], key: "U" },
 ];
 
+const AI_NAME = ["AI agent", "AI 代理"] as const;
+
 export default function Toolbox() {
   const { pick } = useLang();
   const box = useToolbox();
+  const agentOpen = usePanel().open;
   const [menu, setMenu] = useState(false);
   const closeTimer = useRef<number | null>(null);
   const [shown, setShown] = useState(false);
@@ -114,17 +119,18 @@ export default function Toolbox() {
           aria-label={pick(["Music tools", "音樂工具"])}
           className={`flex flex-col items-end gap-2 pb-1 ${menu ? "pointer-events-auto" : ""}`}
         >
-          {TOOLS.map((t, i) => {
-            const running = box.running.includes(t.id);
-            const delay = menu ? (TOOLS.length - 1 - i) * 40 : 0;
+          {[{ id: "ai" as const, icon: Bot, name: AI_NAME, key: "" }, ...TOOLS].map((t, i, all) => {
+            const running = t.id === "ai" ? agentOpen : box.running.includes(t.id);
+            const delay = menu ? (all.length - 1 - i) * 40 : 0;
             return (
               <button
                 key={t.id}
                 type="button"
                 role="menuitem"
                 tabIndex={menu ? 0 : -1}
-                onClick={() => choose(t.id)}
+                onClick={() => (t.id === "ai" ? (toggleAgent(), setMenu(false)) : choose(t.id))}
                 style={{ transitionDelay: `${delay}ms` }}
+                data-testid={t.id === "ai" ? "toolbox-ai" : undefined}
                 className={`group flex items-center gap-2 rounded-full border border-gray-200 bg-white py-1.5 pr-1.5 pl-3 text-sm font-medium text-gray-800 shadow-md transition-all duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] hover:-translate-x-0.5 hover:bg-rose-50 motion-reduce:transition-opacity ${
                   menu
                     ? "translate-y-0 scale-100 opacity-100"
@@ -134,8 +140,7 @@ export default function Toolbox() {
                 <span className="flex flex-col items-end leading-tight">
                   <span>{pick(t.name)}</span>
                   <span className="text-[10px] font-normal text-gray-400">
-                    {mod}
-                    {t.key}
+                    {t.key ? `${mod}${t.key}` : pick(["your own agent", "你自己的代理"])}
                   </span>
                 </span>
                 <span
@@ -153,7 +158,7 @@ export default function Toolbox() {
           aria-haspopup="menu"
           aria-expanded={menu}
           aria-label={pick(["Music tools", "音樂工具"])}
-          title={pick(["Music tools: keyboard, metronome, tuner", "音樂工具：虛擬鍵盤、節拍器、調音器"])}
+          title={pick(["Music tools: AI agent, keyboard, metronome, tuner", "音樂工具：AI 代理、虛擬鍵盤、節拍器、調音器"])}
           data-testid="toolbox"
           className="pointer-events-auto relative flex h-12 w-12 items-center justify-center rounded-full bg-(--lk-accent) text-white shadow-lg transition-all duration-150 ease-out hover:scale-[1.06] hover:shadow-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--lk-accent)"
         >

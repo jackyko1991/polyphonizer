@@ -48,6 +48,7 @@ import type { ShareFile, SiteId } from "./share/sites.ts";
 import { fill } from "./strings.ts";
 import { fileKind, importCode, type FileKind } from "./library/elsewhere.ts";
 import { jobKind } from "./transcribe/routes.ts";
+import { publishScore, registerApplier } from "./agent/bus.ts";
 
 const TranscribeDialog = lazy(() => import("./transcribe/TranscribeDialog.tsx"));
 const ShareDialog = lazy(() => import("./share/ShareDialog.tsx"));
@@ -391,6 +392,33 @@ export default function EditorPage() {
     setCode(MAIN, next);
     void run();
   };
+
+  // the AI agent (agent/): the score on screen goes to its panel, which keeps it after the editor closes; the agent's
+  // changes come back through the applier (the learner pressed Apply or Undo), then the score runs
+  const shownTitle = (ws.current.kind === "own" ? ws.ownLabel : "") || score?.title || "score";
+  useEffect(() => {
+    publishScore({
+      title: shownTitle,
+      files: project.files.map((f) => ({ name: f.name, code: f.code })),
+      active: project.active,
+      error: error ? `${error.file ?? MAIN}${error.line !== null ? `, line ${error.line}` : ""}: ${error.message}` : undefined,
+    });
+  }, [project.files, project.active, shownTitle, error]);
+  useEffect(
+    () =>
+      registerApplier((files, removed) => {
+        const p = projectRef.current;
+        const kept = p.files.filter((f) => f.name === MAIN || !removed.includes(f.name)).map((f) => (f.name in files ? { ...f, code: files[f.name] } : f));
+        const added = Object.entries(files)
+          .filter(([n]) => !p.files.some((f) => f.name === n))
+          .map(([name, code]) => ({ name, code }));
+        const next = { ...p, files: [...kept, ...added], active: kept.some((f) => f.name === p.active) ? p.active : MAIN };
+        projectRef.current = next;
+        setProject(next);
+        void run(next);
+      }),
+    [run],
+  );
 
   // click a note → its code: open its file, select it and scroll to it (the editor view comes from CodePane)
   const editorView = useRef<EditorView | null>(null);

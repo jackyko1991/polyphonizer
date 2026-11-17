@@ -60,7 +60,7 @@ test("the client: status (none when nothing answers), and a job sent with its na
 
   assert.equal(await runnerStatus(RUNNER_URL, fake(() => { throw new TypeError("Failed to fetch"); })), null);
   const status = await runnerStatus(RUNNER_URL, fake(() => Response.json({ omr: true, transcribe: false, version: "0.1" })));
-  assert.deepEqual(status, { omr: true, transcribe: false, version: "0.1" });
+  assert.deepEqual(status, { omr: true, transcribe: false, version: "0.1", agent: null });
   assert.equal(calls.at(-1)!.url, "http://127.0.0.1:8765/status");
 
   const file = new File([new Uint8Array([37, 80, 68, 70])], "Erlkonig.pdf", { type: "application/pdf" });

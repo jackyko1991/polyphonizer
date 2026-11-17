@@ -15,6 +15,15 @@ An engine is a command with {in} and {out} for the files, so any tool can be use
 Found by themselves when on PATH: transkun (piano recordings), audiveris (printed pages). A video is turned into
 audio first with ffmpeg when it is installed.
 
+It also runs the learner's own AI agent (agent/, docs/plans/local-agent.md):
+
+    POST /api/agents/scan                       → the agent programs on this computer (only when asked)
+    POST /api/agents/chat     (JSON)            → NDJSON events of one turn (turn, text, tool, tool_result, question,
+                                                  files, done | error | cancelled)
+    GET  /api/agents/turns/<id>/events?from=N   → the same turn again from event N (after a reload)
+    POST /api/agents/turns/<id>/cancel          → Stop
+    POST /mcp/<chat token>                      → Polyphonizer's tools for the agent (MCP), for that turn only
+
 Only the site's own pages may call it (CORS), it listens on 127.0.0.1 only, and it keeps no files. On a server (a VPS
 behind HTTPS, a Hugging Face Space; runner/Dockerfile): PZ_HOST=0.0.0.0 with PZ_TOKEN, which the site sends as a bearer
 token (Transcribe ▸ address and token). The site's page AI agent ▸ Runner says how.
@@ -31,7 +40,12 @@ import tempfile
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlsplit
+
+from agent import core as agent_core
+from agent import scan as agent_scan
+from agent import tools as agent_tools
+from agent import turns as agent_turns
 
 VERSION = "0.1"
 HOST = "127.0.0.1"
@@ -65,6 +79,7 @@ class Config:
 
 
 REPO = Path(__file__).resolve().parent.parent
+MAX_CHAT_BYTES = 10_000_000
 
 
 def bind_host(env=os.environ):
@@ -162,16 +177,87 @@ def make_server(address, cfg):
                 return self.reply(403, {"error": "not this site"})
             if not self.token_ok():
                 return self.reply(401, {"error": "a token is needed"})
-            if self.path.rstrip("/") == "/status":
-                return self.reply(200, {"omr": bool(cfg.omr), "transcribe": bool(cfg.transcribe), "version": VERSION})
+            url = urlsplit(self.path)
+            if url.path.rstrip("/") == "/status":
+                return self.reply(200, {"omr": bool(cfg.omr), "transcribe": bool(cfg.transcribe), "version": VERSION, "agent": agent_core.status()})
+            m = re.fullmatch(r"/api/agents/turns/(\w+)/events", url.path)
+            if m:
+                turn = agent_turns.get(m.group(1))
+                if turn is None:
+                    return self.reply(404, {"error": "this turn is no longer here (the runner restarted?)"})
+                start = (parse_qs(url.query).get("from") or ["0"])[0]
+                return self.stream(turn, int(start) if start.isdigit() else 0)
             self.reply(404, {"error": "no such path"})
+
+        def stream(self, turn, start):
+            """a turn's events as NDJSON, live until it ends; a blank line now and then while it is quiet"""
+            self.send_response(200)
+            self.cors()
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.close_connection = True
+            try:
+                for e in agent_turns.follow(turn, start):
+                    self.wfile.write(b"\n" if e is None else (json.dumps(e, ensure_ascii=False) + "\n").encode())
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the page went away: the turn goes on, and can be followed again
+
+        def body_json(self, limit):
+            size = int(self.headers.get("Content-Length") or 0)
+            if size > limit:
+                return None
+            try:
+                data = json.loads(self.rfile.read(size) or b"{}")
+            except json.JSONDecodeError:
+                return None
+            return data if isinstance(data, dict) else None
+
+        def agent_post(self, path):
+            if path == "/api/agents/scan":
+                if not agent_core.local_allowed():
+                    return self.reply(403, {"error": "this runner is on a server: it doesn't search its computer"})
+                return self.reply(200, {"agents": agent_scan.scan()})
+            if path == "/api/agents/chat":
+                req = self.body_json(MAX_CHAT_BYTES)
+                if req is None:
+                    return self.reply(400, {"error": "not a chat request"})
+                if why := agent_core.check(req):
+                    return self.reply(400, {"error": why})
+                base = f"http://127.0.0.1:{self.server.server_address[1]}"
+                turn = agent_turns.start(req["chat"], lambda t: agent_core.chat(t, req, base))
+                return self.stream(turn, 0)
+            m = re.fullmatch(r"/api/agents/turns/(\w+)/cancel", path)
+            if m:
+                turn = agent_turns.get(m.group(1))
+                if turn is None:
+                    return self.reply(404, {"error": "no such turn"})
+                return self.reply(200, {"cancelled": agent_turns.cancel(turn)})
+            return self.reply(404, {"error": "no such path"})
+
+        def mcp(self, token):
+            """the agent's tools (MCP over HTTP): the chat token in the path is the permission"""
+            size = int(self.headers.get("Content-Length") or 0)
+            status, answer = agent_tools.handle(token, self.rfile.read(min(size, 1_000_000)))
+            if answer is None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            self.reply(status, answer)
 
         def do_POST(self):
             if not self.origin_ok():
                 return self.reply(403, {"error": "not this site"})
+            path = urlsplit(self.path).path
+            if m := re.fullmatch(r"/mcp/([\w-]+)", path):
+                return self.mcp(m.group(1))
             if not self.token_ok():
                 return self.reply(401, {"error": "a token is needed"})
-            kind = self.path.strip("/")
+            if path.startswith("/api/agents/"):
+                return self.agent_post(path.rstrip("/"))
+            kind = path.strip("/")
             if kind not in RESULT:
                 return self.reply(404, {"error": "no such path"})
             size = int(self.headers.get("Content-Length") or 0)
@@ -229,6 +315,8 @@ def main():
     print(f"Polyphonizer runner {VERSION} on http://{host}:{port}" + (" (token required)" if cfg.token else ""))
     print(f"  reading pages (OMR): {cfg.omr or 'no engine (pixi run omr-setup, or set PZ_OMR)'}")
     print(f"  transcribing:        {cfg.transcribe or 'no engine (set PZ_TRANSCRIBE)'}")
+    st = agent_core.status()
+    print("  AI agent:            " + ", ".join(w for w, on in (("this computer's Claude Code or Codex", st["local"]), ("an API key", True), ("included (Pro)", st["included"])) if on))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

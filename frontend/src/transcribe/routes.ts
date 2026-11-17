@@ -9,6 +9,7 @@
  * Protocol: GET <base>/status → { omr, transcribe, version }; POST <base>/omr or <base>/transcribe with the file as
  * the body (its name in X-Filename) → MusicXML or MIDI, or { error } with a 4xx/5xx status.
  */
+import type { AgentStatus } from "../agent/client.ts";
 import { fileKind } from "../library/elsewhere.ts";
 
 export type JobKind = "omr" | "transcribe";
@@ -17,6 +18,8 @@ export interface RunnerStatus {
   omr: boolean;
   transcribe: boolean;
   version: string;
+  /** what its AI agent offers (null: a runner from before the agent) */
+  agent?: AgentStatus | null;
 }
 
 /** the local runner's address (pixi run runner) */
@@ -91,7 +94,7 @@ export async function runnerStatus(base: string, f: typeof fetch = fetch, token?
     const r = await f(`${base.replace(/\/+$/, "")}/status`, { headers: auth(token), signal: AbortSignal.timeout?.(3000) });
     if (!r.ok) return null;
     const s = (await r.json()) as Partial<RunnerStatus>;
-    return { omr: !!s.omr, transcribe: !!s.transcribe, version: String(s.version ?? "") };
+    return { omr: !!s.omr, transcribe: !!s.transcribe, version: String(s.version ?? ""), agent: s.agent && typeof s.agent === "object" ? s.agent : null };
   } catch {
     return null;
   }

@@ -1,6 +1,6 @@
 /**
  * AI agent ▸ Runner (#/agents/runner): the Polyphonizer runner, which turns PDFs and photos of printed music into
- * notes for Transcribe (and later serves the AI agent), on your own computer, on a VPS or as a Hugging Face Space.
+ * notes for Transcribe and runs the learner's own AI agent (runner/agent/), on your own computer, on a VPS or as a Hugging Face Space.
  * The commands match runner/server.py, runner/Dockerfile and pixi.toml; keep them in step.
  */
 import { ShellCommand, useLang } from "@learnkit/web";
@@ -13,6 +13,7 @@ const SECTIONS: SectionInfo[] = [
   { id: "vps", title: ["On a VPS", "在 VPS 上"] },
   { id: "space", title: ["As a Hugging Face Space", "作為 Hugging Face Space"] },
   { id: "connect", title: ["Connect the site", "連接網站"] },
+  { id: "agent", title: ["The AI agent", "AI 代理"] },
   { id: "safe", title: ["Safe by design", "安全的設計"] },
 ];
 
@@ -49,8 +50,8 @@ export default function RunnerPage({ section }: { section: string | null }) {
         />
         <P
           t={[
-            "All three places run the same program and speak the same small protocol (`GET /status`, `POST /omr`, `POST /transcribe`), so the site only needs its address. The AI helper will use the same runner later.",
-            "三個地方執行的是同一個程式、說同一套小協定（`GET /status`、`POST /omr`、`POST /transcribe`），所以網站只需要它的位址。之後 AI 助手也會使用同一個執行器。",
+            "All three places run the same program and speak the same small protocol (`GET /status`, `POST /omr`, `POST /transcribe`), so the site only needs its address. The AI agent works through the same runner (below).",
+            "三個地方執行的是同一個程式、說同一套小協定（`GET /status`、`POST /omr`、`POST /transcribe`），所以網站只需要它的位址。AI 代理也透過同一個執行器工作（見下文）。",
           ]}
         />
       </Section>
@@ -146,7 +147,46 @@ export default function RunnerPage({ section }: { section: string | null }) {
         </Callout>
       </Section>
 
-      <Section page={PAGE} id="safe" n={6} title={SECTIONS[5].title}>
+      <Section page={PAGE} id="agent" n={6} title={SECTIONS[5].title}>
+        <P
+          t={[
+            "Open the **AI agent** from the toolbox (bottom right), or press **Ask AI** in a bar's note editor. Polyphonizer has no AI of its own: the runner starts the agent you already use, on a scratch copy of the score on screen, with a tool to compile it and nothing else (no shell, no web).",
+            "從工具箱（右下角）打開 **AI 代理**，或在小節的音符編輯器中按 **問 AI**。Polyphonizer 本身沒有 AI：執行器會在畫面上樂譜的暫存副本上啟動你已在使用的代理，只給它一個編譯樂譜的工具（沒有終端機，也不能上網）。",
+          ]}
+        />
+        <List
+          items={[
+            [
+              "**Claude Code** or **Codex** on this computer, with its own login (free: bring your own agent). Settings ▸ **Search this computer** shows which are installed and logged in.",
+              "這台電腦上的 **Claude Code** 或 **Codex**，用它自己的登入（免費：自備代理）。設定 ▸ **搜尋這台電腦** 會顯示哪些已安裝並登入。",
+            ],
+            [
+              "**Claude with your API key** (Anthropic or OpenRouter): the key stays in this tab until you close it and goes only to your runner.",
+              "**用你的 API 金鑰使用 Claude**（Anthropic 或 OpenRouter）：金鑰只保留到你關閉這個分頁，且只傳給你的執行器。",
+            ],
+            [
+              "**Included with Pro** (coming soon): the Polyphonizer service runs the agent for you, with no program to install and no key.",
+              "**Pro 方案內含**（即將推出）：由 Polyphonizer 服務替你執行代理，不用安裝程式，也不用金鑰。",
+            ],
+          ]}
+        />
+        <P
+          t={[
+            "Its changes come back as a diff: **Apply** puts them into your score and runs it, **Undo** takes them out again, **Discard** leaves the score as it is. A reply still being written goes on if you reload the page, and the panel picks it up again.",
+            "它的修改會以差異顯示：**套用** 會把修改放進你的樂譜並執行，**復原** 再把它們拿掉，**捨棄** 則保持樂譜不變。重新整理頁面時，正在寫的回答會繼續，面板會再接上。",
+          ]}
+        />
+        <Callout kind="note" title={["On a server", "在伺服器上"]}>
+          <p>
+            {pick([
+              "A runner with a token offers only the API-key agent: a login on the server's computer is never used unless its owner sets PZ_AGENT_AUTH=local. The compile tool runs the score's Python, so keep the token to yourself.",
+              "有權杖的執行器只提供 API 金鑰的代理：除非擁有者設定 PZ_AGENT_AUTH=local，否則絕不使用伺服器電腦上的登入。編譯工具會執行樂譜的 Python，所以請保管好你的權杖。",
+            ])}
+          </p>
+        </Callout>
+      </Section>
+
+      <Section page={PAGE} id="safe" n={7} title={SECTIONS[6].title}>
         <List
           items={[
             [

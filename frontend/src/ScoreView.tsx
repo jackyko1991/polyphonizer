@@ -4,9 +4,10 @@
  * sound), sound, edit notes, and, with pages, edit line and page breaks (click a bar) and the page turns planned
  * around them; the Page setup dialog; export; full screen (a page reader with pages).
  */
-import { ChevronDown, ChevronLeft, ChevronRight, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, Printer, RotateCcw, Square, X, ZoomIn } from "lucide-react";
+import { Bot, ChevronDown, ChevronLeft, ChevronRight, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, Printer, RotateCcw, Square, X, ZoomIn } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
+import { openAgent } from "./agent/bus.ts";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { engravePages, engraveScroll, timelineOf, type Engraving } from "./engine/engrave.ts";
 import { barIndices, barNumbers, FIT, isFit, PAPERS, SCREENS, screenPaper, UNSET_SETUP, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
@@ -878,6 +879,20 @@ export default function ScoreView({
   );
 }
 
+/** "Ask AI about this bar": the AI panel opens with the bar attached to the next message */
+function AskAi({ bar, className = "" }: { bar: { part: string; n: number }; className?: string }) {
+  const { pick } = useLang();
+  return (
+    <button
+      onClick={() => openAgent({ bars: { part: bar.part, from: bar.n } })}
+      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-(--lk-accent) hover:bg-rose-50 ${className}`}
+      data-testid="bar-ask-ai"
+    >
+      <Icon icon={Bot} className="h-3.5 w-3.5" /> {pick(["Ask AI", "問 AI"])}
+    </button>
+  );
+}
+
 /** The note editor for one bar: its notes as text (tinyNotation, chords as <c e g>4), applied as an edit_bar() line. */
 function BarEditor({
   bar,
@@ -907,7 +922,10 @@ function BarEditor({
         </button>
       </div>
       {bar.error ? (
-        <p className="mt-2 text-red-700">{bar.error}</p>
+        <>
+          <p className="mt-2 text-red-700">{bar.error}</p>
+          <AskAi bar={bar} className="mt-2" />
+        </>
       ) : (
         <>
           <input
@@ -925,6 +943,7 @@ function BarEditor({
           <p className="mt-1.5 text-xs text-gray-500">{t("edit.syntax")}</p>
           {bar.lost.length > 0 && <p className="mt-1 text-xs text-amber-800">⚠ {fill(t("edit.lost"), { what: bar.lost.join(", ") })}</p>}
           <div className="mt-2 flex justify-end gap-2">
+            <AskAi bar={bar} className="mr-auto" />
             <button onClick={onClose} className="rounded-md border border-gray-300 px-2.5 py-1 text-gray-700 hover:bg-gray-50">
               {t("edit.cancel")}
             </button>
