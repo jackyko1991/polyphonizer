@@ -7,7 +7,7 @@
 import { ChevronDown, ChevronLeft, ChevronRight, Download, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, Printer, RotateCcw, Square, X, ZoomIn } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { engravePages, engraveScroll, midiFile, timelineOf, type Engraving } from "./engine/engrave.ts";
 import { barIndices, barNumbers, FIT, isFit, PAPERS, SCREENS, screenPaper, UNSET_SETUP, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
 import { play, stop } from "./engine/player.ts";
@@ -19,6 +19,11 @@ import { RANGE, setStage, useStage } from "./progress.ts";
 import SoundPanel from "./SoundPanel.tsx";
 import { BUTTON, BUTTON_ON, CHECK, FIELD, layoutWidth } from "./ui.ts";
 import { fill } from "./strings.ts";
+import { lilypondText } from "./engine/python.ts";
+import { SITE_IDS, SITES, type ShareFile, type SiteId } from "./share/sites.ts";
+
+// Export ▸ For a library: loads when first opened
+const ShareDialog = lazy(() => import("./share/ShareDialog.tsx"));
 
 
 
@@ -33,6 +38,8 @@ export interface ScoreViewProps {
   fullScore?: ScoreData | null;
   /** Export ▸ Code (the editor's project files) */
   onExportCode?: () => void;
+  /** the score's code, for Export ▸ For a library (an OpenScore original and the bars changed) */
+  shareCode?: () => string;
   /** this sheet's page setup (the score's pages(...) call) and how to change it (the editor rewrites the call) */
   setup?: PageSetup;
   onSetup?: (s: PageSetup) => void;
@@ -100,6 +107,7 @@ export default function ScoreView({
   allParts,
   fullScore,
   onExportCode,
+  shareCode,
   pagesView = true,
   setup,
   onSetup,
@@ -125,6 +133,7 @@ export default function ScoreView({
   const [err, setErr] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [full, setFull] = useState(false);
+  const [share, setShare] = useState<SiteId | null>(null);
   // the page setup: from the score's code (editor), or kept here (Learn, which has no Pages view)
   const [localSetup, setLocalSetup] = useState<PageSetup>(UNSET_SETUP);
   const cur = setup ?? localSetup;
@@ -794,6 +803,24 @@ export default function ScoreView({
                       {t(k as string)}
                     </button>
                   ))}
+                  {shareCode && (
+                    <>
+                      {/* the files a library wants, its rules, and where its upload page is */}
+                      <p className="mt-1 border-t border-gray-100 px-3 pt-2 pb-1 text-xs font-semibold text-gray-500">{t("export.forLibrary")}</p>
+                      <div className="flex flex-wrap gap-1 px-2 pb-1" data-testid="export-sites">
+                        {SITE_IDS.map((id) => (
+                          <button
+                            key={id}
+                            onClick={() => (setMenu(false), setShare(id))}
+                            className="rounded-md border border-gray-200 px-2 py-1 text-xs hover:border-(--lk-accent) hover:text-(--lk-accent)"
+                            data-testid={`export-site-${id}`}
+                          >
+                            {SITES[id].name[0].replace(/ \(.*\)$/, "")}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -809,6 +836,22 @@ export default function ScoreView({
             <Icon icon={full ? Minimize2 : Maximize2} />
           </button>
         </div>
+        {share && score && shareCode && (
+          <Suspense fallback={null}>
+            <ShareDialog
+              site={share}
+              score={score}
+              code={shareCode()}
+              onFile={async (kind: ShareFile, header?: Record<string, string>) => {
+                if (kind === "musicxml") download(`${name}.musicxml`, score.musicxml, "application/vnd.recordare.musicxml+xml");
+                else if (kind === "midi") download(`${name}.mid`, (await midiFile()) as BlobPart, "audio/midi");
+                else if (kind === "pdf") await print();
+                else download(`${name}.ly`, await lilypondText(header ?? {}), "text/x-lilypond");
+              }}
+              onClose={() => setShare(null)}
+            />
+          </Suspense>
+        )}
         {showCursor && cursorShown && (
           <div
             ref={cursorEl}

@@ -11,7 +11,7 @@ import Toolbox from "./tools/Toolbox.tsx";
 const REPO_URL = "https://github.com/jackyko1991/polyphonizer";
 /** Concept's sub-pages (Tensorizer's and Formalizer's order, History last) */
 const CONCEPT_TABS = ["method", "feynman", "theory", "engraving", "limits", "history"] as const;
-const SKILLS_TABS = ["first", "corpus", "structure", "errors", "verify"] as const;
+const SKILLS_TABS = ["first", "corpus", "structure", "errors", "verify", "share"] as const;
 const AGENT_TABS = ["tools", "skills", "mcp", "runner", "roadmap"] as const;
 /** Further reading: books & papers, then the learnkit series (Code labs, Explorables) */
 const READING = ["books", "papers", "labs", "explorables"] as const;
@@ -31,6 +31,7 @@ const SKILLS_PAGES: Record<string, PageView> = {
   structure: lazy(() => import("./pages/skills/Structure.tsx")),
   errors: lazy(() => import("./pages/skills/Errors.tsx")),
   verify: lazy(() => import("./pages/skills/Verify.tsx")),
+  share: lazy(() => import("./pages/skills/Share.tsx")),
 };
 const READING_PAGES: Record<string, PageView> = {
   books: lazy(() => import("./pages/reading/Books.tsx")),

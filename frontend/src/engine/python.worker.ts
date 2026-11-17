@@ -87,6 +87,10 @@ onmessage = async (e: MessageEvent) => {
       py.globals.get("_set_project")(JSON.stringify(modules ?? []));
       out = py.globals.get("_run")(code, part ?? undefined) as string;
     }
+    else if (kind === "lily") {
+      const { header } = e.data as { header: Record<string, string> };
+      out = py.globals.get("_lilypond")(JSON.stringify(header)) as string;
+    }
     else if (kind === "bar") {
       const { part, bar } = e.data as { part: string; bar: number };
       out = py.globals.get("_bar_text")(part, bar) as string;

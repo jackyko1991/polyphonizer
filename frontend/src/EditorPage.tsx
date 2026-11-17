@@ -683,6 +683,7 @@ export default function EditorPage() {
           allParts={score?.parts}
           fullScore={part !== null ? score : null}
           onExportCode={exportCode}
+          shareCode={() => projectRef.current.files[0].code}
           setup={setup}
           onSetup={changeSetup}
           barText={barText}

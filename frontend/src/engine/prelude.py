@@ -140,6 +140,30 @@ def _text_pitch(text):
     return pitch.Pitch(f"{step}{acc}{octave}")
 
 
+def _lilypond(header_json):
+    """The last full score run as LilyPond (music21's writer), with these header fields (for Mutopia: mutopiatitle,
+    mutopiacomposer, source, license …). A draft to tidy: music21 writes every stem direction out."""
+    from music21 import lily
+
+    score = _last["score"]
+    if score is None:
+        raise ValueError("run the score first")
+    # (music21 looks for the LilyPond program only to render; writing the text needs none)
+    lily.translate.LilypondConverter.setupTools = lambda self: None
+    conv = lily.translate.LilypondConverter()
+    conv.loadFromMusic21Object(score)
+    text = str(conv.topLevelObject)
+    # (music21's colour helper uses syntax LilyPond 2.24 no longer takes, and is used only for coloured notes)
+    if "\\color" not in text.split("#})", 1)[-1]:
+        text = re.sub(r"color = #\(define-music-function.*?#\}\)\s*", "", text, count=1, flags=re.S)
+    fields = json.loads(header_json)
+    quote = lambda v: '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
+    header = "\\header {\n" + "".join(f"  {k} = {quote(v)}\n" for k, v in fields.items() if v) + "}\n"
+    # music21's own header (just a title) gives way to the full one
+    text = re.sub(r"\\header\s*\{[^{}]*\}", lambda m: header, text, count=1)
+    return json.dumps({"text": '\\version "2.24.0"\n' + text})
+
+
 def _bar_text(part, bar):
     """The notes of one bar as editable text, and what that text leaves out. Uses the last full score run."""
     score = _last["score"]

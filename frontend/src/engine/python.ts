@@ -65,6 +65,8 @@ export function runScore(code: string, part: number | null = null, modules: PyMo
 }
 /** one bar of the last full score run, as text for edit_bar(), and what that text leaves out */
 export const barText = (part: string, bar: number) => ask<{ text: string; lost: string[] }>({ kind: "bar", part, bar });
+/** the last full score run as LilyPond text, with these \\header fields (a draft: tidy before sending to Mutopia) */
+export const lilypondText = (header: Record<string, string>) => ask<{ text: string }>({ kind: "lily", header }).then((r) => r.text);
 /** make a file available to `load("name")` */
 export const addFile = (name: string, bytes: Uint8Array) => ask<null>({ kind: "file", name, bytes });
 
