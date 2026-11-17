@@ -1,6 +1,7 @@
 /**
  * Which tools are open in the bottom dock, which tab is in front, the dock's height, and which tools are busy in the
- * background (metronome ticking, keyboard armed, tuner listening). Remembered in this browser.
+ * background (metronome ticking, keyboard armed, tuner listening). The dock's size is remembered in this browser; its
+ * tools are not: each visit starts with it closed.
  */
 import { useSyncExternalStore } from "react";
 
@@ -28,11 +29,11 @@ export interface ToolboxState {
 const KEY = "polyphonizer.toolbox";
 let state: ToolboxState = (() => {
   try {
+    // each visit starts with the dock closed (no keyboard over the page until it is asked for); its size is remembered
     const s = JSON.parse(localStorage.getItem(KEY) ?? "null") as Partial<ToolboxState> | null;
-    const open = (s?.open ?? []).filter((t) => TOOL_IDS.includes(t));
     return {
-      open,
-      active: open.includes(s?.active as ToolId) ? (s!.active as ToolId) : (open[0] ?? null),
+      open: [],
+      active: null,
       height: s?.height ?? 230,
       running: [],
       hidden: false,
@@ -50,7 +51,7 @@ const listeners = new Set<() => void>();
 function set(next: ToolboxState) {
   state = next;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ open: state.open, active: state.active, height: state.height, expanded: state.expanded }));
+    localStorage.setItem(KEY, JSON.stringify({ height: state.height, expanded: state.expanded }));
   } catch {
     /* storage unavailable */
   }
