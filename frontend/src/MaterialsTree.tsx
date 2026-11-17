@@ -92,6 +92,26 @@ export default function MaterialsTree({
     onRenameStarted?.();
   }, [startRename, onRenameStarted]);
 
+  // files from the computer being dragged over the page: only then does the drop target show
+  const [carrying, setCarrying] = useState(false);
+  useEffect(() => {
+    let depth = 0;
+    const files = (e: globalThis.DragEvent) => [...(e.dataTransfer?.types ?? [])].includes("Files");
+    const enter = (e: globalThis.DragEvent) => files(e) && ++depth && setCarrying(true);
+    const leave = (e: globalThis.DragEvent) => files(e) && --depth <= 0 && ((depth = 0), setCarrying(false));
+    const done = () => ((depth = 0), setCarrying(false));
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", done);
+    window.addEventListener("dragend", done);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", done);
+      window.removeEventListener("dragend", done);
+    };
+  }, []);
+
   // a drop on a folder ("" = the top): a row being moved, or files from the computer
   const dropOn = (folder: string) => ({
     onDragOver: (e: DragEvent) => {
@@ -250,16 +270,20 @@ export default function MaterialsTree({
           {error}
         </li>
       )}
-      {/* the only place files are added: dropped here, or chosen with the button (your own score only) */}
-      {addable && (
-      <li role="none" className={`mt-0.5 rounded border border-dashed px-2 py-1.5 text-xs ${over === "" ? "border-(--lk-accent) text-rose-900" : "border-gray-300 text-gray-500"}`} data-testid="materials-drop">
-        {!nodes.length && <span className="block">{pick(["Keep PDFs, recordings and other files with this score.", "把 PDF、錄音和其他檔案與這份樂譜放在一起。"])}</span>}
-        <button onClick={() => a.pick("")} className="font-medium text-(--lk-accent) hover:underline" data-testid="materials-add">
-          {pick(["Add files…", "加入檔案…"])}
-        </button>{" "}
-        {pick(["or drop them here", "或拖放到這裡"])}
-      </li>
-      )}
+      {/* files are added here: chosen with the button, or dropped (the target shows only while files are dragged) */}
+      {addable &&
+        (carrying ? (
+          <li role="none" className={`mt-0.5 rounded border border-dashed px-2 py-1.5 text-xs ${over === "" ? "border-(--lk-accent) bg-rose-50 text-rose-900" : "border-gray-300 text-gray-500"}`} data-testid="materials-drop">
+            {pick(["Drop files here", "把檔案放到這裡"])}
+          </li>
+        ) : (
+          <li role="none" className="px-2 py-1 text-xs text-gray-500" data-testid="materials-drop">
+            {!nodes.length && <span className="block">{pick(["Keep PDFs, recordings and other files with this score.", "把 PDF、錄音和其他檔案與這份樂譜放在一起。"])}</span>}
+            <button onClick={() => a.pick("")} className="font-medium text-(--lk-accent) hover:underline" data-testid="materials-add">
+              {pick(["Add files…", "加入檔案…"])}
+            </button>
+          </li>
+        ))}
     </ul>
   );
 }
