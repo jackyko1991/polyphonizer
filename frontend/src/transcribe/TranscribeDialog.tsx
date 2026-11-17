@@ -26,7 +26,7 @@ const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, str
   service: {
     icon: Server,
     name: ["Polyphonizer service", "Polyphonizer 服務"],
-    about: ["The same, run for you on our server, as a paid plan. Coming later.", "同樣的功能，由我們的伺服器代為執行，付費方案。之後推出。"],
+    about: ["The same, run for you on our server, as part of Pro.", "同樣的功能，由我們的伺服器代為執行，屬於 Pro 方案。"],
   },
 };
 const WHY: Record<string, readonly [string, string]> = {
@@ -37,8 +37,18 @@ const WHY: Record<string, readonly [string, string]> = {
     "那裡還沒有回應。請啟動：在終端機的 Polyphonizer 資料夾執行 pixi run runner（讀 PDF 需先執行一次 pixi run -e omr omr-setup）。這裡會自動找到它。",
   ],
   "no-engine": ["Running, but without an engine for this.", "正在執行，但沒有處理這類檔案的引擎。"],
-  coming: ["Coming later.", "之後推出。"],
+  coming: ["Not open yet.", "尚未開放。"],
 };
+
+export const COMING_SOON = ["Coming soon", "即將推出"] as const;
+function Badge({ text, pro = false }: { text: readonly [string, string]; pro?: boolean }) {
+  const { pick } = useLang();
+  return (
+    <span className={`ml-1.5 inline-block rounded px-1.5 py-px align-middle text-[10px] font-semibold ${pro ? "bg-(--lk-accent) text-white" : "bg-amber-100 text-amber-900"}`} data-testid={pro ? "badge-pro" : "badge-soon"}>
+      {pick(text)}
+    </span>
+  );
+}
 
 export default function TranscribeDialog({ file: initial, onDone, onClose }: { file?: File | null; onDone: (f: File) => void; onClose: () => void }) {
   const { pick } = useLang();
@@ -148,6 +158,9 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
                   <Icon icon={R.icon} className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
                   <span className="min-w-0">
                     <b className="font-medium text-gray-900">{pick(R.name)}</b>
+                    {/* the paid service, and what isn't ready yet, say so by name */}
+                    {r.id === "service" && <Badge text={["Pro", "Pro"]} pro />}
+                    {(r.why === "coming" || r.why === "loading") && <Badge text={COMING_SOON} />}
                     <span className="block text-xs text-gray-600">{pick(R.about)}</span>
                     {!r.ready && r.why && <span className="block text-xs text-amber-800">{pick(WHY[r.why])}</span>}
                     {r.id === "runner" && (

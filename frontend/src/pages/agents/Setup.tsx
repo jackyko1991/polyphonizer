@@ -90,7 +90,7 @@ export function SkillsAgent({ section }: { section: string | null }) {
     <Page
       id={SKILL_PAGE}
       overline={AI}
-      title={["Agent skill", "代理 Skill"]}
+      title={["Agent skill (coming soon)", "代理 Skill（即將推出）"]}
       intro={[
         "Teach your own AI coding agent (Claude Code, Codex and others) to write music21 scores the Polyphonizer way: the score is code, the rules do the checking, and when you are learning it gives hints instead of answers.",
         "教你自己的 AI 程式代理（Claude Code、Codex 等）用 Polyphonizer 的方式寫 music21 樂譜：樂譜就是程式碼，由規則負責檢查；你在學習時，它給提示而不是答案。",
@@ -209,7 +209,7 @@ export function McpAgent({ section }: { section: string | null }) {
     <Page
       id={MCP_PAGE}
       overline={AI}
-      title={["MCP server", "MCP 伺服器"]}
+      title={["MCP server (coming soon)", "MCP 伺服器（即將推出）"]}
       intro={[
         "Give your agent Polyphonizer's engine as tools: run score code, check it against the Learn rules and lay it out on pages, through a local MCP server. Planned, not available yet.",
         "把 Polyphonizer 的引擎變成代理的工具：透過本機 MCP 伺服器執行樂譜程式碼、依學習題的規則檢查、排成頁面。已規劃，尚未提供。",
