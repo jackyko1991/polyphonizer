@@ -48,7 +48,7 @@ import type { ShareFile, SiteId } from "./share/sites.ts";
 import { fill } from "./strings.ts";
 import { fileKind, importCode, type FileKind } from "./library/elsewhere.ts";
 import { jobKind } from "./transcribe/routes.ts";
-import { publishScore, registerApplier } from "./agent/bus.ts";
+import { publishScore, publishSelection, registerApplier } from "./agent/bus.ts";
 
 const TranscribeDialog = lazy(() => import("./transcribe/TranscribeDialog.tsx"));
 const ShareDialog = lazy(() => import("./share/ShareDialog.tsx"));
@@ -439,6 +439,8 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSpot, active.name]);
   const onNoteClick = (n: { part: string; partIndex: number; bar: number; index: number }) => {
+    // the clicked note's bar can go to the AI agent with the next message
+    publishSelection({ bars: { part: n.part, from: n.bar } });
     const spot = locateNote(projectRef.current.files, n.part, n.partIndex, n.bar, n.index);
     setNoteInfo(spot?.kind === "token" ? null : fill(t("click.where"), { part: n.part, bar: n.bar }));
     if (!spot) return;
@@ -845,6 +847,7 @@ export default function EditorPage() {
             errorAt={errorHere}
             main={active.name === MAIN}
             onView={(v) => (editorView.current = v)}
+            onSelect={(sel) => publishSelection({ code: sel ? { file: active.name, ...sel } : undefined })}
           />
         </div>
         {noteInfo && (

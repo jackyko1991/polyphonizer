@@ -7,7 +7,7 @@
 import { Bot, ChevronDown, ChevronLeft, ChevronRight, FileCog, Gauge, Maximize2, Minimize2, Music, PencilLine, Play, Printer, RotateCcw, Square, X, ZoomIn } from "lucide-react";
 import { Icon } from "./Button.tsx";
 import { useLang } from "@learnkit/web";
-import { openAgent } from "./agent/bus.ts";
+import { openAgent, publishSelection } from "./agent/bus.ts";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { engravePages, engraveScroll, timelineOf, type Engraving } from "./engine/engrave.ts";
 import { barIndices, barNumbers, FIT, isFit, PAPERS, SCREENS, screenPaper, UNSET_SETUP, withPaper, type PageSetup, type Stand } from "./engine/pageSetup.ts";
@@ -262,6 +262,7 @@ export default function ScoreView({
     if (index < 0 || !partName || n === undefined) return;
     const r = box.current!.getBoundingClientRect();
     const at = { x: e.clientX - r.left + box.current!.scrollLeft, y: e.clientY - r.top + box.current!.scrollTop, part: partName, n };
+    publishSelection({ bars: { part: partName, from: n } });
     try {
       setBar({ ...at, ...(await barText(partName, n)) });
     } catch (err) {

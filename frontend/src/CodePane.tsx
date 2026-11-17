@@ -76,6 +76,7 @@ export default function CodePane({
   blankMessage,
   mark = null,
   onCursor,
+  onSelect,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -93,6 +94,8 @@ export default function CodePane({
   mark?: { from: number; to: number } | null;
   /** the cursor moved (or the selection changed): its position */
   onCursor?: (pos: number) => void;
+  /** the selected lines (whole lines' numbers and the selected text), or null when nothing is selected */
+  onSelect?: (sel: { from: number; to: number; text: string } | null) => void;
 }) {
   const view = useRef<EditorView | null>(null);
   // the Keyboard's staff window can insert what was played here (tools/codeInsert.ts)
@@ -108,6 +111,8 @@ export default function CodePane({
   blanks.current = blankMessage;
   const cursor = useRef(onCursor);
   cursor.current = onCursor;
+  const selected = useRef(onSelect);
+  selected.current = onSelect;
   const extensions = useMemo(
     () => [
       python(),
@@ -123,6 +128,11 @@ export default function CodePane({
       ),
       EditorView.updateListener.of((u) => {
         if (u.selectionSet && cursor.current) cursor.current(u.state.selection.main.head);
+        if ((u.selectionSet || u.docChanged) && selected.current) {
+          const r = u.state.selection.main;
+          const doc = u.state.doc;
+          selected.current(r.empty ? null : { from: doc.lineAt(r.from).number, to: doc.lineAt(r.to).number, text: doc.sliceString(r.from, r.to) });
+        }
       }),
       EditorView.lineWrapping,
       lintGutter(),

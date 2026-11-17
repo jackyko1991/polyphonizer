@@ -16,7 +16,7 @@ import { Badge, COMING_SOON, PRO } from "../Badge.tsx";
 import { Icon } from "../Button.tsx";
 import { backendOk, loadBackend, RUNNER_URL, runnerStatus, saveBackend, type Backend, type RunnerStatus } from "../transcribe/routes.ts";
 import { BUTTON, FIELD, PRIMARY } from "../ui.ts";
-import { applyFiles, clearAttach, closeAgent, scoreOnScreen, usePanel, useScoreOnScreen, type PanelState } from "./bus.ts";
+import { applyFiles, attach as attachTo, clearAttach, closeAgent, detach, scoreOnScreen, usePanel, useScoreOnScreen, useSelection, type PanelState, type Selection } from "./bus.ts";
 import { loadChat, saveChat, toolLabel, withEvent, withMessage, type Block, type Chat } from "./chat.ts";
 import {
   cancelTurn,
@@ -54,15 +54,36 @@ const AGENT_NAME: Record<AgentId, L> = {
   included: ["Included with Pro", "Pro 方案內含"],
 };
 
-/** what the attached bars or code say, for the chip and the message */
-function attachLabel(a: PanelState["attach"], pick: (l: L) => string): string | null {
+/** what attached (or selected) bars or code say, one label each, for the chips and the message */
+function selectionLabels(a: PanelState["attach"] | Selection, pick: (l: L) => string): { kind: keyof Selection; label: string }[] {
+  const out: { kind: keyof Selection; label: string }[] = [];
   if (a?.bars) {
     const { from, to, part } = a.bars;
     const bars = to && to !== from ? pick([`bars ${from}–${to}`, `第 ${from}–${to} 小節`]) : pick([`bar ${from}`, `第 ${from} 小節`]);
-    return part ? `${bars} · ${part}` : bars;
+    out.push({ kind: "bars", label: part ? `${bars} · ${part}` : bars });
   }
-  if (a?.code) return `${a.code.file}: ${pick([`lines ${a.code.from}–${a.code.to}`, `第 ${a.code.from}–${a.code.to} 行`])}`;
-  return null;
+  if (a?.code) {
+    const { file, from, to } = a.code;
+    out.push({ kind: "code", label: `${file}: ${from === to ? pick([`line ${from}`, `第 ${from} 行`]) : pick([`lines ${from}–${to}`, `第 ${from}–${to} 行`])}` });
+  }
+  return out;
+}
+const attachLabel = (a: PanelState["attach"], pick: (l: L) => string): string | null => selectionLabels(a, pick).map((x) => x.label).join(" · ") || null;
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** the runner is there but from before the agent: what to do */
+function OldRunner() {
+  const { pick } = useLang();
+  return (
+    <p className="my-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-950" data-testid="agent-old-runner">
+      <RichText
+        text={pick([
+          "This runner is running code from before the AI agent. Restart it (Ctrl+C in its terminal, then `pixi run runner`). If this still shows afterwards, update your copy first with `git pull`.",
+          "這個執行器跑的是 AI 代理之前的程式碼。請重新啟動它（在它的終端機按 Ctrl+C，再執行 `pixi run runner`）。如果之後仍顯示這段話，請先用 `git pull` 更新你的副本。",
+        ])}
+      />
+    </p>
+  );
 }
 
 /** an answer: code fences as code, the rest as paragraphs and lists with inline Markdown */
@@ -294,7 +315,8 @@ function Settings({
     try {
       setFound(await scanAgents(backend.url, backend.token));
     } catch (e) {
-      setScanError((e as Error).message);
+      // (an older runner has no such address: say what to do instead)
+      setScanError(/no such path|HTTP 404/.test((e as Error).message) ? pick(["This runner is from before the AI agent: restart it.", "這個執行器比 AI 代理舊：請重新啟動它。"]) : (e as Error).message);
     } finally {
       setScanning(false);
     }
@@ -332,8 +354,9 @@ function Settings({
           {radio("claude-code", !local)}
           {radio("codex", !local)}
           {!local && <p className="px-1.5 text-xs text-amber-800">{pick(["This runner is on a server: use an API key here.", "這個執行器在伺服器上：請在這裡使用 API 金鑰。"])}</p>}
+          {status && !status.agent && <OldRunner />}
           {local && (
-            <button onClick={scan} disabled={scanning || !status} className="mt-1 ml-1.5 inline-flex items-center gap-1 text-xs font-medium text-(--lk-accent) hover:underline disabled:opacity-50" data-testid="agent-scan">
+            <button onClick={scan} disabled={scanning || !status?.agent} className="mt-1 ml-1.5 inline-flex items-center gap-1 text-xs font-medium text-(--lk-accent) hover:underline disabled:opacity-50" data-testid="agent-scan">
               <Icon icon={Search} className="h-3 w-3" /> {scanning ? pick(["Searching…", "搜尋中…"]) : pick(["Search this computer", "搜尋這台電腦"])}
             </button>
           )}
@@ -410,6 +433,7 @@ function Settings({
 export default function AgentPanel() {
   const { pick } = useLang();
   const panel = usePanel();
+  const selection = useSelection();
   const score = useScoreOnScreen();
   const [chat, setChat] = useState<Chat>(() => loadChat() ?? fresh());
   const chatRef = useRef(chat);
@@ -444,8 +468,12 @@ export default function AgentPanel() {
     setChecking(false);
   }, [backend]);
   useEffect(() => {
-    if (panel.open) void check();
-  }, [panel.open, check]);
+    if (!panel.open) return;
+    void check();
+    // while open, look again every few seconds: starting (or restarting) the runner is enough, and the light shows it
+    const again = window.setInterval(() => void runnerStatus(backend.url, fetch, backend.token).then(setStatus), 5000);
+    return () => window.clearInterval(again);
+  }, [panel.open, check, backend]);
   useEffect(() => {
     if (panel.draft) setDraft(panel.draft);
   }, [panel.draft]);
@@ -543,8 +571,16 @@ export default function AgentPanel() {
   const setBlock = (i: number, b: Block) => update((c) => ({ ...c, blocks: c.blocks.map((x, j) => (j === i ? b : x)) }));
 
   if (!panel.open) return null;
-  const chip = attachLabel(panel.attach, pick);
+  const chips = selectionLabels(panel.attach, pick);
+  // what is selected in the editor and not attached yet: offered as "+ …"
+  const offers = selectionLabels(selection, pick).filter((x) => !same(selection[x.kind], panel.attach?.[x.kind]));
   const noRunner = status === null && !checking;
+  // the light in the title bar: green connected, amber an old runner, red nothing there, grey still looking
+  const light =
+    status?.agent ? { color: "bg-emerald-500", text: pick(["Connected to the runner", "已連上執行器"]) }
+    : status ? { color: "bg-amber-500", text: pick(["The runner is from before the AI agent: restart it", "執行器比 AI 代理舊：請重新啟動"]) }
+    : checking ? { color: "bg-gray-300", text: pick(["Looking for the runner…", "正在尋找執行器…"]) }
+    : { color: "bg-red-500", text: pick(["Not connected: start the runner", "未連線：請啟動執行器"]) };
   const ready = settings.agent !== "claude-api" || apiKey.trim().length > 0;
   return createPortal(
     <aside
@@ -563,7 +599,10 @@ export default function AgentPanel() {
       >
         <Icon icon={Bot} className="ml-1 h-4 w-4 text-(--lk-accent)" />
         <div className="ml-1 min-w-0 flex-1">
-          <h2 className="text-sm font-semibold text-gray-900">{pick(["AI agent", "AI 代理"])}</h2>
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+            {pick(["AI agent", "AI 代理"])}
+            <span className={`inline-block h-2 w-2 rounded-full ${light.color}`} title={light.text} role="status" aria-label={light.text} data-testid="agent-light" data-state={status?.agent ? "on" : status ? "old" : checking ? "checking" : "off"} />
+          </h2>
           <p className="truncate text-[11px] text-gray-500">
             {pick(AGENT_NAME[settings.agent])}
             {score ? ` · ${score.title}` : ""}
@@ -620,16 +659,7 @@ export default function AgentPanel() {
                 </div>
               </div>
             )}
-            {status && !status.agent && (
-              <p className="my-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-950">
-                <RichText
-                  text={pick([
-                    "This runner is running code from before the AI agent. Restart it (Ctrl+C in its terminal, then `pixi run runner`). If this still shows afterwards, update your copy first with `git pull`.",
-                    "這個執行器跑的是 AI 代理之前的程式碼。請重新啟動它（在它的終端機按 Ctrl+C，再執行 `pixi run runner`）。如果之後仍顯示這段話，請先用 `git pull` 更新你的副本。",
-                  ])}
-                />
-              </p>
-            )}
+            {status && !status.agent && <OldRunner />}
             {!chat.blocks.length && (
               <div className="py-6 text-center text-sm text-gray-500">
                 <p>{score ? pick([`Ask about “${score.title}”, or ask for a change.`, `問關於「${score.title}」的問題，或請它修改。`]) : pick(["Open a score in Scores, then ask about it.", "在「樂譜」中開啟一份樂譜，然後問它。"])}</p>
@@ -692,13 +722,30 @@ export default function AgentPanel() {
             }}
             className="border-t border-gray-200 p-2"
           >
-            {chip && (
-              <span className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-900" data-testid="agent-attach">
-                {chip}
-                <button type="button" onClick={clearAttach} aria-label={pick(["Remove", "移除"])} className="text-rose-700 hover:text-rose-950">
-                  <Icon icon={X} className="h-3 w-3" />
-                </button>
-              </span>
+            {(chips.length > 0 || offers.length > 0) && (
+              <div className="mb-1.5 flex flex-wrap gap-1">
+                {chips.map((c) => (
+                  <span key={c.kind} className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-900" data-testid="agent-attach">
+                    {c.label}
+                    <button type="button" onClick={() => detach(c.kind)} aria-label={pick(["Remove", "移除"])} className="text-rose-700 hover:text-rose-950">
+                      <Icon icon={X} className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                {/* the editor's selection (lines of code, a clicked bar): one click adds it to the message */}
+                {offers.map((o) => (
+                  <button
+                    key={o.kind}
+                    type="button"
+                    onClick={() => attachTo({ [o.kind]: selection[o.kind] })}
+                    title={pick(["Add the selection to the message", "把選取的內容加到訊息"])}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:border-(--lk-accent) hover:text-rose-900"
+                    data-testid={`agent-offer-${o.kind}`}
+                  >
+                    <Icon icon={Plus} className="h-3 w-3" /> {o.label}
+                  </button>
+                ))}
+              </div>
             )}
             <div className="flex items-end gap-1.5">
               <textarea

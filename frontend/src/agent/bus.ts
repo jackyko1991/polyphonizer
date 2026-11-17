@@ -3,7 +3,9 @@
  * - the editor publishes the score on screen (its files, the open file, the last error), which the panel sends with
  *   each message; it stays after leaving the editor, so the panel keeps working on that score;
  * - the editor registers how the agent's files are applied (into the project, then run);
- * - anything can open the panel, with bars or code attached ("Ask AI about this bar").
+ * - anything can open the panel, with bars or code attached ("Ask AI about this bar");
+ * - the editor publishes what is selected (lines of code, the bar of a clicked note), which the panel offers to add to
+ *   the next message.
  */
 import { useSyncExternalStore } from "react";
 import type { AgentContext } from "./client.ts";
@@ -35,7 +37,11 @@ function store<T>(initial: T) {
   };
 }
 
+/** what is selected in the editor now: lines of code, and the bar of the note last clicked in the score */
+export type Selection = Pick<AgentContext, "bars" | "code">;
+
 const score = store<ScoreOnScreen | null>(null);
+const selection = store<Selection>({});
 const panel = store<PanelState>({ open: false, attach: null });
 let applier: ((files: Record<string, string>, removed: string[]) => void) | null = null;
 
@@ -63,3 +69,15 @@ export const openAgent = (attach: PanelState["attach"] = null, draft?: string) =
 export const closeAgent = () => panel.set({ ...panel.get(), open: false });
 export const toggleAgent = () => panel.set({ ...panel.get(), open: !panel.get().open });
 export const clearAttach = () => panel.set({ ...panel.get(), attach: null, draft: undefined });
+
+/** the editor's selection changed: only the kinds given are replaced (undefined clears one) */
+export const publishSelection = (s: Partial<Selection>) => selection.set({ ...selection.get(), ...s });
+export const useSelection = () => useSyncExternalStore(selection.subscribe, selection.get, selection.get);
+/** add bars or code to the next message (beside what is already attached) */
+export const attach = (a: Selection) => panel.set({ ...panel.get(), attach: { ...(panel.get().attach ?? {}), ...a } });
+/** take one kind off the next message */
+export function detach(kind: keyof Selection) {
+  const rest = { ...(panel.get().attach ?? {}) };
+  delete rest[kind];
+  panel.set({ ...panel.get(), attach: rest.bars || rest.code ? rest : null });
+}
