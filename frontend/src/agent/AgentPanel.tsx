@@ -622,7 +622,12 @@ export default function AgentPanel() {
             )}
             {status && !status.agent && (
               <p className="my-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-950">
-                {pick(["This runner is older than the AI agent: update your copy (git pull), then restart it.", "這個執行器比 AI 代理舊：請更新你的副本（git pull），再重新啟動。"])}
+                <RichText
+                  text={pick([
+                    "This runner is running code from before the AI agent. Restart it (Ctrl+C in its terminal, then `pixi run runner`). If this still shows afterwards, update your copy first with `git pull`.",
+                    "這個執行器跑的是 AI 代理之前的程式碼。請重新啟動它（在它的終端機按 Ctrl+C，再執行 `pixi run runner`）。如果之後仍顯示這段話，請先用 `git pull` 更新你的副本。",
+                  ])}
+                />
               </p>
             )}
             {!chat.blocks.length && (
