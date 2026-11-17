@@ -266,8 +266,6 @@ export const STRINGS = {
     "在那裡下載 MusicXML、MIDI、ABC 或 Humdrum 檔（在 IMSLP 要先接受你所在國家的版權說明），再把檔案拖到編輯器上，或用「樂譜 ▸ 匯入」。PDF 或錄音可用「樂譜 ▸ 轉成樂譜」轉成音符。",
   ],
   "lib.toEditor": ["Open the editor", "打開編輯器"],
-  "lib.imslpAlso": ["Also search IMSLP (hundreds of thousands of works; downloads there)", "也搜尋 IMSLP（數十萬首作品；在那裡下載）"],
-  "lib.imslpLoading": ["Loading IMSLP's index…", "正在載入 IMSLP 索引…"],
   "lib.onImslp": ["On IMSLP", "IMSLP 上"],
   "lib.imslpType": ["IMSLP: type a title or pick a composer to search its works.", "IMSLP：輸入曲名或選擇作曲家來搜尋它的作品。"],
   "lib.imslpMore": ["More from IMSLP", "更多 IMSLP 結果"],

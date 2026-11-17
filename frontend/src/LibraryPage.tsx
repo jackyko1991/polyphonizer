@@ -61,11 +61,11 @@ export default function LibraryPage() {
     const k = analysisKey(x);
     return k ? analyses.works[k] : undefined;
   };
-  // IMSLP's works, searched in the catalogue database (read over HTTP, only what a search needs) when ticked
+  // IMSLP's works, searched in the catalogue database (read over HTTP, only what a search needs) whenever there is a
+  // search or a composer: opened the first time one is asked for
   const [imslp, setImslp] = useState<"off" | "loading" | "on" | "error">("off");
   const [imslpDb, setImslpDb] = useState<Sql | null>(null);
   const [imslpShown, setImslpShown] = useState(50);
-  const [imslpOn, setImslpOn] = useState(false);
   const loadImslp = () => {
     if (imslp === "loading" || imslp === "on") return;
     setImslp("loading");
@@ -135,6 +135,10 @@ export default function LibraryPage() {
   }, [composers, query, composer]);
   const activeComposer = composer || named || "";
   // words used up by the composer chip don't also have to match the title
+  const asked = words.length > 0 || !!composer;
+  useEffect(() => {
+    if (asked) loadImslp();
+  }, [asked]); // eslint-disable-line react-hooks/exhaustive-deps
   const rest = named ? words.filter((w) => !fold(`${named} ${COMPOSER_ZH[named] ?? ""}`).split(/[\s・.]+/).some((n) => n.startsWith(w)) && !fold(COMPOSER_ZH[named] ?? "").includes(w)) : words;
 
   const filtered = useMemo(() => {
@@ -325,10 +329,6 @@ export default function LibraryPage() {
         <input type="checkbox" checked={withHarmony} onChange={(e) => setWithHarmony(e.target.checked)} />
         {t("lib.withHarmony")} ({Object.keys(analyses.works).length})
       </label>
-      <label className="mt-2 inline-flex items-center gap-1.5 text-sm text-gray-700" data-testid="lib-imslp-toggle">
-        <input type="checkbox" checked={imslpOn && imslp !== "error"} disabled={imslp === "loading"} onChange={(e) => (setImslpOn(e.target.checked), e.target.checked && loadImslp())} />
-        {imslp === "loading" ? t("lib.imslpLoading") : imslp === "error" ? t("lib.imslpError") : t("lib.imslpAlso")}
-      </label>
       {/* the same search in libraries this page can't open from: one line under the filters */}
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm" data-testid="lib-elsewhere">
         <span className="text-gray-600">{t("lib.elsewhere")}</span>
@@ -484,7 +484,8 @@ export default function LibraryPage() {
         })}
         {rows && filtered.length === 0 && <li className="px-4 py-6 text-center text-sm text-gray-500">{t("lib.none")}</li>}
       </ul>
-      {imslpOn && imslpDb && <ImslpResults db={imslpDb} words={rest} composer={activeComposer} shown={imslpShown} onMore={() => setImslpShown((n) => n + 50)} />}
+      {imslp === "error" && asked && <p className="mt-4 text-sm text-gray-500">{t("lib.imslpError")}</p>}
+      {asked && imslpDb && <ImslpResults db={imslpDb} words={rest} composer={activeComposer} shown={imslpShown} onMore={() => setImslpShown((n) => n + 50)} />}
       {filtered.length > shown && (
         <button onClick={() => setShown((n) => n + PAGE)} className="mx-auto mt-4 block rounded-md border border-gray-300 bg-white px-4 py-1.5 text-sm hover:bg-gray-50">
           {fill(t("lib.more"), { n: Math.min(PAGE, filtered.length - shown) })}
