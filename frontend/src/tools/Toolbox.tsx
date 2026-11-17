@@ -26,7 +26,8 @@ export const TOOLS: { id: ToolId; icon: LucideIcon; name: readonly [string, stri
 
 const AI_NAME = ["AI agent", "AI 代理"] as const;
 
-export default function Toolbox() {
+/** `agent`: offer the AI agent (the score editor only) */
+export default function Toolbox({ agent = true }: { agent?: boolean }) {
   const { pick } = useLang();
   const box = useToolbox();
   const agentOpen = usePanel().open;
@@ -119,7 +120,7 @@ export default function Toolbox() {
           aria-label={pick(["Music tools", "音樂工具"])}
           className={`flex flex-col items-end gap-2 pb-1 ${menu ? "pointer-events-auto" : ""}`}
         >
-          {[{ id: "ai" as const, icon: Bot, name: AI_NAME, key: "" }, ...TOOLS].map((t, i, all) => {
+          {[...(agent ? [{ id: "ai" as const, icon: Bot, name: AI_NAME, key: "" }] : []), ...TOOLS].map((t, i, all) => {
             const running = t.id === "ai" ? agentOpen : box.running.includes(t.id);
             const delay = menu ? (all.length - 1 - i) * 40 : 0;
             return (

@@ -1,5 +1,5 @@
 import { go, READING_TABS, RichText, routeHash, SeriesPage, seriesText, Shell, Timeline, useLang, useRoute, type ShellPage } from "@learnkit/web";
-import { Component, lazy, Suspense, useState, type ComponentType, type ErrorInfo, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useState, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import EditorPage from "./EditorPage.tsx";
 import LearnPage from "./LearnPage.tsx";
 import { SCROLL } from "./pages/kit.tsx";
@@ -7,14 +7,18 @@ import { LEARN_TABS } from "./learn/route.ts";
 import RoadmapPage from "./RoadmapPage.tsx";
 import { STRINGS } from "./strings.ts";
 import Toolbox from "./tools/Toolbox.tsx";
-import { usePanel } from "./agent/bus.ts";
+import { closeAgent, usePanel } from "./agent/bus.ts";
 
 const AgentPanel = lazy(() => import("./agent/AgentPanel.tsx"));
-/** the AI panel, loaded the first time it is opened, then kept (a running answer goes on while it is closed) */
-function AgentHost() {
+/** the AI panel, loaded the first time it is opened, then kept (a running answer goes on while it is closed); only in
+ * the score editor: leaving it closes the panel */
+function AgentHost({ here }: { here: boolean }) {
   const open = usePanel().open;
   const [opened, setOpened] = useState(open);
   if (open && !opened) setOpened(true);
+  useEffect(() => {
+    if (!here && open) closeAgent();
+  }, [here, open]);
   return opened ? (
     <Suspense fallback={null}>
       <AgentPanel />
@@ -62,6 +66,8 @@ const HistoryPage = lazy(() => import("./history.ts").then((m) => ({ default: hi
 export default function App() {
   const { t, lang } = useLang();
   const route = useRoute("editor");
+  // the AI agent works on the score in the editor, so it is offered only there
+  const onEditor = !["library", "learn", "concept", "skills", "reading", "agents", "roadmap"].includes(route.page);
   const pages: ShellPage[] = [
     { id: "editor", label: t("page.editor") },
     { id: "library", label: t("page.library") },
@@ -170,8 +176,8 @@ export default function App() {
         )}
       </Suspense>
       </PageBoundary>
-      <Toolbox />
-      <AgentHost />
+      <Toolbox agent={onEditor} />
+      <AgentHost here={onEditor} />
     </Shell>
   );
 }
