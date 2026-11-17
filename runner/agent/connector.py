@@ -34,6 +34,7 @@ class Connector:
     workspace: Path
     title: str = ""
     client: str = ""  # the agent's name, from its MCP initialize
+    mode: str = "ask"  # the page's mode: in plan mode write_file is refused
     last_seen: float | None = None  # the agent's last MCP request
     events: list = field(default_factory=list)
     seq: int = 0
@@ -115,7 +116,7 @@ def revoke(token: str) -> bool:
     return gone
 
 
-def sync(c: Connector, title: str, files: list) -> int:
+def sync(c: Connector, title: str, files: list, mode: str = "ask") -> int:
     """the score on the learner's screen, into the connector's folder (its .py files replaced): how many files"""
     keep = {}
     for f in files[:MAX_FILES] if isinstance(files, list) else []:
@@ -130,6 +131,7 @@ def sync(c: Connector, title: str, files: list) -> int:
     for name, code in keep.items():
         (c.workspace / name).write_text(code, encoding="utf-8")
     c.title = str(title or "")[:200]
+    c.mode = mode if mode in ("ask", "auto", "plan") else "ask"
     return len(keep)
 
 

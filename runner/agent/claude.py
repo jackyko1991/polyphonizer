@@ -56,6 +56,8 @@ async def run(
     mcp_url: str,
     secrets: list[str],
     login_hint: str,
+    plan: bool = False,
+    images: list[tuple[str, str]] | None = None,
 ) -> AsyncIterator[dict]:
     """one turn: yields text, tool, tool_result, done {cost_usd} or error"""
     from claude_agent_sdk import (
@@ -73,6 +75,8 @@ async def run(
     root = session.workspace
 
     async def can_use_tool(name: str, data: dict, _context) -> PermissionResultAllow | PermissionResultDeny:
+        if plan and name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+            return PermissionResultDeny(message="Plan mode: describe the change instead of making it.")
         path = data.get("file_path") or data.get("path") or data.get("notebook_path")
         if path is not None and not inside(path, root):
             return PermissionResultDeny(message="Only the files of this score can be read or changed.")
@@ -80,8 +84,9 @@ async def run(
 
     options = ClaudeAgentOptions(
         cwd=str(root),
-        tools=["Read", "Write", "Edit", "Glob", "Grep"],
-        disallowed_tools=["Bash", "WebFetch", "WebSearch", "Task"],
+        # plan mode: it reads and compiles, and can't write
+        tools=["Read", "Glob", "Grep"] if plan else ["Read", "Write", "Edit", "Glob", "Grep"],
+        disallowed_tools=["Bash", "WebFetch", "WebSearch", "Task", *(["Write", "Edit"] if plan else [])],
         allowed_tools=TOOLS,
         mcp_servers={SERVER: {"type": "http", "url": mcp_url}},
         strict_mcp_config=True,
@@ -100,7 +105,16 @@ async def run(
     async def drive() -> None:
         try:
             async with ClaudeSDKClient(options=options) as client:
-                await client.query(message)
+                if images:
+                    # the pictures pasted with the message go in it, as images Claude sees (not files to go and read)
+                    content = [{"type": "text", "text": message}, *({"type": "image", "source": {"type": "base64", "media_type": t, "data": d}} for t, d in images)]
+
+                    async def one():
+                        yield {"type": "user", "message": {"role": "user", "content": content}, "parent_tool_use_id": None}
+
+                    await client.query(one())
+                else:
+                    await client.query(message)
                 async for m in client.receive_response():
                     await sink.put(("sdk", m))
         except Exception as e:  # noqa: BLE001 - shown to the learner, never with the key

@@ -185,6 +185,21 @@ class Policy(unittest.TestCase):
         argv = core.codex.command("codex", "/w", None, "sess-1", "http://x/mcp/t", ["/w/pictures/picture-1.png"])
         self.assertEqual(argv[-4:], ["resume", "sess-1", "--image=/w/pictures/picture-1.png", "-"])
 
+    def test_modes(self):
+        self.assertIsNone(core.check(self.req(agent="claude-api", api_key="k", mode="plan"), {}))
+        self.assertIn("mode", core.check(self.req(agent="claude-api", api_key="k", mode="yolo"), {}))
+        # plan mode: Codex can't write
+        self.assertIn("read-only", core.codex.command("codex", "/w", None, None, "http://x", plan=True))
+        self.assertIn("workspace-write", core.codex.command("codex", "/w", None, None, "http://x"))
+        # an outside agent's write_file is refused while the page is in plan mode
+        with tempfile.TemporaryDirectory() as d:
+            c = connector.Connector(id="abcdefabcdef", workspace=Path(d))
+            connector.sync(c, "T", [{"name": "main.py", "code": "score = 1\n"}], "plan")
+            text, err, files = tools.file_tool(tools.Binding(Path(d), c, "connector"), "write_file", {"name": "main.py", "code": "x"})
+            self.assertTrue(err and files is None and "plan" in text)
+            connector.sync(c, "T", [{"name": "main.py", "code": "score = 1\n"}], "auto")
+            self.assertFalse(tools.file_tool(tools.Binding(Path(d), c, "connector"), "write_file", {"name": "main.py", "content": "y"})[1])
+
     def test_bad_requests(self):
         self.assertIn("chat id", core.check(self.req(chat="../x"), {}))
         self.assertIn("empty", core.check(self.req(message=" "), {}))

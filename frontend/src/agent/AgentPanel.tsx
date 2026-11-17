@@ -8,7 +8,7 @@
  * score by itself. The chat survives a reload: a turn still running is followed again.
  */
 import { go, RichText, useLang } from "@learnkit/web";
-import { Bot, Check, ChevronRight, Copy, ImagePlus, Plug, Maximize2, Minimize2, Plus, RefreshCw, Search, Send, Settings2, Square, Undo2, Wrench, X } from "lucide-react";
+import { ArrowUp, AudioLines, Bot, Check, ChevronRight, ChevronsRight, Copy, FileMusic, Hand, ListChecks, Plug, Maximize2, Minimize2, Plus, RefreshCw, Search, Settings2, Square, Undo2, Wrench, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HANDLES, useFloatingWindow, type Box } from "../tools/floatingWindow.ts";
@@ -16,7 +16,7 @@ import { Badge, COMING_SOON, PRO } from "../Badge.tsx";
 import { Icon } from "../Button.tsx";
 import { backendOk, loadBackend, RUNNER_URL, runnerStatus, saveBackend, type Backend, type RunnerStatus } from "../transcribe/routes.ts";
 import { BUTTON, FIELD, PRIMARY } from "../ui.ts";
-import { applyFiles, attach as attachTo, clearAttach, closeAgent, detach, scoreOnScreen, usePanel, useScoreOnScreen, useSelection, type PanelState, type Selection } from "./bus.ts";
+import { applyFiles, attach as attachTo, clearAttach, closeAgent, detach, keepScoreFile, loadedNames, publishSelection, readScoreFile, scoreOnScreen, usePanel, useScoreOnScreen, useSelection, type PanelState, type Selection } from "./bus.ts";
 import { loadChat, saveChat, toolLabel, withEvent, withMessage, type Block, type Chat } from "./chat.ts";
 import {
   cancelTurn,
@@ -33,6 +33,10 @@ import {
   type AgentId,
   type AgentSettings,
   type FoundAgent,
+  loadMode,
+  MODES,
+  saveMode,
+  type AgentMode,
   ConnectionGone,
   connectionEvents,
   createConnection,
@@ -45,7 +49,7 @@ import {
   type ConnectorState,
 } from "./client.ts";
 import { counts, diffLines, hunks } from "./diff.ts";
-import { MAX_PICTURES, picturesIn, readPicture, type Picture } from "./pictures.ts";
+import { ACCEPT, filesIn, isPicture, MAX_FILES, MAX_PICTURES, readMusic, readPicture, sizeText, type MusicFile, type Picture } from "./pictures.ts";
 
 type L = readonly [string, string];
 const fresh = (): Chat => ({ id: newChatId(), blocks: [], turn: null });
@@ -55,7 +59,8 @@ function defaultBox(): Box {
   const w = Math.min(420, window.innerWidth - 32);
   const top = 64;
   const dockTop = document.querySelector('[data-testid="tool-dock"]')?.getBoundingClientRect().top ?? window.innerHeight;
-  return { x: window.innerWidth - w - 16, y: top, w, h: Math.max(320, Math.min(dockTop, window.innerHeight) - top - 16) };
+  // (ending above the toolbox's round button at the bottom right, so the send button is never under it)
+  return { x: window.innerWidth - w - 16, y: top, w, h: Math.max(320, Math.min(dockTop, window.innerHeight) - top - 112) };
 }
 
 const AGENT_NAME: Record<AgentId, L> = {
@@ -211,6 +216,27 @@ function FileDiff({ name, before, after }: { name: string; before: string; after
   );
 }
 
+/** put a change into the score (keeping the files as they were, for Undo); a message when no editor is open */
+function applyChange(b: Extract<Block, { kind: "files" }>, pick: (l: L) => string): Extract<Block, { kind: "files" }> | string {
+  const current = Object.fromEntries((scoreOnScreen()?.files ?? []).map((f) => [f.name, f.code]));
+  const before: Record<string, string | null> = Object.fromEntries([...Object.keys(b.files), ...b.removed].map((n) => [n, current[n] ?? null]));
+  if (!applyFiles(b.files, b.removed)) return pick(["Open the score in Scores to apply this.", "請在「樂譜」中開啟這份樂譜再套用。"]);
+  return { ...b, state: "applied", before, auto: undefined };
+}
+
+const b64 = (bytes: Uint8Array) => {
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(out);
+};
+
+/** the modes, as Claude Code names them */
+const MODE_INFO: Record<AgentMode, { icon: typeof Hand; name: L; hint: L }> = {
+  ask: { icon: Hand, name: ["Ask before applying", "套用前先問"], hint: ["You apply or discard each change.", "每個修改由你套用或捨棄。"] },
+  auto: { icon: ChevronsRight, name: ["Apply automatically", "自動套用"], hint: ["Changes go straight into the score; Undo takes one back.", "修改直接進入樂譜；按「復原」可撤回。"] },
+  plan: { icon: ListChecks, name: ["Plan only", "只做規劃"], hint: ["The agent can't change files: it answers with a plan.", "代理不能修改檔案：它會回答一份計畫。"] },
+};
+
 function FilesCard({ b, onChange }: { b: Extract<Block, { kind: "files" }>; onChange: (b: Extract<Block, { kind: "files" }>) => void }) {
   const { pick } = useLang();
   const score = useScoreOnScreen();
@@ -218,10 +244,10 @@ function FilesCard({ b, onChange }: { b: Extract<Block, { kind: "files" }>; onCh
   const names = [...Object.keys(b.files), ...b.removed];
   const [note, setNote] = useState<string | null>(null);
   const apply = () => {
-    const before: Record<string, string | null> = Object.fromEntries(names.map((n) => [n, current[n] ?? null]));
-    if (!applyFiles(b.files, b.removed)) return setNote(pick(["Open the score in Scores to apply this.", "請在「樂譜」中開啟這份樂譜再套用。"]));
+    const r = applyChange(b, pick);
+    if (typeof r === "string") return setNote(r);
     setNote(null);
-    onChange({ ...b, state: "applied", before });
+    onChange(r);
   };
   const undo = () => {
     const back = b.before ?? {};
@@ -566,6 +592,12 @@ export default function AgentPanel() {
     return () => mq.removeEventListener("change", on);
   }, []);
   const [draft, setDraft] = useState("");
+  // ask / auto / plan, as Claude Code's modes (Shift+Tab in the box switches)
+  const [mode, setModeState] = useState<AgentMode>(loadMode);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const setMode = (m: AgentMode) => (setModeState(m), saveMode(m));
+  const nextMode = () => setMode(MODES[(MODES.indexOf(modeRef.current) + 1) % MODES.length]);
   // an agent outside the site (MCP): the connection, what it says, and its work brought into the chat
   const [connection, setConnectionState] = useState<Connection | null>(loadConnection);
   const [connState, setConnState] = useState<Omit<ConnectorState, "events"> | null>(null);
@@ -578,14 +610,14 @@ export default function AgentPanel() {
     if (!live || !score || !connection) return;
     const t = window.setTimeout(
       () =>
-        void syncConnection(connection, { title: score.title, files: score.files }, backend.token || undefined)
+        void syncConnection(connection, { title: score.title, files: score.files, mode }, backend.token || undefined)
           .then(({ client, last_seen_s, has_score }) => setConnState({ client, last_seen_s, has_score }))
           .catch((e) => e instanceof ConnectionGone && setConnection(null)),
       600,
     );
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live, score, connection?.token]);
+  }, [live, score, connection?.token, mode]);
   // what the agent did: every 2 s while the panel is open
   useEffect(() => {
     if (!live) return;
@@ -599,7 +631,7 @@ export default function AgentPanel() {
         const blocks: Block[] = [];
         for (const e of st.events) {
           const who = st.client || "MCP";
-          if (e.type === "files") blocks.push({ kind: "files", files: e.files, removed: e.removed ?? [], state: "new" });
+          if (e.type === "files") blocks.push({ kind: "files", files: e.files, removed: e.removed ?? [], state: "new", ...(modeRef.current === "auto" ? { auto: true } : {}) });
           else if (e.type === "tool") blocks.push({ kind: "tool", id: `mcp-${e.seq}`, name: e.name, input: { ...e.input, via: who }, ok: e.ok });
           else if (e.type === "compiled") blocks.push({ kind: "tool", id: `mcp-${e.seq}`, name: "compile", input: { via: who }, ok: e.ok });
         }
@@ -621,14 +653,26 @@ export default function AgentPanel() {
   const [pictures, setPictures] = useState<Picture[]>([]);
   const [pictureError, setPictureError] = useState("");
   const pictureInput = useRef<HTMLInputElement>(null);
-  const addPictures = async (files: File[]) => {
+  // music attached with the + (score files, recordings)
+  const [music, setMusic] = useState<MusicFile[]>([]);
+  /** pictures and music from the +, a paste or a drop */
+  const addFiles = async (files: File[]) => {
     setPictureError("");
+    const pics = files.filter(isPicture);
+    const rest = files.filter((f) => !isPicture(f));
     const room = MAX_PICTURES - pictures.length;
-    if (files.length > room) setPictureError(pick([`At most ${MAX_PICTURES} pictures with a message.`, `每則訊息最多 ${MAX_PICTURES} 張圖片。`]));
-    const read = (await Promise.all(files.slice(0, Math.max(0, room)).map((f) => readPicture(f).catch(() => null)))).filter((p): p is Picture => p !== null);
-    if (read.length < Math.min(files.length, room)) setPictureError(pick(["PNG, JPEG, GIF or WebP pictures only.", "只接受 PNG、JPEG、GIF 或 WebP 圖片。"]));
+    if (pics.length > room) setPictureError(pick([`At most ${MAX_PICTURES} pictures with a message.`, `每則訊息最多 ${MAX_PICTURES} 張圖片。`]));
+    const read = (await Promise.all(pics.slice(0, Math.max(0, room)).map((f) => readPicture(f).catch(() => null)))).filter((p): p is Picture => p !== null);
+    if (read.length < Math.min(pics.length, room)) setPictureError(pick(["Pictures: PNG, JPEG, GIF or WebP.", "圖片：PNG、JPEG、GIF 或 WebP。"]));
     setPictures((p) => [...p, ...read].slice(0, MAX_PICTURES));
+    const songs = await Promise.all(rest.slice(0, Math.max(0, MAX_FILES - music.length)).map((f) => readMusic(f).catch(() => null)));
+    if (songs.includes("big")) setPictureError(pick(["A file is larger than 20 MB.", "有檔案超過 20 MB。"]));
+    else if (songs.includes(null)) setPictureError(pick(["Attach pictures, scores (MusicXML, MIDI, ABC) or recordings (MP3, WAV …).", "可附加圖片、樂譜（MusicXML、MIDI、ABC）或錄音（MP3、WAV …）。"]));
+    setMusic((m) => [...m, ...songs.filter((x): x is MusicFile => x !== null && x !== "big")].slice(0, MAX_FILES));
   };
+  // a picture seen full size (click a thumbnail); the full pictures of this visit, by thumbnail
+  const [viewing, setViewing] = useState<string | null>(null);
+  const fullOf = useRef(new Map<string, string>());
   const abort = useRef<AbortController | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const busy = chat.turn !== null;
@@ -655,12 +699,35 @@ export default function AgentPanel() {
   // Esc closes (a window filling the page goes back to its size first)
   useEffect(() => {
     if (!panel.open) return;
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && (max ? setMax(false) : closeAgent());
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && (viewing ? setViewing(null) : max ? setMax(false) : closeAgent());
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
-  }, [panel.open, max]);
+  }, [panel.open, max, viewing]);
 
-  const onEvent = useCallback((e: AgentEvent) => update((c) => withEvent(c, e)), [update]);
+  // (in auto mode a change is marked to be applied as soon as it arrives: the effect below does it)
+  const onEvent = useCallback(
+    (e: AgentEvent) => (
+      e.type === "attached" && void keepScoreFile(e.name, Uint8Array.from(atob(e.data), (ch) => ch.charCodeAt(0))),
+      update((c) => {
+        const next = withEvent(c, e);
+        if (next === c || e.type !== "files" || modeRef.current !== "auto") return next;
+        const blocks = next.blocks.slice();
+        const last = blocks[blocks.length - 1];
+        if (last?.kind === "files") blocks[blocks.length - 1] = { ...last, auto: true };
+        return { ...next, blocks };
+      })
+    ),
+    [update],
+  );
+  // auto mode: changes marked to apply go into the score now (Undo on each card)
+  useEffect(() => {
+    const i = chat.blocks.findIndex((b) => b.kind === "files" && b.auto && b.state === "new");
+    if (i < 0) return;
+    const b = chat.blocks[i] as Extract<Block, { kind: "files" }>;
+    const r = applyChange(b, pick);
+    setBlock(i, typeof r === "string" ? { ...b, auto: undefined } : r);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.blocks]);
   /** follow the running turn until it ends (after a reload, or when the connection dropped) */
   const following = useRef(false);
   const follow = useCallback(async () => {
@@ -696,8 +763,11 @@ export default function AgentPanel() {
     const attach = panel.attach;
     const label = attachLabel(attach, pick) ?? undefined;
     const sent = pictures;
-    update((c) => withMessage(c, text.trim(), label, sent.map((p) => p.thumb)));
+    const songs = music;
+    sent.forEach((p) => fullOf.current.set(p.thumb, p.full));
+    update((c) => withMessage(c, text.trim(), label, sent.map((p) => p.thumb), songs.map((m) => m.name)));
     setPictures([]);
+    setMusic([]);
     setPictureError("");
     setDraft("");
     clearAttach();
@@ -706,12 +776,19 @@ export default function AgentPanel() {
       return;
     }
     const context: AgentContext = { title: s.title, file: s.active, error: s.error, ...(attach ?? {}) };
+    // the files the score load()s go too, so the agent can compile and read them
+    const scoreFiles: { name: string; data: string }[] = [];
+    for (const name of loadedNames(s.files).slice(0, 8)) {
+      const bytes = await readScoreFile(name).catch(() => null);
+      if (bytes && bytes.length < 15_000_000) scoreFiles.push({ name, data: b64(bytes) });
+    }
     abort.current = new AbortController();
     try {
       await sendChat(
         backend.url,
         {
           agent: settings.agent,
+          mode,
           chat: chatRef.current.id,
           message: text.trim(),
           model: settings.model || null,
@@ -719,6 +796,8 @@ export default function AgentPanel() {
           api_key: settings.agent === "claude-api" ? apiKey : undefined,
           files: s.files,
           images: sent.length ? sent.map(({ name, type, data }) => ({ name, type, data })) : undefined,
+          attachments: songs.length ? songs.map(({ name, data }) => ({ name, data })) : undefined,
+          score_files: scoreFiles.length ? scoreFiles : undefined,
           context,
         },
         onEvent,
@@ -864,7 +943,18 @@ export default function AgentPanel() {
                     {b.pictures && (
                       <span className="mb-1 flex flex-wrap gap-1">
                         {b.pictures.map((src, k) => (
-                          <img key={k} src={src} alt="" className="h-12 rounded border border-gray-200 object-cover" />
+                          <button key={k} type="button" onClick={() => setViewing(fullOf.current.get(src) ?? src)} title={pick(["See it full size", "查看原圖"])} className="cursor-zoom-in">
+                            <img src={src} alt="" className="h-12 rounded border border-gray-200 object-cover" />
+                          </button>
+                        ))}
+                      </span>
+                    )}
+                    {b.files && (
+                      <span className="mb-1 flex flex-wrap gap-1">
+                        {b.files.map((f) => (
+                          <span key={f} className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5 text-xs text-gray-700">
+                            <Icon icon={/\.(mp3|wav|m4a|ogg|oga|flac|aac|aiff?)$/i.test(f) ? AudioLines : FileMusic} className="h-3 w-3" /> {f}
+                          </span>
                         ))}
                       </span>
                     )}
@@ -903,72 +993,82 @@ export default function AgentPanel() {
               e.preventDefault();
               void send(draft);
             }}
-            className="border-t border-gray-200 p-2"
+            className="p-2"
           >
-            {(chips.length > 0 || offers.length > 0) && (
-              <div className="mb-1.5 flex flex-wrap gap-1">
-                {chips.map((c) => (
-                  <span key={c.kind} className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-900" data-testid="agent-attach">
-                    {c.label}
-                    <button type="button" onClick={() => detach(c.kind)} aria-label={pick(["Remove", "移除"])} className="text-rose-700 hover:text-rose-950">
-                      <Icon icon={X} className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-                {/* the editor's selection (lines of code, a clicked bar): one click adds it to the message */}
-                {offers.map((o) => (
-                  <button
-                    key={o.kind}
-                    type="button"
-                    onClick={() => attachTo({ [o.kind]: selection[o.kind] })}
-                    title={pick(["Add the selection to the message", "把選取的內容加到訊息"])}
-                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:border-(--lk-accent) hover:text-rose-900"
-                    data-testid={`agent-offer-${o.kind}`}
-                  >
-                    <Icon icon={Plus} className="h-3 w-3" /> {o.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            {pictures.length > 0 && (
-              <div className="mb-1.5 flex flex-wrap gap-1.5" data-testid="agent-pictures">
-                {pictures.map((p, k) => (
-                  <span key={k} className="relative">
-                    <img src={p.thumb} alt={p.name} title={p.name} className="h-14 rounded border border-gray-300 object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setPictures((ps) => ps.filter((_, j) => j !== k))}
-                      aria-label={pick(["Remove", "移除"])}
-                      className="absolute -top-1.5 -right-1.5 rounded-full bg-gray-700 p-0.5 text-white hover:bg-gray-900"
-                    >
-                      <Icon icon={X} className="h-2.5 w-2.5" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            {pictureError && <p className="mb-1 text-xs text-red-700">{pictureError}</p>}
-            <div className="flex items-end gap-1.5">
-              <button type="button" onClick={() => pictureInput.current?.click()} disabled={pictures.length >= MAX_PICTURES} title={pick(["Add a picture (or paste one)", "加入圖片（或直接貼上）"])} aria-label={pick(["Add a picture", "加入圖片"])} className="rounded p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-40" data-testid="agent-picture">
-                <Icon icon={ImagePlus} />
-              </button>
-              <input ref={pictureInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => (void addPictures([...(e.target.files ?? [])]), (e.target.value = ""))} />
+            {/* one box, as Claude's chat window: what goes with the message, the text, then + · mode · send */}
+            <div
+              className="rounded-xl border border-gray-300 bg-white focus-within:border-(--lk-accent)"
+              onDragOver={(e) => [...(e.dataTransfer?.types ?? [])].includes("Files") && e.preventDefault()}
+              onDrop={(e) => {
+                const files = filesIn(e.dataTransfer?.items);
+                if (!files.length) return;
+                e.preventDefault();
+                void addFiles(files);
+              }}
+              data-testid="agent-composer"
+            >
+              {(chips.length > 0 || offers.length > 0 || pictures.length > 0 || music.length > 0) && (
+                <div className="flex flex-wrap gap-1.5 border-b border-gray-100 px-2 pt-2 pb-1.5" data-testid="agent-pictures">
+                  {pictures.map((p, k) => (
+                    <span key={`p${k}`} className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 py-0.5 pr-1 pl-0.5 text-xs text-gray-800">
+                      <button type="button" onClick={() => setViewing(p.full)} title={pick(["See it full size", "查看原圖"])} className="cursor-zoom-in">
+                        <img src={p.thumb} alt="" className="h-6 w-6 rounded object-cover" />
+                      </button>
+                      <span className="max-w-[10rem] truncate font-medium">{p.name}</span>
+                      <span className="text-gray-500 tabular-nums">
+                        {p.width}×{p.height}
+                      </span>
+                      <button type="button" onClick={() => setPictures((ps) => ps.filter((_, j) => j !== k))} aria-label={pick(["Remove", "移除"])} className="rounded p-0.5 text-gray-500 hover:bg-gray-200">
+                        <Icon icon={X} className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {music.map((m, k) => (
+                    <span key={`m${k}`} className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-1.5 py-0.5 text-xs text-gray-800" data-testid="agent-music">
+                      <Icon icon={m.kind === "audio" ? AudioLines : FileMusic} className="h-3.5 w-3.5 text-gray-500" />
+                      <span className="max-w-[10rem] truncate font-medium">{m.name}</span>
+                      <span className="text-gray-500">{sizeText(m.size)}</span>
+                      <button type="button" onClick={() => setMusic((ms) => ms.filter((_, j) => j !== k))} aria-label={pick(["Remove", "移除"])} className="rounded p-0.5 text-gray-500 hover:bg-gray-200">
+                        <Icon icon={X} className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {chips.map((c) => (
+                    <span key={c.kind} className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-1.5 py-0.5 text-xs text-rose-900" data-testid="agent-attach">
+                      {c.label}
+                      <button type="button" onClick={() => detach(c.kind)} aria-label={pick(["Remove", "移除"])} className="rounded p-0.5 text-rose-700 hover:bg-rose-100">
+                        <Icon icon={X} className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {/* the editor's selection (lines of code, a clicked bar): one click adds it, × forgets it */}
+                  {offers.map((o) => (
+                    <span key={o.kind} className="inline-flex items-center rounded-md border border-dashed border-gray-300 text-xs text-gray-600">
+                      <button type="button" onClick={() => attachTo({ [o.kind]: selection[o.kind] })} title={pick(["Add the selection to the message", "把選取的內容加到訊息"])} className="inline-flex items-center gap-1 py-0.5 pl-1.5 hover:text-rose-900" data-testid={`agent-offer-${o.kind}`}>
+                        <Icon icon={Plus} className="h-3 w-3" /> {o.label}
+                      </button>
+                      <button type="button" onClick={() => publishSelection({ [o.kind]: undefined })} aria-label={pick(["Not this", "不要這個"])} className="rounded p-0.5 px-1 text-gray-400 hover:text-gray-700">
+                        <Icon icon={X} className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
               <textarea
                 onPaste={(e) => {
-                  const files = picturesIn(e.clipboardData?.items);
+                  const files = filesIn(e.clipboardData?.items);
                   if (!files.length) return; // text: pasted as usual
                   e.preventDefault();
-                  void addPictures(files);
-                }}
-                onDrop={(e) => {
-                  const files = picturesIn(e.dataTransfer?.items);
-                  if (!files.length) return;
-                  e.preventDefault();
-                  void addPictures(files);
+                  void addFiles(files);
                 }}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
+                  if (e.key === "Tab" && e.shiftKey) {
+                    e.preventDefault();
+                    nextMode();
+                    return;
+                  }
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     void send(draft);
@@ -976,22 +1076,51 @@ export default function AgentPanel() {
                 }}
                 rows={Math.min(6, Math.max(2, draft.split("\n").length))}
                 placeholder={ready ? pick(["Ask, or ask for a change… (Enter sends)", "提問，或請它修改…（Enter 送出）"]) : pick(["Enter your API key in Settings first", "請先在設定中輸入 API 金鑰"])}
-                className="min-w-0 flex-1 resize-none rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-(--lk-accent) focus:outline-none"
+                className="block w-full resize-none bg-transparent px-2.5 py-2 text-sm focus:outline-none"
                 data-testid="agent-input"
               />
-              {busy ? (
-                <button type="button" onClick={stop} className={BUTTON} title={pick(["Stop", "停止"])} data-testid="agent-stop">
-                  <Icon icon={Square} className="h-3.5 w-3.5" />
+              <div className="flex items-center gap-1 px-1.5 pb-1.5">
+                <button type="button" onClick={() => pictureInput.current?.click()} title={pick(["Add pictures, scores or recordings (or paste, or drop them here)", "加入圖片、樂譜或錄音（也可貼上或拖放到這裡）"])} aria-label={pick(["Add files", "加入檔案"])} className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100" data-testid="agent-picture">
+                  <Icon icon={Plus} />
                 </button>
-              ) : (
-                <button type="submit" disabled={!draft.trim() || !ready} className={PRIMARY} title={pick(["Send", "送出"])} data-testid="agent-send">
-                  <Icon icon={Send} className="h-3.5 w-3.5" />
-                </button>
-              )}
+                <input ref={pictureInput} type="file" accept={ACCEPT} multiple hidden onChange={(e) => (void addFiles([...(e.target.files ?? [])]), (e.target.value = ""))} />
+                <span className="flex-1" />
+                {(() => {
+                  const M = MODE_INFO[mode];
+                  return (
+                    <button
+                      type="button"
+                      onClick={nextMode}
+                      title={`${pick(M.hint)} ${pick(["Click or Shift+Tab to switch.", "按一下或 Shift+Tab 切換。"])}`}
+                      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium ${mode === "auto" ? "text-violet-700 hover:bg-violet-50" : mode === "plan" ? "text-teal-700 hover:bg-teal-50" : "text-gray-600 hover:bg-gray-100"}`}
+                      data-testid="agent-mode"
+                      data-mode={mode}
+                    >
+                      <Icon icon={M.icon} className="h-3.5 w-3.5" /> {pick(M.name)}
+                    </button>
+                  );
+                })()}
+                {busy ? (
+                  <button type="button" onClick={stop} className="rounded-md bg-gray-800 p-1.5 text-white hover:bg-gray-900" title={pick(["Stop", "停止"])} aria-label={pick(["Stop", "停止"])} data-testid="agent-stop">
+                    <Icon icon={Square} className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  <button type="submit" disabled={!draft.trim() || !ready} className="rounded-md bg-(--lk-accent) p-1.5 text-white hover:opacity-90 disabled:opacity-40" title={pick(["Send", "送出"])} aria-label={pick(["Send", "送出"])} data-testid="agent-send">
+                    <Icon icon={ArrowUp} className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
+            {pictureError && <p className="mt-1 text-xs text-red-700">{pictureError}</p>}
             {chat.cost && settings.agent === "claude-api" ? <p className="mt-1 text-right text-[10px] text-gray-400">{pick(["last answer", "上一個回答"])}: ${chat.cost.toFixed(3)}</p> : null}
           </form>
         </>
+      )}
+      {/* a picture full size: a click or Esc closes it */}
+      {viewing && (
+        <div className="fixed inset-0 z-[90] flex cursor-zoom-out items-center justify-center bg-black/75 p-4" onClick={() => setViewing(null)} role="dialog" aria-label={pick(["Picture", "圖片"])} data-testid="agent-viewer">
+          <img src={viewing} alt="" className="max-h-full max-w-full rounded shadow-2xl" />
+        </div>
       )}
       {/* resize from any edge or corner */}
       {!phone &&

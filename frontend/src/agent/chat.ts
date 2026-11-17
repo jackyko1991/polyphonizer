@@ -6,12 +6,12 @@
 import type { AgentEvent } from "./client.ts";
 
 export type Block =
-  | { kind: "user"; text: string; context?: string; pictures?: string[] }
+  | { kind: "user"; text: string; context?: string; pictures?: string[]; files?: string[] }
   | { kind: "text"; text: string }
   | { kind: "tool"; id: string; name: string; input: Record<string, unknown>; ok?: boolean; result?: string }
   | { kind: "question"; question: string; options: string[]; multi: boolean; answered?: boolean }
   /** the files the agent changed: shown as a diff, applied (with the files as they were, for Undo) or discarded */
-  | { kind: "files"; files: Record<string, string>; removed: string[]; state: "new" | "applied" | "discarded"; before?: Record<string, string | null> }
+  | { kind: "files"; files: Record<string, string>; removed: string[]; state: "new" | "applied" | "discarded"; before?: Record<string, string | null>; auto?: boolean }
   | { kind: "error"; text: string }
   | { kind: "note"; text: "waiting" | "cancelled" | "lost" };
 
@@ -72,10 +72,10 @@ export function withEvent(chat: Chat, e: AgentEvent): Chat {
 }
 
 /** the learner's message, before the turn's events */
-export const withMessage = (chat: Chat, text: string, context?: string, pictures?: string[]): Chat => ({
+export const withMessage = (chat: Chat, text: string, context?: string, pictures?: string[], files?: string[]): Chat => ({
   ...chat,
   // (an unanswered question is answered by this message)
-  blocks: [...chat.blocks.map((b) => (b.kind === "question" && !b.answered ? { ...b, answered: true } : b)), { kind: "user", text, context, ...(pictures?.length ? { pictures } : {}) }],
+  blocks: [...chat.blocks.map((b) => (b.kind === "question" && !b.answered ? { ...b, answered: true } : b)), { kind: "user", text, context, ...(pictures?.length ? { pictures } : {}), ...(files?.length ? { files } : {}) }],
   turn: null,
 });
 

@@ -39,6 +39,19 @@ FILE_NAME = re.compile(r"^[A-Za-z_][\w-]{0,60}\.py$")
 MAX_FILE = 200_000
 MAX_FILES = 40
 MAX_MESSAGE = 20_000
+# how the learner wants changes: ask (they apply each), auto (the page applies them), plan (no changes: a plan)
+MODES = ("ask", "auto", "plan")
+PLAN = (
+    "\n\n[Plan mode: do not change any file (you can't). Read the score, compile it if useful, and answer with a short "
+    "plan: what you would change, where (files, bars, parts) and why. The learner switches mode to have it carried out.]"
+)
+# music attached to the message (the panel's +): score files go to files/ (load() reads them there and on the page);
+# a recording is turned into a score first, by the runner's sound engine when it has one (TRANSCRIBE, set by server.py)
+MAX_ATTACHMENTS = 4
+MAX_ATTACHMENT = 20_000_000
+SCORE_EXT = {".musicxml", ".xml", ".mxl", ".mid", ".midi", ".abc", ".krn"}
+AUDIO_EXT = {".mp3", ".wav", ".m4a", ".ogg", ".oga", ".flac", ".aac", ".aif", ".aiff"}
+TRANSCRIBE = None  # (src: Path, out: Path, title: str) → Path, or None when this runner has no sound engine
 # pictures pasted into the message (a screenshot, a photo of a page): kept in the chat's folder for that turn
 MAX_PICTURES = 4
 MAX_PICTURE = 5_000_000
@@ -142,6 +155,50 @@ def sync_files(s: Session, files: list[dict]) -> dict[str, str]:
     return keep
 
 
+def safe_name(name: str) -> str:
+    """a file name the learner gave, as a plain name in one folder (no path, no odd characters)"""
+    p = Path(str(name).replace("\\", "/")).name
+    stem = re.sub(r"[^\w\- ]+", "_", Path(p).stem).strip() or "file"
+    return f"{stem[:60]}{Path(p).suffix.lower()}"
+
+
+async def save_attachments(turn: turns.Turn, s: Session, att: list[dict]) -> list[str]:
+    """the message's music in the chat's files/ folder: a line for the agent about each. A recording is transcribed
+    to MusicXML (shown as a tool row), and the score sent to the page too ("attached"), so load() works there."""
+    folder = s.workspace / "files"
+    folder.mkdir(exist_ok=True)
+    notes = []
+    for i, a in enumerate(att):
+        try:
+            data = base64.b64decode(a["data"], validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        name = safe_name(a["name"])
+        if Path(name).suffix in SCORE_EXT:
+            (folder / name).write_bytes(data)
+            notes.append(f"files/{name} (a score file: in main.py, load({name!r}) reads it)")
+            continue
+        (s.workspace / "attachments").mkdir(exist_ok=True)
+        src = s.workspace / "attachments" / name
+        src.write_bytes(data)
+        if TRANSCRIBE is None:
+            notes.append(f"attachments/{name} (a recording; this runner has no engine to turn it into notes: say so if it matters)")
+            continue
+        out = folder / f"{Path(name).stem}.musicxml"
+        tid = f"transcribe-{i}"
+        turn.emit({"type": "tool", "id": tid, "name": "transcribe", "input": {"file_path": name}})
+        try:
+            await asyncio.to_thread(TRANSCRIBE, src, out, Path(name).stem)
+        except Exception as e:  # noqa: BLE001 - the engine's message, for the learner and the agent
+            turn.emit({"type": "tool_result", "id": tid, "ok": False, "text": str(e)[:300]})
+            notes.append(f"attachments/{name} (a recording; transcribing it failed: {str(e)[:200]})")
+            continue
+        turn.emit({"type": "tool_result", "id": tid, "ok": True, "text": f"files/{out.name}"})
+        turn.emit({"type": "attached", "name": out.name, "data": base64.b64encode(out.read_bytes()).decode()})
+        notes.append(f"files/{out.name} (the recording {name}, transcribed by the runner into a score: piano model, beat, bars and key found automatically, so check what looks odd; load({out.name!r}) reads it)")
+    return notes
+
+
 def save_pictures(s: Session, pics: list[dict]) -> list[str]:
     """the message's pictures in the chat's folder (pictures/, replaced each turn; not .py, so never sent back as a
     change): their paths relative to it"""
@@ -220,6 +277,20 @@ def check(req: dict, env=os.environ) -> str | None:
         return "the message is empty"
     if len(req["message"]) > MAX_MESSAGE:
         return f"the message is longer than {MAX_MESSAGE} characters"
+    if req.get("mode", "ask") not in MODES:
+        return "the mode is ask, auto or plan"
+    loaded = req.get("score_files") or []
+    if not isinstance(loaded, list) or len(loaded) > 8 or any(not isinstance(f, dict) or Path(str(f.get("name", ""))).suffix.lower() not in SCORE_EXT or not isinstance(f.get("data"), str) for f in loaded):
+        return "the score's files must be score files (MusicXML, MIDI, ABC, Humdrum), at most 8"
+    att = req.get("attachments") or []
+    if not isinstance(att, list) or len(att) > MAX_ATTACHMENTS:
+        return f"at most {MAX_ATTACHMENTS} files with a message"
+    for a in att:
+        ext = Path(str((a or {}).get("name", ""))).suffix.lower() if isinstance(a, dict) else ""
+        if ext not in SCORE_EXT | AUDIO_EXT or not isinstance(a.get("data"), str):
+            return "attach scores (MusicXML, MIDI, ABC, Humdrum) or recordings (MP3, WAV …)"
+        if len(a["data"]) * 3 // 4 > MAX_ATTACHMENT:
+            return f"a file is larger than {MAX_ATTACHMENT // 1_000_000} MB"
     pics = req.get("images") or []
     if not isinstance(pics, list) or len(pics) > MAX_PICTURES:
         return f"at most {MAX_PICTURES} pictures with a message"
@@ -252,10 +323,24 @@ async def chat(turn: turns.Turn, req: dict, base: str, env=os.environ) -> None:
     except ValueError as e:
         turn.emit({"type": "error", "message": str(e)})
         return
+    plan = req.get("mode") == "plan"
+    # the files the score load()s, as the page has them: compile and the agent read them in files/
+    for f in req.get("score_files") or []:
+        try:
+            (s.workspace / "files").mkdir(exist_ok=True)
+            (s.workspace / "files" / safe_name(f["name"])).write_bytes(base64.b64decode(f["data"], validate=True))
+        except (binascii.Error, ValueError, OSError):
+            pass
     pictures = save_pictures(s, req.get("images") or [])
     message = context_text(req.get("context") or {}) + req["message"]
     if pictures:
-        message += "\n\n[The learner pasted " + ("a picture" if len(pictures) == 1 else f"{len(pictures)} pictures") + " with this message: " + ", ".join(pictures) + ". Look at " + ("it" if len(pictures) == 1 else "them") + " (the Read tool shows a picture) before answering.]"
+        message += "\n\n[The learner pasted " + ("a picture" if len(pictures) == 1 else f"{len(pictures)} pictures") + " with this message (attached to it; also saved as " + ", ".join(pictures) + "). Look at " + ("it" if len(pictures) == 1 else "them") + " before answering.]"
+    if att := req.get("attachments"):
+        notes = await save_attachments(turn, s, att)
+        if notes:
+            message += "\n\n[The learner attached with this message: " + "; ".join(notes) + ".]"
+    if plan:
+        message += PLAN
     key = str(req.get("api_key") or "").strip() if agent == "claude-api" else included_key(env) if agent == "included" else None
     secrets = [key] if key else []
     chosen = model_for(agent, provider, req.get("model"))
@@ -270,9 +355,10 @@ async def chat(turn: turns.Turn, req: dict, base: str, env=os.environ) -> None:
                 await asyncio.sleep(0.5)  # (Stop still works while it waits)
             got = True
         if agent in ("claude-code", "claude-api", "included"):
-            stream = _claude(s, agent, provider, key, chosen, message, mcp_url, secrets)
+            images = [(p["type"], p["data"]) for p in req.get("images") or []]
+            stream = _claude(s, agent, provider, key, chosen, message, mcp_url, secrets, plan, images)
         else:
-            stream = _codex(s, chosen, message, mcp_url, token, pictures)
+            stream = _codex(s, chosen, message, mcp_url, token, pictures, plan)
         async for event in stream:
             if event["type"] in ("done", "error"):
                 if (files := changes(before, snapshot(s))) is not None:
@@ -306,7 +392,7 @@ def _relative(event: dict, ws: Path) -> dict:
     return {**event, "input": fix(event["input"])} if event.get("type") == "tool" else {**event, "text": fix(event["text"])} if event.get("type") == "tool_result" else event
 
 
-def _claude(s: Session, agent: str, provider: str, key: str | None, model: str, message: str, mcp_url: str, secrets: list[str]):
+def _claude(s: Session, agent: str, provider: str, key: str | None, model: str, message: str, mcp_url: str, secrets: list[str], plan: bool = False, images: list | None = None):
     env = {"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
     if agent != "claude-code":  # an API key: a config folder of its own, so this computer's login is never used
         env["CLAUDE_CONFIG_DIR"] = str(s.workspace.parent / ".claude")
@@ -319,17 +405,17 @@ def _claude(s: Session, agent: str, provider: str, key: str | None, model: str, 
         "claude-api": " (Check the API key in the agent's settings.)",
         "included": "",
     }[agent]
-    return claude.run(s, message, model=model, env=env, system_prompt=SYSTEM, max_turns=MAX_TURNS, mcp_url=mcp_url, secrets=secrets, login_hint=hint)
+    return claude.run(s, message, model=model, env=env, system_prompt=SYSTEM, max_turns=MAX_TURNS, mcp_url=mcp_url, secrets=secrets, login_hint=hint, plan=plan, images=images)
 
 
-def _codex(s: Session, model: str | None, message: str, mcp_url: str, token: str, pictures: list[str] | None = None):
+def _codex(s: Session, model: str | None, message: str, mcp_url: str, token: str, pictures: list[str] | None = None, plan: bool = False):
     exe = scan.executable("codex")
     if s.cli_agent != "codex":
         s.cli_session, s.cli_agent = None, "codex"
     rules = f"{SYSTEM}\n\nThe tools are the MCP tools `compile` and `ask_user` of the `polyphonizer` server.\n\n---\n\n"
     prompt = (rules if s.cli_session is None else "") + message
     mapper = codex.Mapper()
-    argv = codex.command(exe, str(s.workspace), model, s.cli_session, mcp_url, [str(s.workspace / p) for p in pictures or []])
+    argv = codex.command(exe, str(s.workspace), model, s.cli_session, mcp_url, [str(s.workspace / p) for p in pictures or []], plan)
 
     async def stream():
         try:

@@ -48,7 +48,7 @@ import type { ShareFile, SiteId } from "./share/sites.ts";
 import { fill } from "./strings.ts";
 import { fileKind, importCode, type FileKind } from "./library/elsewhere.ts";
 import { jobKind } from "./transcribe/routes.ts";
-import { publishScore, publishSelection, registerApplier } from "./agent/bus.ts";
+import { publishScore, publishSelection, registerApplier, registerFileStore } from "./agent/bus.ts";
 
 const TranscribeDialog = lazy(() => import("./transcribe/TranscribeDialog.tsx"));
 const ShareDialog = lazy(() => import("./share/ShareDialog.tsx"));
@@ -418,6 +418,26 @@ export default function EditorPage() {
         void run(next);
       }),
     [run],
+  );
+
+  // the score files load() reads, for the AI agent: the ones saved in this browser, else the project's kept files; and
+  // one the agent's message brought (a recording it transcribed), added like an import
+  useEffect(
+    () =>
+      registerFileStore({
+        read: async (name) => {
+          const saved = savedFiles()[name];
+          if (saved) return fromB64(saved);
+          const m = (projectRef.current.materials ?? []).find((x) => baseName(x.path) === name);
+          const b = m ? await getBlob(m.id).catch(() => undefined) : undefined;
+          return b ? new Uint8Array(await b.arrayBuffer()) : null;
+        },
+        keep: async (name, bytes) => {
+          await addFile(name, bytes);
+          if (bytes.length < 3_000_000) write(FILES_KEY, JSON.stringify({ ...savedFiles(), [name]: toB64(bytes) }));
+        },
+      }),
+    [],
   );
 
   // click a note → its code: open its file, select it and scroll to it (the editor view comes from CodePane)

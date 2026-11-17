@@ -57,6 +57,23 @@ export function registerApplier(f: (files: Record<string, string>, removed: stri
   };
 }
 export const canApply = () => applier !== null;
+
+/** the editor's score files (what load() reads): read one for the agent, keep one the agent's message brought */
+export interface FileStore {
+  read: (name: string) => Promise<Uint8Array | null>;
+  keep: (name: string, bytes: Uint8Array) => Promise<void>;
+}
+let fileStore: FileStore | null = null;
+export function registerFileStore(f: FileStore): () => void {
+  fileStore = f;
+  return () => {
+    if (fileStore === f) fileStore = null;
+  };
+}
+export const readScoreFile = (name: string) => fileStore?.read(name) ?? Promise.resolve(null);
+export const keepScoreFile = (name: string, bytes: Uint8Array) => fileStore?.keep(name, bytes) ?? Promise.resolve();
+/** the files main.py and its modules load(): load("name.musicxml") */
+export const loadedNames = (files: { code: string }[]) => [...new Set(files.flatMap((f) => [...f.code.matchAll(/\bload\(\s*["']([^"'\n]+)["']/g)].map((m) => m[1])))];
 /** put the agent's files into the score; false when no editor is open to take them */
 export function applyFiles(files: Record<string, string>, removed: string[] = []): boolean {
   if (!applier) return false;

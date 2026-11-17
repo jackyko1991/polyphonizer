@@ -262,7 +262,8 @@ export default function ScoreView({
   const clearPick = () => {
     box.current?.querySelectorAll(".pz-picked").forEach((el) => el.classList.remove("pz-picked"));
     setRect(null);
-    setPicked(null);
+    // (the AI panel stops offering it too)
+    setPicked((p) => (p && publishSelection({ bars: undefined }), null));
   };
   useEffect(() => {
     if (!rect) return;

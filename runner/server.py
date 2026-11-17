@@ -93,7 +93,7 @@ class Config:
 
 
 REPO = Path(__file__).resolve().parent.parent
-MAX_CHAT_BYTES = 10_000_000
+MAX_CHAT_BYTES = 60_000_000  # (a message may carry recordings and pictures)
 
 
 def bind_host(env=os.environ):
@@ -277,7 +277,7 @@ def make_server(address, cfg):
                     return self.reply(404, {"error": "no such connection: make a new one"})
                 req = self.body_json(MAX_CHAT_BYTES)
                 try:
-                    n = agent_connector.sync(c, (req or {}).get("title", ""), (req or {}).get("files"))
+                    n = agent_connector.sync(c, (req or {}).get("title", ""), (req or {}).get("files"), str((req or {}).get("mode") or "ask"))
                 except ValueError as e:
                     return self.reply(400, {"error": str(e)})
                 return self.reply(200, {"files": n, **agent_connector.status(c)})
@@ -403,6 +403,12 @@ def main():
     agent_connector.load()  # agents connected before this start stay connected
     port = int(os.environ.get("PZ_PORT", PORT))
     host = bind_host()
+    # music attached in the AI panel: a recording is turned into a score by the same engine as Transcribe
+    if cfg.transcribe and cfg.instruments:
+        def transcribe(src, out, title):
+            return run_engine(cfg.transcribe, src, out, out.parent, cfg.timeout, title, "piano" if "piano" in cfg.instruments else cfg.instruments[0])
+
+        agent_core.TRANSCRIBE = transcribe
     try:
         httpd = make_server((host, port), cfg)
     except OSError as e:

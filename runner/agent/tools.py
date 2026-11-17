@@ -195,6 +195,8 @@ def file_tool(b: Binding, name: str, args: dict) -> tuple[str, bool, dict | None
         return "a file name like main.py or parts.py (the `name` argument)", True, None
     if name == "read_file":
         return ((ws / file).read_text(encoding="utf-8"), False, None) if (ws / file).exists() else (f"no file {file}; the files are {', '.join(names)}", True, None)
+    if getattr(b.turn, "mode", "ask") == "plan":
+        return "the learner's page is in plan mode: describe the change instead of writing it", True, None
     code = args.get("code", args.get("content"))  # (some agents say content)
     if not isinstance(code, str) or len(code) > connector.MAX_FILE:
         return "give the file's whole code in `code` (at most 200 kB)", True, None

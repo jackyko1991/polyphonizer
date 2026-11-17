@@ -1,7 +1,9 @@
 /**
- * Pictures pasted (or chosen) into the AI panel's message: a screenshot, a photo of a page. Each goes to the runner as
- * base64 with the message (runner/agent/core.py keeps it in the chat's folder for that turn, where the agent looks at
- * it); a large one is made smaller first, and a small thumbnail stays in the chat to show what was sent.
+ * What the AI panel's + (or a paste, or a drop) adds to a message, as Claude's own chat window does:
+ * - pictures (a screenshot, a photo of a page): sent as base64 and given to the agent as images (runner/agent/claude.py);
+ *   a large one is made smaller first, and a small thumbnail stays in the chat;
+ * - music: a score file (MusicXML, MIDI, ABC, Humdrum), which the agent can load(), or a recording, which the runner
+ *   turns into a score first (runner/agent/core.py save_attachments).
  */
 
 export interface Picture {
@@ -11,7 +13,35 @@ export interface Picture {
   data: string;
   /** a small JPEG data URL, for the message box and the chat */
   thumb: string;
+  /** the picture as sent, to see it full size (a data URL; not kept after a reload) */
+  full: string;
+  width: number;
+  height: number;
 }
+
+/** a score file or a recording attached to a message */
+export interface MusicFile {
+  kind: "score" | "audio";
+  name: string;
+  data: string;
+  size: number;
+}
+const SCORE_FILE = /\.(musicxml|xml|mxl|midi?|abc|krn)$/i;
+const AUDIO_FILE = /\.(mp3|wav|m4a|ogg|oga|flac|aac|aiff?)$/i;
+export const MAX_FILES = 4;
+const MAX_MUSIC = 20_000_000;
+export const ACCEPT = "image/png,image/jpeg,image/gif,image/webp,.musicxml,.xml,.mxl,.mid,.midi,.abc,.krn,audio/*";
+
+/** a music file as the panel sends it; null when it isn't one; "big" when it is over 20 MB */
+export async function readMusic(file: File): Promise<MusicFile | null | "big"> {
+  const kind = SCORE_FILE.test(file.name) ? "score" : AUDIO_FILE.test(file.name) ? "audio" : null;
+  if (!kind) return null;
+  if (file.size > MAX_MUSIC) return "big";
+  return { kind, name: file.name, data: await toBase64(file), size: file.size };
+}
+
+/** a size for a chip: 3.2 MB, 640 kB */
+export const sizeText = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} kB`);
 
 export const MAX_PICTURES = 4;
 /** larger than this (bytes, or pixels on the long side) is drawn smaller first */
@@ -49,17 +79,23 @@ export async function readPicture(file: File): Promise<Picture | null> {
   try {
     const big = file.size > MAX_BYTES || Math.max(img.width, img.height) > MAX_SIDE;
     const body: Blob = big ? await draw(img, MAX_SIDE, "image/jpeg", 0.9) : file;
+    const outType = big ? "image/jpeg" : type;
+    const data = await toBase64(body);
     return {
       name: file.name || `picture.${type.split("/")[1]}`,
-      type: big ? "image/jpeg" : type,
-      data: await toBase64(body),
+      type: outType,
+      data,
       thumb: `data:image/jpeg;base64,${await toBase64(await draw(img, 160, "image/jpeg", 0.7))}`,
+      full: `data:${outType};base64,${data}`,
+      width: img.width,
+      height: img.height,
     };
   } finally {
     img.close();
   }
 }
 
-/** the picture files in a paste or a drop */
-export const picturesIn = (items: DataTransferItemList | null | undefined): File[] =>
-  [...(items ?? [])].filter((i) => i.kind === "file" && i.type.startsWith("image/")).map((i) => i.getAsFile()).filter((f): f is File => f !== null);
+/** the files in a paste or a drop */
+export const filesIn = (items: DataTransferItemList | null | undefined): File[] =>
+  [...(items ?? [])].filter((i) => i.kind === "file").map((i) => i.getAsFile()).filter((f): f is File => f !== null);
+export const isPicture = (f: File) => f.type.startsWith("image/");

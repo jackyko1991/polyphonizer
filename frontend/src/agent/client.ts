@@ -44,8 +44,30 @@ export interface AgentContext {
   problem?: string;
 }
 
+/** how changes are made, as in Claude Code (Shift+Tab switches): ask before applying each, apply them automatically,
+ * or plan only (the agent can't change files) */
+export type AgentMode = "ask" | "auto" | "plan";
+export const MODES: AgentMode[] = ["ask", "auto", "plan"];
+const MODE = "polyphonizer.agent.mode";
+export function loadMode(): AgentMode {
+  try {
+    const m = localStorage.getItem(MODE);
+    return m === "auto" || m === "plan" ? m : "ask";
+  } catch {
+    return "ask";
+  }
+}
+export function saveMode(m: AgentMode) {
+  try {
+    localStorage.setItem(MODE, m);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export interface ChatRequest {
   agent: AgentId;
+  mode?: AgentMode;
   chat: string;
   message: string;
   model?: string | null;
@@ -55,6 +77,10 @@ export interface ChatRequest {
   context?: AgentContext;
   /** pictures pasted with the message (base64): PNG, JPEG, GIF or WebP, at most 4 */
   images?: { name: string; type: string; data: string }[];
+  /** music attached with the + (base64): score files, or recordings the runner transcribes */
+  attachments?: { name: string; data: string }[];
+  /** the score files main.py load()s, as this page has them (base64) */
+  score_files?: { name: string; data: string }[];
 }
 
 export type AgentEvent = (
@@ -69,6 +95,8 @@ export type AgentEvent = (
   | { type: "done"; cost_usd?: number | null }
   | { type: "error"; message: string }
   | { type: "cancelled" }
+  /** a score the runner made from an attached recording: kept with the page's files, so load() reads it here too */
+  | { type: "attached"; name: string; data: string }
 ) & {
   /** its number in the turn's log (0 = the turn event) */
   n?: number;
@@ -243,7 +271,7 @@ async function connectorCall(c: Connection, path: string, init: RequestInit, tok
   return r;
 }
 /** the score on screen → the runner's copy the agent works on */
-export const syncConnection = async (c: Connection, score: { title: string; files: { name: string; code: string }[] }, token?: string, f: typeof fetch = fetch) =>
+export const syncConnection = async (c: Connection, score: { title: string; files: { name: string; code: string }[]; mode?: AgentMode }, token?: string, f: typeof fetch = fetch) =>
   (await connectorCall(c, "/api/agents/connector/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(score) }, token, f)).json() as Promise<Omit<ConnectorState, "events">>;
 /** what the agent did since event `c.seq` */
 export const connectionEvents = async (c: Connection, token?: string, f: typeof fetch = fetch) =>

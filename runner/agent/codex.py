@@ -31,7 +31,7 @@ from .cli import tool_input, tool_name
 LABEL = "Codex"
 
 
-def command(exe: str, workspace: str, model: str | None, resume: str | None, mcp_url: str, images: list[str] | None = None) -> list[str]:
+def command(exe: str, workspace: str, model: str | None, resume: str | None, mcp_url: str, images: list[str] | None = None, plan: bool = False) -> list[str]:
     argv = [
         exe,
         "exec",
@@ -39,7 +39,7 @@ def command(exe: str, workspace: str, model: str | None, resume: str | None, mcp
         "--cd",
         workspace,
         "--sandbox",
-        "workspace-write",
+        "read-only" if plan else "workspace-write",  # (plan mode: it can't write)
         "--skip-git-repo-check",
         "--ignore-user-config",
         "--ignore-rules",
