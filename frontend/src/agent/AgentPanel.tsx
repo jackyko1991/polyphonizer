@@ -1,6 +1,8 @@
 /**
- * The AI panel (docs/plans/local-agent.md): one for the whole site, a drawer on the right opened from the Toolbox or
- * "Ask AI about this bar". The learner's own agent works on the score on screen through their runner (client.ts):
+ * The AI panel (docs/plans/local-agent.md): one for the whole site, opened from the Toolbox or "Ask AI about this bar",
+ * in a window floating over the page as the keyboard's staff is (tools/floatingWindow.ts): dragged by its title bar,
+ * resized from any edge or corner, ⤢ (or a double-click on the title bar) to fill the page; where it is and how big
+ * are remembered. On a phone it fills the screen. The learner's own agent works on the score on screen through their runner (client.ts):
  * this computer's Claude Code or Codex (free: bring your own agent), their API key, or, with Pro, the agent included
  * with the Polyphonizer service. Its edits come back as a diff to apply (then Undo) or discard; nothing changes the
  * score by itself. The chat survives a reload: a turn still running is followed again.
@@ -8,6 +10,8 @@
 import { go, RichText, useLang } from "@learnkit/web";
 import { Bot, Check, ChevronRight, Maximize2, Minimize2, Plus, RefreshCw, Search, Send, Settings2, Square, Undo2, Wrench, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { HANDLES, useFloatingWindow, type Box } from "../tools/floatingWindow.ts";
 import { Badge, COMING_SOON, PRO } from "../Badge.tsx";
 import { Icon } from "../Button.tsx";
 import { backendOk, loadBackend, RUNNER_URL, runnerStatus, saveBackend, type Backend, type RunnerStatus } from "../transcribe/routes.ts";
@@ -34,6 +38,14 @@ import { counts, diffLines, hunks } from "./diff.ts";
 
 type L = readonly [string, string];
 const fresh = (): Chat => ({ id: newChatId(), blocks: [], turn: null });
+const WINDOW_KEY = "polyphonizer.agent.window";
+/** on the right, under the site's header, above the dock when it is open */
+function defaultBox(): Box {
+  const w = Math.min(420, window.innerWidth - 32);
+  const top = 64;
+  const dockTop = document.querySelector('[data-testid="tool-dock"]')?.getBoundingClientRect().top ?? window.innerHeight;
+  return { x: window.innerWidth - w - 16, y: top, w, h: Math.max(320, Math.min(dockTop, window.innerHeight) - top - 16) };
+}
 
 const AGENT_NAME: Record<AgentId, L> = {
   "claude-code": ["Claude Code on this computer", "這台電腦上的 Claude Code"],
@@ -411,7 +423,16 @@ export default function AgentPanel() {
   const [status, setStatus] = useState<RunnerStatus | null>(null);
   const [checking, setChecking] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [wide, setWide] = useState(false);
+  // the window: on the right below the site's header by default, as tall as the page allows
+  const win = useFloatingWindow(WINDOW_KEY, defaultBox, { w: 320, h: 260 });
+  const [max, setMax] = useState(false);
+  const [phone, setPhone] = useState(() => window.matchMedia("(max-width: 639px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   const [draft, setDraft] = useState("");
   const abort = useRef<AbortController | null>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -432,13 +453,13 @@ export default function AgentPanel() {
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight });
   }, [chat.blocks]);
-  // Esc closes (a wide panel goes back to its width first)
+  // Esc closes (a window filling the page goes back to its size first)
   useEffect(() => {
     if (!panel.open) return;
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && (wide ? setWide(false) : closeAgent());
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && (max ? setMax(false) : closeAgent());
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
-  }, [panel.open, wide]);
+  }, [panel.open, max]);
 
   const onEvent = useCallback((e: AgentEvent) => update((c) => withEvent(c, e)), [update]);
   /** follow the running turn until it ends (after a reload, or when the connection dropped) */
@@ -525,13 +546,21 @@ export default function AgentPanel() {
   const chip = attachLabel(panel.attach, pick);
   const noRunner = status === null && !checking;
   const ready = settings.agent !== "claude-api" || apiKey.trim().length > 0;
-  return (
+  return createPortal(
     <aside
-      className={`fixed top-0 right-0 bottom-[var(--pz-dock,0px)] z-[65] flex w-full flex-col border-l border-gray-200 bg-white shadow-xl ${wide ? "sm:w-[min(56rem,100vw)]" : "sm:w-[26rem]"}`}
+      className={`fixed z-[65] flex flex-col overflow-hidden bg-white shadow-2xl ${phone ? "inset-0" : max ? "inset-2 rounded-lg border border-gray-300" : "rounded-lg border border-gray-300"}`}
+      style={phone || max ? undefined : { left: win.box.x, top: win.box.y, width: win.box.w, height: win.box.h }}
+      role="dialog"
       aria-label={pick(["AI agent", "AI 代理"])}
       data-testid="agent-panel"
     >
-      <header className="flex items-center gap-1 border-b border-gray-200 px-2 py-1.5">
+      <header
+        className={`flex shrink-0 touch-none items-center gap-1 border-b border-gray-200 bg-gray-50 px-2 py-1.5 select-none ${phone || max ? "" : "cursor-grab active:cursor-grabbing"}`}
+        {...(phone || max ? {} : win.handle(null))}
+        onDoubleClick={(e) => !phone && !(e.target as HTMLElement).closest("button") && setMax((m) => !m)}
+        title={phone || max ? undefined : pick(["Drag to move; double-click to fill the page", "拖曳移動；按兩下填滿頁面"])}
+        data-testid="agent-titlebar"
+      >
         <Icon icon={Bot} className="ml-1 h-4 w-4 text-(--lk-accent)" />
         <div className="ml-1 min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-gray-900">{pick(["AI agent", "AI 代理"])}</h2>
@@ -546,8 +575,8 @@ export default function AgentPanel() {
         <button onClick={() => setShowSettings((s) => !s)} title={pick(["Settings", "設定"])} aria-label={pick(["Settings", "設定"])} aria-pressed={showSettings} className={`rounded p-1.5 hover:bg-gray-100 ${showSettings ? "text-(--lk-accent)" : "text-gray-600"}`} data-testid="agent-settings-button">
           <Icon icon={Settings2} />
         </button>
-        <button onClick={() => setWide((w) => !w)} title={pick(["Wider", "加寬"])} aria-label={pick(["Wider", "加寬"])} className="hidden rounded p-1.5 text-gray-600 hover:bg-gray-100 sm:block">
-          <Icon icon={wide ? Minimize2 : Maximize2} />
+        <button onClick={() => setMax((m) => !m)} title={max ? pick(["Back to its size", "回到原本大小"]) : pick(["Fill the page", "填滿頁面"])} aria-label={max ? pick(["Back to its size", "回到原本大小"]) : pick(["Fill the page", "填滿頁面"])} className="hidden rounded p-1.5 text-gray-600 hover:bg-gray-100 sm:block" data-testid="agent-max">
+          <Icon icon={max ? Minimize2 : Maximize2} />
         </button>
         <button onClick={closeAgent} title={pick(["Close", "關閉"])} aria-label={pick(["Close", "關閉"])} className="rounded p-1.5 text-gray-600 hover:bg-gray-100" data-testid="agent-close">
           <Icon icon={X} />
@@ -695,6 +724,11 @@ export default function AgentPanel() {
           </form>
         </>
       )}
-    </aside>
+      {/* resize from any edge or corner */}
+      {!phone &&
+        !max &&
+        HANDLES.map((h, i) => <div key={i} className={`absolute z-10 touch-none ${h.className} ${h.cursor}`} {...win.handle(h.edges)} aria-hidden data-testid={i === 5 ? "agent-resize" : undefined} />)}
+    </aside>,
+    document.body,
   );
 }

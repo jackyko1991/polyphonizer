@@ -150,8 +150,8 @@ export default function RunnerPage({ section }: { section: string | null }) {
       <Section page={PAGE} id="agent" n={6} title={SECTIONS[5].title}>
         <P
           t={[
-            "Open the **AI agent** from the toolbox (bottom right), or press **Ask AI** in a bar's note editor. Polyphonizer has no AI of its own: the runner starts the agent you already use, on a scratch copy of the score on screen, with a tool to compile it and nothing else (no shell, no web).",
-            "從工具箱（右下角）打開 **AI 代理**，或在小節的音符編輯器中按 **問 AI**。Polyphonizer 本身沒有 AI：執行器會在畫面上樂譜的暫存副本上啟動你已在使用的代理，只給它一個編譯樂譜的工具（沒有終端機，也不能上網）。",
+            "Open the **AI agent** from the toolbox (bottom right), or press **Ask AI** in a bar's note editor. It opens in its own window: drag it by its title bar, resize it from any edge or corner, double-click the title bar to fill the page. Polyphonizer has no AI of its own: the runner starts the agent you already use, on a scratch copy of the score on screen, with a tool to compile it and nothing else (no shell, no web).",
+            "從工具箱（右下角）打開 **AI 代理**，或在小節的音符編輯器中按 **問 AI**。它會在自己的視窗中開啟：拖曳標題列移動，從任一邊或角調整大小，按兩下標題列填滿頁面。Polyphonizer 本身沒有 AI：執行器會在畫面上樂譜的暫存副本上啟動你已在使用的代理，只給它一個編譯樂譜的工具（沒有終端機，也不能上網）。",
           ]}
         />
         <List

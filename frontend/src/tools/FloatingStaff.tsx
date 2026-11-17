@@ -13,28 +13,18 @@ import { Code, Copy, CornerDownLeft, Delete, Eraser, GripHorizontal, Minus, Plus
 import { canInsert, insertCode, onEditors } from "./codeInsert.ts";
 import { clearStaff, groupChords, onStaff, staffNotes, undoBar, undoStaff } from "./liveStaff.ts";
 import { staffCode } from "./staffCode.ts";
+import { fitBox as fitWindow, type Box } from "./floatingWindow.ts";
 import { useToolbox } from "./toolboxState.ts";
 
 const LiveStaff = lazy(() => import("./LiveStaff.tsx"));
 
-interface Box {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
 const KEY = "polyphonizer.liveStaff.window";
 const MIN_W = 280;
 const MIN_H = 130;
 const BAR = 32; // the title bar's height
 
 /** keep the window on screen (at least its title bar), and no bigger than the screen */
-export function fitBox(b: Box, vw: number, vh: number): Box {
-  // never wider or taller than the screen (that wins over the minimum size, on a small phone)
-  const w = Math.min(Math.max(MIN_W, b.w), vw - 16);
-  const h = Math.min(Math.max(MIN_H, b.h), vh - 16);
-  return { w: Math.round(w), h: Math.round(h), x: Math.round(Math.max(8, Math.min(b.x, vw - w - 8))), y: Math.round(Math.max(8, Math.min(b.y, vh - BAR - 8))) };
-}
+export const fitBox = (b: Box, vw: number, vh: number): Box => fitWindow(b, vw, vh, { w: MIN_W, h: MIN_H }, BAR);
 
 /** two bars of a grand staff, above the dock on the right */
 function defaultBox(): Box {
