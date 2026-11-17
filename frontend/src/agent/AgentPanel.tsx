@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom";
 import { HANDLES, useFloatingWindow, type Box } from "../tools/floatingWindow.ts";
 import { Badge, COMING_SOON, PRO } from "../Badge.tsx";
+import RunnerSetup from "../RunnerSetup.tsx";
 import { Icon } from "../Button.tsx";
 import { backendOk, loadBackend, RUNNER_URL, runnerStatus, saveBackend, type Backend, type RunnerStatus } from "../transcribe/routes.ts";
 import { BUTTON, FIELD, PRIMARY } from "../ui.ts";
@@ -900,10 +901,12 @@ export default function AgentPanel() {
             {noRunner && (
               <div className="my-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" data-testid="agent-no-runner">
                 <p className="font-medium">{pick(["Start the runner on your computer", "在你的電腦上啟動執行器"])}</p>
-                <p className="mt-1">
-                  {pick(["The agent works through the Polyphonizer runner. In a copy of the repository:", "代理透過 Polyphonizer 執行器工作。在程式庫的副本中執行："])}
+<p className="mt-1">
+                  {pick(["The agent works through the Polyphonizer runner, a small program on your computer:", "代理透過 Polyphonizer 執行器工作，它是你電腦上的一個小程式："])}
                 </p>
-                <pre className="mt-1.5 rounded bg-gray-900 px-2 py-1 font-mono text-xs text-gray-100">pixi run runner</pre>
+                <div className="mt-2 text-gray-900">
+                  <RunnerSetup need={[]} open />
+                </div>
                 <div className="mt-2 flex flex-wrap gap-3 text-xs">
                   <button onClick={() => void check()} className="inline-flex items-center gap-1 font-medium text-(--lk-accent) hover:underline">
                     <Icon icon={RefreshCw} className="h-3 w-3" /> {pick(["Check again", "再檢查一次"])}

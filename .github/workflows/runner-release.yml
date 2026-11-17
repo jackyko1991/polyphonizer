@@ -1,0 +1,33 @@
+# Publish the runner (scripts/runner_bundle.py) as a GitHub release asset at a fixed URL, so the website's steps
+# (AI agent ▸ Runner, Transcribe, the AI panel) can download and unzip it instead of cloning the repository:
+#   https://github.com/jackyko1991/polyphonizer/releases/download/runner-latest/polyphonizer-runner.zip
+name: Release the runner
+
+on:
+  push:
+    branches: [main]
+    paths: ["runner/**", "pixi.toml", "pixi.lock", "frontend/src/engine/prelude.py", "scripts/runner_bundle.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: runner-release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: python3 scripts/runner_bundle.py --out dist # standard library only
+      - name: Upload to the runner-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view runner-latest >/dev/null 2>&1 || gh release create runner-latest \
+            --title "Runner (latest)" \
+            --notes "Download, unzip, then in the folder run: pixi run runner. Once, for what you need: pixi run -e omr omr-setup (PDFs), pixi run -e audio audio-setup (recordings). See AI agent > Runner on https://jackyko1991.github.io/polyphonizer/"
+          gh release upload runner-latest dist/polyphonizer-runner.zip --clobber
+          git tag -f runner-latest "$GITHUB_SHA" && git push -f origin refs/tags/runner-latest

@@ -3,6 +3,7 @@
  * notes for Transcribe and runs the learner's own AI agent (runner/agent/), on your own computer, on a VPS or as a Hugging Face Space.
  * The commands match runner/server.py, runner/Dockerfile and pixi.toml; keep them in step.
  */
+import RunnerSetup from "../../RunnerSetup.tsx";
 import { ShellCommand, useLang } from "@learnkit/web";
 import { Callout, List, P, Page, Section, type L, type SectionInfo } from "../kit";
 
@@ -65,20 +66,11 @@ export default function RunnerPage({ section }: { section: string | null }) {
       <Section page={PAGE} id="computer" n={2} title={SECTIONS[1].title}>
         <P
           t={[
-            "You need [pixi](https://pixi.sh) and a copy of Polyphonizer's repository. Once, install the reader (PyTorch and about 131 MB of model files):",
-            "你需要 [pixi](https://pixi.sh) 和一份 Polyphonizer 的程式庫。先安裝一次讀譜器（PyTorch 與約 131 MB 的模型檔）：",
+            "No git needed: install [pixi](https://pixi.sh), download the runner, set up what you need once, and start it.",
+            "不需要 git：安裝 [pixi](https://pixi.sh)、下載執行器、一次安裝你需要的功能，然後啟動它。",
           ]}
         />
-        <Cmd t={"git clone https://github.com/jackyko1991/polyphonizer\ncd polyphonizer\npixi run -e omr omr-setup"} />
-        <P
-          t={[
-            "For recordings, once more (Transkun, Basic Pitch and ffmpeg; about 2 GB on disk, mostly PyTorch):",
-            "要處理錄音，再執行一次（Transkun、Basic Pitch 與 ffmpeg；約佔 2 GB 磁碟空間，大多是 PyTorch）：",
-          ]}
-        />
-        <Cmd t="pixi run -e audio audio-setup" />
-        <P t={["Then, whenever you want to transcribe, start the runner and leave it open:", "之後每次要轉譜時，啟動執行器並讓它保持開著："]} />
-        <Cmd t="pixi run runner" />
+        <RunnerSetup open />
         <P
           t={[
             "It answers at `http://127.0.0.1:8765`, the address Transcribe tries first: the dialog finds it by itself, and says where recordings run (the Mac's GPU, an NVIDIA GPU, or the CPU). On an Intel Mac, PyTorch has no build for this Python: use a server or a Space instead.",

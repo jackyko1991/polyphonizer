@@ -9,6 +9,7 @@ import { Icon } from "../Button.tsx";
 import { BUTTON, PRIMARY } from "../ui.ts";
 import { backendOk, deviceName, estimateSeconds, jobKind, loadBackend, pdfPageCount, progressAt, routesFor, RUNNER_URL, runJob, runnerStatus, saveBackend, type Backend, type Instrument, type RouteId, type RunnerStatus } from "./routes.ts";
 import { Badge, COMING_SOON } from "../Badge.tsx";
+import RunnerSetup from "../RunnerSetup.tsx";
 
 const ROUTES: Record<RouteId, { icon: typeof Laptop; name: readonly [string, string]; about: readonly [string, string] }> = {
   browser: {
@@ -34,8 +35,8 @@ const WHY: Record<string, readonly [string, string]> = {
   "not-here": ["Reading pages needs the runner or the service.", "讀取樂譜頁面需要執行器或服務。"],
   loading: ["The in-browser model is not installed yet (coming next).", "瀏覽器內的模型尚未安裝（即將推出）。"],
   "not-running": [
-    "Nothing answers there yet. Start it: in a terminal, in the Polyphonizer folder, run pixi run runner (once before: pixi run -e omr omr-setup for PDFs, pixi run -e audio audio-setup for recordings). This finds it by itself.",
-    "那裡還沒有回應。請啟動：在終端機的 Polyphonizer 資料夾執行 pixi run runner（讀 PDF 需先執行一次 pixi run -e omr omr-setup，錄音則是 pixi run -e audio audio-setup）。這裡會自動找到它。",
+    "Nothing answers there yet: start the runner (below). This finds it by itself.",
+    "那裡還沒有回應：請啟動執行器（見下方）。這裡會自動找到它。",
   ],
   "no-engine": ["Running, but without an engine for this (for recordings: pixi run -e audio audio-setup, then restart it).", "正在執行，但沒有處理這類檔案的引擎（錄音：執行 pixi run -e audio audio-setup，再重新啟動）。"],
   coming: ["Not open yet.", "尚未開放。"],
@@ -199,7 +200,8 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
             {routes.map((r) => {
               const R = ROUTES[r.id];
               return (
-                <label key={r.id} className={`flex gap-2 rounded-lg border p-2.5 text-sm ${r.ready ? "cursor-pointer border-gray-300 hover:border-(--lk-accent)" : "border-gray-200 opacity-60"} ${chosen === r.id ? "border-(--lk-accent) bg-rose-50/50" : ""}`}>
+                <div key={r.id}>
+                <label className={`flex gap-2 rounded-lg border p-2.5 text-sm ${r.ready ? "cursor-pointer border-gray-300 hover:border-(--lk-accent)" : "border-gray-200 opacity-60"} ${chosen === r.id ? "border-(--lk-accent) bg-rose-50/50" : ""}`}>
                   <input type="radio" name="route" disabled={!r.ready} checked={chosen === r.id} onChange={() => setRoute(r.id)} className="mt-1" />
                   <Icon icon={R.icon} className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
                   <span className="min-w-0">
@@ -209,6 +211,7 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
                     {(r.why === "coming" || r.why === "loading") && <Badge text={COMING_SOON} />}
                     <span className="block text-xs text-gray-600">{pick(R.about)}</span>
                     {!r.ready && r.why && <span className="block text-xs text-amber-800">{pick(WHY[r.why])}</span>}
+
                     {r.id === "runner" && (
                       // the address (and a token, for a server that asks for one)
                       <span className="mt-1.5 flex flex-wrap items-center gap-1.5" onClick={(e) => e.preventDefault()}>
@@ -255,6 +258,13 @@ export default function TranscribeDialog({ file: initial, onDone, onClose }: { f
                     )}
                   </span>
                 </label>
+                {/* nothing answers, or no engine for this: how to start (or set up) the runner */}
+                {r.id === "runner" && (r.why === "not-running" || r.why === "no-engine") && (
+                  <div className="mt-1.5">
+                    <RunnerSetup need={[kind === "omr" ? "omr" : "audio"]} />
+                  </div>
+                )}
+                </div>
               );
             })}
           </fieldset>
